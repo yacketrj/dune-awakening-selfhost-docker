@@ -16,6 +16,23 @@ prompt_default() {
   printf '%s' "$value"
 }
 
+check_running_stack() {
+  local running
+  running="$(docker ps --filter "name=dune-" --format "{{.Names}}" | grep -v '^dune-orchestrator$' || true)"
+
+  if [ -n "$running" ]; then
+    echo "A Dune Docker stack appears to be running:"
+    echo "$running" | sed 's/^/  /'
+    echo
+    echo "Running init can overwrite local config and restart services."
+    read -r -p "Continue anyway? [y/N]: " answer
+    case "$answer" in
+      y|Y|yes|YES) ;;
+      *) echo "Init cancelled."; exit 1 ;;
+    esac
+  fi
+}
+
 confirm_overwrite() {
   if [ -f .env ] || [ -f runtime/generated/battlegroup.env ] || [ -f runtime/secrets/funcom-token.txt ]; then
     echo "Existing local configuration was found:"
@@ -72,6 +89,7 @@ echo "This will create local config, save your Funcom token locally, generate a 
 echo "download/load server assets, run DB setup/update, and start the Docker stack."
 echo
 
+check_running_stack
 confirm_overwrite
 
 SERVER_TITLE="$(prompt_default "Server title" "My Dune Server")"
