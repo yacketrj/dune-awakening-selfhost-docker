@@ -55,7 +55,7 @@ main() {
     bg_pid=$!
 
     while ! pid="$(find_game_pid)"; do
-        check_process_existence "$bg_pid"
+        check_process_existence "$bg_pid" "$bg_pid"
         sleep 1
     done
 
@@ -67,7 +67,7 @@ main() {
         if [ "${#ports[@]}" -ge 2 ]; then
             break
         fi
-        check_process_existence "$pid"
+        check_process_existence "$pid" "$bg_pid"
         sleep 1
     done
 
@@ -123,9 +123,23 @@ install_cert() {
 }
 
 check_process_existence() {
-    if ! kill -0 "$1"; then
-        wait %1
-        exit $?
+    local probe_pid="${1:-}"
+    local wait_pid="${2:-${bg_pid:-}}"
+
+    if [ -z "$probe_pid" ]; then
+        echo "Process probe pid was empty." >&2
+        if [ -n "$wait_pid" ]; then
+            wait "$wait_pid" || true
+        fi
+        exit 1
+    fi
+
+    if ! kill -0 "$probe_pid" 2>/dev/null; then
+        if [ -n "$wait_pid" ]; then
+            wait "$wait_pid"
+            exit $?
+        fi
+        exit 1
     fi
 }
 
@@ -180,9 +194,9 @@ fetch_external_node_address() {
 }
 
 _term() {
-    if [ ! -z "${pid:-}" ]; then
+    if [ -n "${pid:-}" ]; then
         kill -TERM "$pid"
-        wait "$bg_pid"
+        [ -n "${bg_pid:-}" ] && wait "$bg_pid"
         exit $?
     fi
 }
