@@ -62,6 +62,38 @@ container_count_for_map() {
   docker ps --format '{{.Names}}' | grep -Ec "^dune-server-${safe}-[0-9]+$" || true
 }
 
+max_dimensions_for_map() {
+  local map="$1"
+  local configured
+
+  configured="$(python3 - "$map" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target = sys.argv[1]
+config_path = Path("runtime/generated/sietch-config.json")
+if not config_path.exists():
+    raise SystemExit
+config = json.loads(config_path.read_text())
+value = config.get("maps", {}).get(target, {}).get("max_dimensions")
+if value:
+    print(value)
+PY
+  )"
+
+  if [ -n "$configured" ]; then
+    echo "$configured"
+    return 0
+  fi
+
+  psql_value "
+    select count(*)
+    from dune.world_partition
+    where lower(map) = lower('${map//\'/\'\'}');
+  "
+}
+
 state_key() {
   local map="$1"
   local server_id="$2"
@@ -113,6 +145,14 @@ handle_demand() {
 
   local running
   running="$(container_count_for_map "$map")"
+
+  local max_dimensions
+  max_dimensions="$(max_dimensions_for_map "$map")"
+
+  if [ "$assigned" -ge "$max_dimensions" ] 2>/dev/null || [ "$running" -ge "$max_dimensions" ] 2>/dev/null; then
+    echo "WAIT demand map=$map num=$num max dimensions reached max=$max_dimensions assigned=$assigned containers=$running"
+    return 0
+  fi
 
   if [ "$assigned" != "0" ] || [ "$running" != "0" ]; then
     echo "OK   demand map=$map num=$num already running/assigned assigned=$assigned containers=$running"

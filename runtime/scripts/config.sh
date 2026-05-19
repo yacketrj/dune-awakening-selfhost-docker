@@ -7,7 +7,7 @@ usage() {
   cat <<'EOF'
 Usage:
   dune config title
-  dune config title "New Server Name"
+  dune config title "New Server Name" [--yes] [--no-restart]
 EOF
 }
 
@@ -61,24 +61,79 @@ cmd="${1:-help}"
 case "$cmd" in
   title)
     shift || true
-    if [ "$#" -eq 0 ]; then
+    assume_yes=0
+    restart_services=1
+    title_parts=()
+
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --yes|-y)
+          assume_yes=1
+          ;;
+        --no-restart)
+          restart_services=0
+          ;;
+        *)
+          title_parts+=("$1")
+          ;;
+      esac
+      shift
+    done
+
+    if [ "${#title_parts[@]}" -eq 0 ]; then
       echo "Current server title: $(config_value .env SERVER_TITLE || echo unknown)"
       exit 0
     fi
 
-    new_title="$*"
+    new_title="${title_parts[*]}"
     if [ -z "$new_title" ]; then
       echo "Server title cannot be empty."
       exit 1
     fi
 
+    cat <<EOF
+Changing the server title requires restarting the service(s) that publish
+the server name to the in-game server browser.
+
+New title: $new_title
+
+This will restart:
+  - gateway
+EOF
+
+    if [ "$restart_services" = "0" ]; then
+      cat <<'EOF'
+
+--no-restart was provided. The title will be saved, but no services will restart.
+To apply it later, run:
+  dune restart gateway
+EOF
+    fi
+
+    echo
+    if [ "$assume_yes" != "1" ]; then
+      read -r -p "Continue? [y/N]: " answer
+      case "$answer" in
+        y|Y|yes|YES) ;;
+        *) echo "Cancelled. No changes were made."; exit 1 ;;
+      esac
+    fi
+
     set_env_value SERVER_TITLE "$new_title"
     echo "Updated server title: $new_title"
+
+    # Gateway owns the explicit browser-facing gateway_display_name value.
+    # Director also reads the title for battlegroup metadata, but restarting
+    # only Gateway is the smallest restart that republishes the visible server
+    # name without interrupting maps or infrastructure services.
+    if [ "$restart_services" = "1" ]; then
+      echo
+      echo "Restarting gateway so the new title can be published..."
+      runtime/scripts/dune restart gateway
+    fi
+
     echo
-    echo "The server browser may not show the new title until services redeclare state."
-    echo "Recommended:"
-    echo "  dune restart gateway"
-    echo "  dune restart director"
+    echo "Title change complete."
     ;;
   help|--help|-h)
     usage

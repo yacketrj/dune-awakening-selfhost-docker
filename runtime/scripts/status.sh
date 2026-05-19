@@ -280,6 +280,8 @@ echo "=== Game servers ==="
 printf "%-12s %-12s %s\n" "MAP" "STATE" "UPTIME"
 printf "%-12s %-12s %s\n" "Survival_1" "$survival_state" "$(container_status dune-server-survival-1)"
 printf "%-12s %-12s %s\n" "Overmap" "$overmap_state" "$(container_status dune-server-overmap)"
+echo
+echo "Note: after a sietch becomes READY, it can still take a bit of time to show up again in the in-game server browser."
 
 echo
 echo "=== Automation ==="

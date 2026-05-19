@@ -2,8 +2,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
+ROOT_DIR="$(pwd)"
 
 BACKUP_DIR_DEFAULT="runtime/backups/db"
+AUTO_STATE_FILE="runtime/generated/db-backup.env"
+AUTO_SERVICE_FILE="/etc/systemd/system/dune-awakening-db-backup.service"
+AUTO_TIMER_FILE="/etc/systemd/system/dune-awakening-db-backup.timer"
 
 usage() {
   cat <<'EOF'
@@ -13,6 +17,14 @@ Usage:
   dune db list
   dune db status
   dune db import <backup-file>
+  dune db restore <backup-file>
+  dune db delete <backup-file-or-name>
+  dune db delete --all
+  dune db auto enable <hours> [retention-days]
+  dune db auto disable
+  dune db auto status
+  dune db auto retention <days>
+  dune db auto retention off
 
 Backups use pg_dump custom format and do not include Funcom token files.
 Import requires confirmation and creates a pre-import backup first.
@@ -42,9 +54,159 @@ config_value() {
   ' "$file"
 }
 
+valid_backup_basename() {
+  local name="$1"
+  printf '%s' "$name" | grep -Eq '^dune-db-([a-z0-9][a-z0-9_-]*__)?[0-9]{8}-[0-9]{6}\.(dump|sql)$'
+}
+
+backup_timestamp_from_name() {
+  local name="$1"
+  printf '%s' "$name" | sed -E 's/^dune-db-([a-z0-9][a-z0-9_-]*__)?([0-9]{8}-[0-9]{6})\.(dump|sql)$/\2/'
+}
+
+backup_scope_from_name() {
+  local name="$1"
+  if printf '%s' "$name" | grep -Eq '^dune-db-[a-z0-9][a-z0-9_-]*__[0-9]{8}-[0-9]{6}\.(dump|sql)$'; then
+    printf '%s' "$name" | sed -E 's/^dune-db-([a-z0-9][a-z0-9_-]*)__[0-9]{8}-[0-9]{6}\.(dump|sql)$/\1/'
+  else
+    echo "legacy"
+  fi
+}
+
+backup_scope_slug() {
+  local rows primary count secondary
+
+  rows="$(docker exec dune-postgres psql -U postgres -d dune -At -F '|' -c "
+    select distinct map
+    from dune.world_partition
+    where coalesce(server_id, '') <> ''
+    order by map;
+  " 2>/dev/null || true)"
+
+  count="$(printf '%s\n' "$rows" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+  if [ "${count:-0}" -le 0 ]; then
+    echo "all_maps"
+    return 0
+  fi
+
+  primary="$(printf '%s\n' "$rows" | sed -n '1p' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g; s/__*/_/g; s/^_//; s/_$//')"
+  [ -n "$primary" ] || primary="all_maps"
+
+  case "$count" in
+    1)
+      echo "$primary"
+      ;;
+    2)
+      secondary="$(printf '%s\n' "$rows" | sed -n '2p' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g; s/__*/_/g; s/^_//; s/_$//')"
+      [ -n "$secondary" ] || secondary="map"
+      echo "${primary}_and_${secondary}"
+      ;;
+    *)
+      echo "${primary}_plus_$((count - 1))_more"
+      ;;
+  esac
+}
+
+backup_scope_maps() {
+  docker exec dune-postgres psql -U postgres -d dune -At -F ',' -c "
+    select string_agg(map, ',' order by map)
+    from (
+      select distinct map
+      from dune.world_partition
+      where coalesce(server_id, '') <> ''
+    ) maps;
+  " 2>/dev/null | tr -d '\r' || true
+}
+
+backup_dir_abs() {
+  local dir="${1:-$BACKUP_DIR_DEFAULT}"
+  mkdir -p "$dir"
+  (cd "$dir" && pwd -P)
+}
+
+resolve_backup_name() {
+  local input="$1"
+  local backup_dir="${2:-$BACKUP_DIR_DEFAULT}"
+  local backup_abs
+  local input_dir
+  local name
+
+  if [ -z "$input" ]; then
+    echo "Missing backup file."
+    return 1
+  fi
+
+  backup_abs="$(backup_dir_abs "$backup_dir")"
+
+  case "$input" in
+    */*)
+      input_dir="$(cd "$(dirname "$input")" 2>/dev/null && pwd -P || true)"
+      if [ "$input_dir" != "$backup_abs" ]; then
+        echo "Refusing to delete outside the database backup directory: $input"
+        return 1
+      fi
+      name="$(basename "$input")"
+      ;;
+    *)
+      name="$input"
+      ;;
+  esac
+
+  if ! valid_backup_basename "$name"; then
+    echo "Not a valid database backup file: $name"
+    echo "Expected: dune-db-<scope>__YYYYMMDD-HHMMSS.dump"
+    return 1
+  fi
+
+  printf '%s' "$name"
+}
+
+backup_path_for_name() {
+  local name="$1"
+  local backup_dir="${2:-$BACKUP_DIR_DEFAULT}"
+  printf '%s/%s' "$backup_dir" "$name"
+}
+
+delete_backup_files_for_name() {
+  local name="$1"
+  local backup_dir="${2:-$BACKUP_DIR_DEFAULT}"
+  local file
+  local ts
+  local scope
+  local meta
+
+  file="$(backup_path_for_name "$name" "$backup_dir")"
+  ts="$(backup_timestamp_from_name "$name")"
+  scope="$(backup_scope_from_name "$name")"
+  meta="$backup_dir/dune-db-$scope""__""$ts.meta"
+
+  if [ ! -f "$file" ]; then
+    echo "Backup file does not exist: $file"
+    return 1
+  fi
+
+  command rm -f -- "$file"
+  [ -f "$meta" ] && command rm -f -- "$meta"
+}
+
+iter_valid_backup_names() {
+  local backup_dir="${1:-$BACKUP_DIR_DEFAULT}"
+
+  [ -d "$backup_dir" ] || return 0
+
+  find "$backup_dir" -maxdepth 1 -type f \( -name 'dune-db-*.dump' -o -name 'dune-db-*.sql' \) -printf '%f\n' \
+    | while IFS= read -r name; do
+        if valid_backup_basename "$name"; then
+          printf '%s\n' "$name"
+        fi
+      done
+}
+
 backup_db() {
   local out_dir="${1:-$BACKUP_DIR_DEFAULT}"
   local ts
+  local scope
+  local scope_maps
   local backup_file
   local meta_file
   local tmp_file
@@ -53,12 +215,15 @@ backup_db() {
   mkdir -p "$out_dir"
 
   ts="$(date +%Y%m%d-%H%M%S)"
-  backup_file="$out_dir/dune-db-$ts.dump"
-  meta_file="$out_dir/dune-db-$ts.meta"
-  tmp_file="/tmp/dune-db-$ts.dump"
+  scope="$(backup_scope_slug)"
+  [ -n "$scope" ] || scope="all_maps"
+  scope_maps="$(backup_scope_maps)"
+  backup_file="$out_dir/dune-db-$scope""__""$ts.dump"
+  meta_file="$out_dir/dune-db-$scope""__""$ts.meta"
+  tmp_file="/tmp/dune-db-$scope""__""$ts.dump"
 
   echo "Creating database backup..."
-  docker exec dune-postgres pg_dump -U dune -d dune -Fc -f "$tmp_file"
+  docker exec dune-postgres pg_dump -U postgres -d dune -Fc -f "$tmp_file"
   docker cp "dune-postgres:$tmp_file" "$backup_file"
   docker exec dune-postgres rm -f "$tmp_file" >/dev/null 2>&1 || true
 
@@ -66,6 +231,8 @@ backup_db() {
     echo "created_at=$(date -Iseconds)"
     echo "database=dune"
     echo "format=pg_dump_custom"
+    echo "scope=$scope"
+    echo "maps=${scope_maps:-unknown}"
     echo "server_title=$(config_value .env SERVER_TITLE || echo unknown)"
     echo "server_region=$(config_value .env SERVER_REGION || echo unknown)"
     echo "server_ip_mode=$(config_value .env SERVER_IP_MODE || echo unknown)"
@@ -78,6 +245,10 @@ backup_db() {
   echo "  $backup_file"
   echo "Metadata:"
   echo "  $meta_file"
+
+  if [ "${DB_BACKUP_PRUNE_AFTER_SUCCESS:-0}" = "1" ]; then
+    prune_old_db_backups "$out_dir" "${DB_AUTO_BACKUP_RETENTION_DAYS:-0}"
+  fi
 }
 
 list_backups() {
@@ -85,9 +256,108 @@ list_backups() {
 
   echo "=== Database backups ==="
   if [ -d "$out_dir" ]; then
-    find "$out_dir" -maxdepth 1 -type f \( -name '*.dump' -o -name '*.sql' \) -printf '%TY-%Tm-%Td %TH:%TM  %p\n' | sort || true
+    find "$out_dir" -maxdepth 1 -type f \( -name 'dune-db-*.dump' -o -name 'dune-db-*.sql' \) -printf '%TY-%Tm-%Td %TH:%TM  %p\n' | sort || true
   else
     echo "No backup directory found: $out_dir"
+  fi
+}
+
+delete_backup() {
+  local target="${1:-}"
+  local name
+  local file
+
+  if [ "$target" = "--all" ]; then
+    delete_all_backups
+    return
+  fi
+
+  name="$(resolve_backup_name "$target" "$BACKUP_DIR_DEFAULT")" || exit 1
+  file="$(backup_path_for_name "$name" "$BACKUP_DIR_DEFAULT")"
+
+  if [ ! -f "$file" ]; then
+    echo "Backup file does not exist: $file"
+    exit 1
+  fi
+
+  if [ "${DUNE_DB_ASSUME_YES:-0}" != "1" ]; then
+    read -r -p "Delete backup '$name'? [y/N]: " answer
+    case "$answer" in
+      y|Y|yes|YES) ;;
+      *) echo "Delete cancelled."; exit 1 ;;
+    esac
+  fi
+
+  delete_backup_files_for_name "$name" "$BACKUP_DIR_DEFAULT"
+  echo "Deleted backup: $name"
+}
+
+delete_all_backups() {
+  local backup_dir="$BACKUP_DIR_DEFAULT"
+  local names
+  local count
+  local deleted=0
+
+  if [ ! -d "$backup_dir" ]; then
+    echo "No backup directory found: $backup_dir"
+    return 0
+  fi
+
+  names="$(iter_valid_backup_names "$backup_dir" | sort || true)"
+  count="$(printf '%s\n' "$names" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+
+  if [ "${count:-0}" -eq 0 ]; then
+    echo "No database backups found in: $backup_dir"
+    return 0
+  fi
+
+  echo "Backup directory: $backup_dir"
+  echo "Database backups found: $count"
+  if [ "${DUNE_DB_ASSUME_YES:-0}" != "1" ]; then
+    read -r -p "Delete ALL database backups? Type DELETE to confirm: " answer
+    if [ "$answer" != "DELETE" ]; then
+      echo "Delete cancelled."
+      exit 1
+    fi
+  fi
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    delete_backup_files_for_name "$name" "$backup_dir"
+    deleted=$((deleted + 1))
+  done <<< "$names"
+
+  echo "Deleted $deleted database backups."
+}
+
+prune_old_db_backups() {
+  local backup_dir="${1:-$BACKUP_DIR_DEFAULT}"
+  local days="${2:-0}"
+  local removed=0
+  local file
+
+  if ! validate_positive_integer "$days" || [ "$days" -le 0 ]; then
+    echo "Auto backup retention is off. Old backups were not deleted."
+    return 0
+  fi
+
+  if [ ! -d "$backup_dir" ]; then
+    return 0
+  fi
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    file="$(backup_path_for_name "$name" "$backup_dir")"
+    if find "$file" -maxdepth 0 -type f -mtime +"$days" -print -quit 2>/dev/null | grep -q .; then
+      delete_backup_files_for_name "$name" "$backup_dir"
+      removed=$((removed + 1))
+    fi
+  done < <(iter_valid_backup_names "$backup_dir")
+
+  if [ "$removed" -gt 0 ]; then
+    echo "Removed $removed database backups older than $days days."
+  else
+    echo "No database backups older than $days days were removed."
   fi
 }
 
@@ -105,8 +375,20 @@ select count(*) as world_partition_rows from world_partition;
 
 stop_db_dependents() {
   echo "Stopping services that depend on the database..."
-  docker ps --format '{{.Names}}' | grep '^dune-server-' | xargs -r docker rm -f
+  docker ps --format '{{.Names}}' | grep '^dune-server-' | xargs -r docker rm -f || true
   docker rm -f dune-server-gateway dune-director dune-text-router 2>/dev/null || true
+}
+
+recreate_dune_database() {
+  echo "Recreating dune database..."
+  docker exec dune-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
+select pg_terminate_backend(pid)
+from pg_stat_activity
+where datname = 'dune'
+  and pid <> pg_backend_pid();
+"
+  docker exec dune-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "drop database if exists dune;"
+  docker exec dune-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "create database dune owner dune;"
 }
 
 import_db() {
@@ -128,20 +410,23 @@ import_db() {
 
   echo "WARNING: importing a database backup replaces current battlegroup database state."
   echo "A pre-import backup will be created first."
-  read -r -p "Continue with import? [y/N]: " answer
-  case "$answer" in
-    y|Y|yes|YES) ;;
-    *) echo "Import cancelled."; exit 1 ;;
-  esac
+  if [ "${DUNE_DB_ASSUME_YES:-0}" != "1" ]; then
+    read -r -p "Continue with import? [y/N]: " answer
+    case "$answer" in
+      y|Y|yes|YES) ;;
+      *) echo "Import cancelled."; exit 1 ;;
+    esac
+  fi
 
   backup_db "$BACKUP_DIR_DEFAULT/pre-import"
   stop_db_dependents
+  recreate_dune_database
 
   tmp_file="/tmp/dune-db-import-$(date +%Y%m%d-%H%M%S).dump"
   docker cp "$backup_file" "dune-postgres:$tmp_file"
 
   echo "Restoring database..."
-  docker exec dune-postgres pg_restore -U dune -d dune --clean --if-exists "$tmp_file"
+  docker exec dune-postgres pg_restore -U postgres -d dune "$tmp_file"
   docker exec dune-postgres rm -f "$tmp_file" >/dev/null 2>&1 || true
 
   echo "Database import finished."
@@ -149,6 +434,236 @@ import_db() {
   case "$restore_after" in
     y|Y|yes|YES) runtime/scripts/start-all.sh ;;
     *) echo "Services remain stopped. Start them with: dune start" ;;
+  esac
+}
+
+validate_positive_integer() {
+  local value="$1"
+  printf '%s' "$value" | grep -Eq '^[1-9][0-9]*$'
+}
+
+load_auto_state() {
+  DB_AUTO_BACKUP_ENABLED="${DB_AUTO_BACKUP_ENABLED:-0}"
+  DB_AUTO_BACKUP_INTERVAL_HOURS="${DB_AUTO_BACKUP_INTERVAL_HOURS:-24}"
+  DB_AUTO_BACKUP_RETENTION_DAYS="${DB_AUTO_BACKUP_RETENTION_DAYS:-0}"
+  DB_AUTO_BACKUP_DIR="${DB_AUTO_BACKUP_DIR:-$BACKUP_DIR_DEFAULT}"
+
+  if [ -f "$AUTO_STATE_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$AUTO_STATE_FILE"
+  fi
+
+  DB_AUTO_BACKUP_ENABLED="${DB_AUTO_BACKUP_ENABLED:-0}"
+  DB_AUTO_BACKUP_INTERVAL_HOURS="${DB_AUTO_BACKUP_INTERVAL_HOURS:-24}"
+  DB_AUTO_BACKUP_RETENTION_DAYS="${DB_AUTO_BACKUP_RETENTION_DAYS:-0}"
+  DB_AUTO_BACKUP_DIR="${DB_AUTO_BACKUP_DIR:-$BACKUP_DIR_DEFAULT}"
+}
+
+write_auto_state() {
+  local enabled="$1"
+  local hours="$2"
+  local retention_days="${3:-0}"
+
+  mkdir -p runtime/generated
+  cat > "$AUTO_STATE_FILE" <<EOF
+DB_AUTO_BACKUP_ENABLED=$enabled
+DB_AUTO_BACKUP_INTERVAL_HOURS=$hours
+DB_AUTO_BACKUP_RETENTION_DAYS=$retention_days
+DB_AUTO_BACKUP_DIR=$BACKUP_DIR_DEFAULT
+EOF
+}
+
+validate_hours() {
+  local hours="$1"
+  validate_positive_integer "$hours"
+}
+
+auto_backup_enable() {
+  local hours="${1:-}"
+  local retention_days="${2:-}"
+
+  if [ -z "$hours" ]; then
+    echo "Missing backup interval."
+    echo "Usage: dune db auto enable <hours>"
+    exit 2
+  fi
+
+  if ! validate_hours "$hours"; then
+    echo "Invalid interval: $hours"
+    echo "Use a positive integer number of hours, for example:"
+    echo "  dune db auto enable 6"
+    exit 1
+  fi
+
+  load_auto_state
+
+  if [ -n "$retention_days" ]; then
+    if ! validate_positive_integer "$retention_days"; then
+      echo "Invalid retention days: $retention_days"
+      echo "Use a positive integer number of days, for example:"
+      echo "  dune db auto enable 6 14"
+      exit 1
+    fi
+  else
+    retention_days="${DB_AUTO_BACKUP_RETENTION_DAYS:-0}"
+  fi
+
+  write_auto_state 1 "$hours" "$retention_days"
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "Auto DB backup preference saved, but systemctl was not found."
+    echo "Saved: $AUTO_STATE_FILE"
+    return 0
+  fi
+
+  cat > "$AUTO_SERVICE_FILE" <<EOF
+[Unit]
+Description=Dune Awakening battlegroup database backup
+Wants=docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=$ROOT_DIR
+Environment=DB_BACKUP_PRUNE_AFTER_SUCCESS=1
+EnvironmentFile=$ROOT_DIR/runtime/generated/db-backup.env
+ExecStart=$ROOT_DIR/runtime/scripts/dune db backup
+EOF
+
+  cat > "$AUTO_TIMER_FILE" <<EOF
+[Unit]
+Description=Run Dune Awakening battlegroup database backup
+
+[Timer]
+OnBootSec=15m
+OnUnitActiveSec=${hours}h
+Persistent=true
+RandomizedDelaySec=10m
+Unit=dune-awakening-db-backup.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable --now dune-awakening-db-backup.timer
+
+  echo "Auto DB backups enabled."
+  echo "Interval: every $hours hours"
+  if [ "${retention_days:-0}" -gt 0 ] 2>/dev/null; then
+    echo "Retention: keep backups from the last $retention_days days"
+  else
+    echo "Retention: off"
+  fi
+  echo "Timer: dune-awakening-db-backup.timer"
+}
+
+auto_backup_disable() {
+  local hours
+  local retention_days
+
+  load_auto_state
+  hours="${DB_AUTO_BACKUP_INTERVAL_HOURS:-24}"
+  retention_days="${DB_AUTO_BACKUP_RETENTION_DAYS:-0}"
+
+  write_auto_state 0 "$hours" "$retention_days"
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now dune-awakening-db-backup.timer >/dev/null 2>&1 || true
+    rm -f "$AUTO_SERVICE_FILE" "$AUTO_TIMER_FILE"
+    systemctl daemon-reload
+  fi
+
+  echo "Auto DB backups disabled."
+}
+
+auto_backup_status() {
+  load_auto_state
+
+  echo "=== Automatic database backups ==="
+  echo "Enabled:          ${DB_AUTO_BACKUP_ENABLED:-0}"
+  echo "Interval hours:   ${DB_AUTO_BACKUP_INTERVAL_HOURS:-24}"
+  if [ "${DB_AUTO_BACKUP_RETENTION_DAYS:-0}" -gt 0 ] 2>/dev/null; then
+    echo "Retention:        ${DB_AUTO_BACKUP_RETENTION_DAYS} days"
+  else
+    echo "Retention:        off"
+  fi
+  echo "Backup directory: ${DB_AUTO_BACKUP_DIR:-$BACKUP_DIR_DEFAULT}"
+
+  if command -v systemctl >/dev/null 2>&1; then
+    echo
+    if systemctl list-unit-files dune-awakening-db-backup.timer --no-legend --no-pager 2>/dev/null | grep -q '^dune-awakening-db-backup.timer'; then
+      timer_enabled="$(systemctl is-enabled dune-awakening-db-backup.timer 2>/dev/null || true)"
+      [ -n "$timer_enabled" ] && echo "Systemd timer:   $timer_enabled"
+      systemctl list-timers --all dune-awakening-db-backup.timer --no-pager || true
+    else
+      echo "Systemd timer:   not installed"
+    fi
+  fi
+
+  echo
+  echo "=== Recent database backups ==="
+  if [ -d "${DB_AUTO_BACKUP_DIR:-$BACKUP_DIR_DEFAULT}" ]; then
+    find "${DB_AUTO_BACKUP_DIR:-$BACKUP_DIR_DEFAULT}" -maxdepth 1 -type f \( -name 'dune-db-*.dump' -o -name 'dune-db-*.sql' \) -printf '%TY-%Tm-%Td %TH:%TM  %p\n' | sort | tail -n 5 || true
+  else
+    echo "No backup directory found: ${DB_AUTO_BACKUP_DIR:-$BACKUP_DIR_DEFAULT}"
+  fi
+}
+
+auto_backup_retention() {
+  local value="${1:-}"
+
+  load_auto_state
+
+  case "$value" in
+    "")
+      echo "Missing retention value."
+      echo "Usage: dune db auto retention <days>"
+      echo "       dune db auto retention off"
+      exit 2
+      ;;
+    off|OFF|0)
+      write_auto_state "${DB_AUTO_BACKUP_ENABLED:-0}" "${DB_AUTO_BACKUP_INTERVAL_HOURS:-24}" 0
+      echo "Auto backup retention disabled. Old backups will not be deleted automatically."
+      ;;
+    *)
+      if ! validate_positive_integer "$value"; then
+        echo "Invalid retention days: $value"
+        echo "Use a positive integer number of days, or: dune db auto retention off"
+        exit 1
+      fi
+      write_auto_state "${DB_AUTO_BACKUP_ENABLED:-0}" "${DB_AUTO_BACKUP_INTERVAL_HOURS:-24}" "$value"
+      echo "Auto backup retention set to $value days."
+      ;;
+  esac
+}
+
+handle_auto_backup() {
+  local sub="${1:-status}"
+
+  case "$sub" in
+    enable|on)
+      auto_backup_enable "${2:-}" "${3:-}"
+      ;;
+    disable|off)
+      auto_backup_disable
+      ;;
+    status)
+      auto_backup_status
+      ;;
+    retention)
+      auto_backup_retention "${2:-}"
+      ;;
+    *)
+      echo "Unknown DB auto-backup command: $sub"
+      echo "Usage:"
+      echo "  dune db auto enable <hours>"
+      echo "  dune db auto disable"
+      echo "  dune db auto status"
+      echo "  dune db auto retention <days>"
+      echo "  dune db auto retention off"
+      exit 2
+      ;;
   esac
 }
 
@@ -166,6 +681,12 @@ case "$cmd" in
     ;;
   import|restore)
     import_db "${2:-}"
+    ;;
+  delete)
+    delete_backup "${2:-}"
+    ;;
+  auto)
+    handle_auto_backup "${2:-status}" "${3:-}" "${4:-}"
     ;;
   help|--help|-h)
     usage

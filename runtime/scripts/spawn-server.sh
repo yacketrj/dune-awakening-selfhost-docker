@@ -164,37 +164,8 @@ PY
 }
 
 MEMORY="$(memory_for_map "$MAP_NAME")"
-server_index_for_map() {
-  local map="$1"
-  python3 - "$map" <<'SERVERINDEXPY'
-import json
-import sys
-from pathlib import Path
-
-target = sys.argv[1].lower()
-catalog_path = Path("runtime/generated/server-catalog.json")
-
-if not catalog_path.exists():
-    print("0")
-    raise SystemExit
-
-catalog = json.loads(catalog_path.read_text())
-for item in catalog:
-    if str(item.get("map", "")).lower() == target:
-        print(int(item.get("index", 0)) + 1)
-        raise SystemExit
-
-print("0")
-SERVERINDEXPY
-}
-
-SERVER_INDEX="$(server_index_for_map "$MAP_NAME")"
-
-if [ "$SERVER_INDEX" = "0" ]; then
-  echo "Could not determine SERVER_INDEX for map: $MAP_NAME"
-  echo "Make sure runtime/generated/server-catalog.json exists."
-  exit 1
-fi
+mapfile -t SIETCH_RUNTIME_ARGS < <(runtime/scripts/sietches.sh runtime-args "$MAP_NAME" "$PARTITION_ID" 2>/dev/null || true)
+SERVER_INDEX="$PARTITION_ID"
 
 
 port_is_free() {
@@ -240,6 +211,7 @@ echo
 mkdir -p "runtime/game/$safe_name/Saved"
 mkdir -p runtime/game/artifacts
 mkdir -p runtime/fake-k8s-serviceaccount
+mkdir -p runtime/container
 
 cat > runtime/fake-k8s-serviceaccount/namespace <<EOF
 funcom-seabass-$BATTLEGROUP_ID
@@ -263,6 +235,7 @@ docker run -d \
   --memory-reservation "$MEMORY" \
   -v "$PWD/runtime/game/$safe_name/Saved:/home/dune/server/DuneSandbox/Saved" \
   -v "$PWD/runtime/game/artifacts:/home/dune/artifacts" \
+  -v "$PWD/runtime/container:/opt/dune-local:ro" \
   -v "$PWD/runtime/fake-k8s-serviceaccount:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
   -e "POD_UID=docker-$safe_name" \
   -e "POD_NAME=${BATTLEGROUP_ID}-sg-${safe_name}-pod-${PARTITION_ID}" \
@@ -280,7 +253,7 @@ docker run -d \
   -e "RMQ_HTTP_TOKEN_AUTH_SECRET=$RMQ_HTTP_TOKEN_AUTH_SECRET" \
   -e "fls-apikey=$FLS_APIKEY" \
   "$IMAGE" \
-  /home/dune/run.sh \
+  /opt/dune-local/run-server.sh \
   "$MAP_NAME" \
   "-FarmRegion=$SERVER_REGION" \
   "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=$FUNCOM_TOKEN" \
@@ -299,6 +272,7 @@ docker run -d \
   --RMQGamePort=31982 \
   --RMQAdminHostname=127.0.0.1 \
   --RMQAdminPort=32573 \
+  "${SIETCH_RUNTIME_ARGS[@]}" \
   -stdout \
   -FullStdOutLogOutput
 

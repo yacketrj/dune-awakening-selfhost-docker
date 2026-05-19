@@ -131,6 +131,11 @@ case "$cmd" in
     runtime/scripts/memory.sh "$@"
     ;;
 
+  sietches)
+    shift || true
+    runtime/scripts/sietches.sh "$@"
+    ;;
+
   help|--help|-h)
     cat <<'EOF'
 Usage:
@@ -151,9 +156,30 @@ Usage:
   runtime/scripts/dune logs <service> [--raw]
   runtime/scripts/dune restart <service>
   runtime/scripts/dune update [check|auto enable|auto disable|auto status|--yes]
-  runtime/scripts/dune db [backup|list|status|import <backup-file>]
+  runtime/scripts/dune db backup [output-dir]
+  runtime/scripts/dune db list
+  runtime/scripts/dune db status
+  runtime/scripts/dune db import <backup-file>
+  runtime/scripts/dune db restore <backup-file>
+  runtime/scripts/dune db delete <backup-file>
+  runtime/scripts/dune db delete --all
+  runtime/scripts/dune db auto enable <hours> [retention-days]
+  runtime/scripts/dune db auto disable
+  runtime/scripts/dune db auto status
+  runtime/scripts/dune db auto retention <days>
+  runtime/scripts/dune db auto retention off
   runtime/scripts/dune config title ["New Server Name"]
-  runtime/scripts/dune memory [status|set <map> <memory>|unset <map>]
+  runtime/scripts/dune memory status
+  runtime/scripts/dune memory list-maps
+  runtime/scripts/dune memory set <map-name> <memory>
+  runtime/scripts/dune memory unset <map-name>
+  runtime/scripts/dune memory set default <memory>
+  runtime/scripts/dune memory unset default
+  runtime/scripts/dune sietches [list|show <map-name>|dimensions <map-name>]
+  runtime/scripts/dune sietches set-max <map-name> <count>
+  runtime/scripts/dune sietches set-active <map-name> <count>
+  runtime/scripts/dune sietches set-display <partition-id> <display-name>
+  runtime/scripts/dune sietches set-password <partition-id> [password]
 
 Services for logs/restart:
   postgres

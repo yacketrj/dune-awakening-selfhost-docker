@@ -47,6 +47,18 @@ runtime/scripts/start-autoscaler.sh || {
 }
 
 echo
+echo "=== Reconciling Active Sietch Dimensions ==="
+runtime/scripts/sietches.sh reconcile Survival_1 || {
+  echo "Could not reconcile Survival_1 active dimensions."
+}
+
+echo
+echo "=== Starting Sietch Override Publisher ==="
+runtime/scripts/publish-sietch-overrides.sh restart || {
+  echo "Could not start sietch override publisher."
+}
+
+echo
 echo "=== Final quick status ==="
 docker ps --filter "name=dune-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 

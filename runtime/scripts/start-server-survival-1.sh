@@ -23,6 +23,7 @@ SERVER_REGION="${SERVER_REGION:-Europe Test}"
 SERVER_IP="${SERVER_IP:-auto}"
 BATTLEGROUP_ID="${BATTLEGROUP_ID:-dune-docker}"
 MEMORY="${DUNE_MEMORY_SURVIVAL_1:-12g}"
+PARTITION_ID="${DUNE_SURVIVAL_PARTITION_ID:-1}"
 
 if [ "$SERVER_IP" = "auto" ]; then
   SERVER_IP="$(curl -4fsSL https://api.ipify.org || echo 127.0.0.1)"
@@ -37,6 +38,7 @@ fi
 mkdir -p runtime/game/survival-1/Saved
 mkdir -p runtime/game/artifacts
 mkdir -p runtime/fake-k8s-serviceaccount
+mkdir -p runtime/container
 
 cat > runtime/fake-k8s-serviceaccount/namespace <<'EOF'
 funcom-seabass-dune-docker
@@ -46,6 +48,8 @@ fake-token
 EOF
 : > runtime/fake-k8s-serviceaccount/ca.crt
 chmod -R 755 runtime/fake-k8s-serviceaccount
+
+mapfile -t SIETCH_RUNTIME_ARGS < <(runtime/scripts/sietches.sh runtime-args Survival_1 "$PARTITION_ID" 2>/dev/null || true)
 
 docker rm -f dune-server-survival-1 2>/dev/null || true
 
@@ -60,6 +64,7 @@ docker run -d \
   --memory-reservation "$MEMORY" \
   -v "$PWD/runtime/game/survival-1/Saved:/home/dune/server/DuneSandbox/Saved" \
   -v "$PWD/runtime/game/artifacts:/home/dune/artifacts" \
+  -v "$PWD/runtime/container:/opt/dune-local:ro" \
   -v "$PWD/runtime/fake-k8s-serviceaccount:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
   -e "POD_UID=docker-survival-1" \
   -e "POD_NAME=${BATTLEGROUP_ID}-sg-survival-1-pod-1" \
@@ -77,7 +82,7 @@ docker run -d \
   -e "RMQ_HTTP_TOKEN_AUTH_SECRET=$RMQ_HTTP_TOKEN_AUTH_SECRET" \
   -e "fls-apikey=$FLS_APIKEY" \
   "$IMAGE" \
-  /home/dune/run.sh \
+  /opt/dune-local/run-server.sh \
   Survival_1 \
   "-FarmRegion=$SERVER_REGION" \
   "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=$FUNCOM_TOKEN" \
@@ -88,7 +93,7 @@ docker run -d \
   -DatabaseHost=127.0.0.1:15432 \
   -DatabaseUser=dune \
   -DatabasePassword=dune \
-  -PartitionIndex=1 \
+  "-PartitionIndex=$PARTITION_ID" \
   "-ini:engine:[URL]:Port=7778" \
   "-ini:engine:[URL]:IGWPort=7888" \
   -battlegroup-director-url=127.0.0.1:11717 \
@@ -96,6 +101,7 @@ docker run -d \
   --RMQGamePort=31982 \
   --RMQAdminHostname=127.0.0.1 \
   --RMQAdminPort=32573 \
+  "${SIETCH_RUNTIME_ARGS[@]}" \
   -stdout \
   -FullStdOutLogOutput
 
@@ -106,3 +112,5 @@ docker ps --filter "name=dune-server-survival-1" --format "table {{.Names}}\t{{.
 echo
 echo "=== survival logs ==="
 docker logs --tail 180 dune-server-survival-1
+
+runtime/scripts/publish-sietch-overrides.sh restart >/dev/null 2>&1 || true

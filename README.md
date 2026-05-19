@@ -48,6 +48,21 @@ Start with the friendly menu:
 dune manager
 ```
 
+The manager is organized around the main jobs most hosts need:
+
+| Menu | What It Does |
+|---|---|
+| Battlegroup Overview | Status, readiness, version, containers, and ports |
+| Battlegroup Settings | Battlegroup name, Start, Stop, Restart, Redeploy, dynamic maps, autoscaler, database maintenance, and current config |
+| Sietches | Map list and supported map settings |
+| Updates | Manual and automatic update controls |
+| Logs | Redacted logs for the main services |
+| Advanced Tools | Diagnostics and safe low-level details |
+
+When starting or restarting from the manager, the configured player-facing IP is checked first. If your public or LAN IP changed, the manager asks before updating `.env` and continuing.
+
+Manager menus use a colored `[X]` selector in interactive terminals. Use Up and Down to move, Enter to select, and the explicit Back items to return. Ctrl+C exits normal menu screens cleanly; inside an input prompt it cancels the current action without saving changes. Plain numbered menus are used automatically when the terminal is not interactive.
+
 Or run first-time setup directly:
 
 ```bash
@@ -135,30 +150,48 @@ The autoscaler starts with `dune start` so maps can be deployed automatically wh
 
 Dynamic maps use UDP `7779-7810` for game traffic and `7890-7921` for server-to-server traffic.
 
-## Backups And Import
+`Survival_1` and `Overmap` are always-on protected maps. The manager will not stop them from the dynamic maps menu.
+
+## Database Backups
 
 ```bash
 dune db backup
 dune db list
 dune db status
+dune db delete dune-db-<scope>__YYYYMMDD-HHMMSS.dump
+dune db delete --all
 dune db import runtime/backups/db/<backup-file>.dump
+dune db restore runtime/backups/db/<backup-file>.dump
+dune db auto enable 12
+dune db auto enable 1 7
+dune db auto retention 7
+dune db auto retention off
+dune db auto disable
+dune db auto status
 ```
 
-Import requires confirmation and creates a pre-import backup first.
+Backups are saved under `runtime/backups/db/` by default and do not include Funcom tokens or secret files. Backup filenames use the format `dune-db-<scope>__YYYYMMDD-HHMMSS.dump`, where `<scope>` is derived from the currently assigned map set so the file is easier to identify later. The `.meta` file next to each backup also records the full active map list and battlegroup details at backup time.
 
-## Server Settings
+Automatic backups use a systemd timer when systemd is available. Optional retention keeps backups from the last X days, for example `dune db auto enable 1 7` backs up hourly and keeps the last 7 days.
 
-Change or show the server title:
+In the manager, database restore is shown as `Restore A Database Backup` and uses a backup picker instead of asking for a path. Delete flows also show available backups first. Import/restore replaces the current database state, requires confirmation, and creates a pre-import backup first. Deleting backups is permanent.
+
+## Battlegroup And Sietch Settings
+
+Change or show the battlegroup title:
 
 ```bash
 dune config title
 dune config title "My New Server Name"
 ```
 
+Changing the title restarts only the Gateway service, which publishes the browser-facing server name.
+
 Configure memory for maps/servers:
 
 ```bash
 dune memory status
+dune memory list-maps
 dune memory set survival 12g
 dune memory set overmap 8g
 dune memory set default 8g
@@ -166,7 +199,22 @@ dune memory set DeepDesert_1 10g
 dune memory unset DeepDesert_1
 ```
 
-Memory changes apply after the affected server container is restarted.
+Use `dune memory list-maps` or the manager to choose from known maps instead of memorizing internal names. Changing or removing a map memory setting asks for confirmation; if that map is running, only that map restarts so the new limit can apply. Default memory applies to future spawned/restarted maps and does not restart running maps.
+
+The manager's Sietches area lists maps from the current world partition state when Postgres is running, with the generated world partition catalog as a fallback:
+
+```bash
+dune sietches list
+dune sietches show Survival_1
+```
+
+Inside Sietches, use `List Maps` and `Edit Map`. In the manager, `Survival_1` supports memory, display name, and password. All other maps, including `Overmap`, are memory-only in the manager. Passwords are stored locally under `runtime/generated/` and are never displayed.
+
+`dune sietches` still provides the backend controls for max dimensions and active dimensions, but those controls are intentionally not exposed in the manager for this version.
+
+For `Survival_1`, display name and password changes are applied immediately by restarting `Survival_1`, `director`, and `gateway`, then republishing the browser-facing state. `Overmap` is protected and only supports memory changes. Dedicated scaling maps have active dimensions managed by the autoscaler at runtime.
+
+If a map setting fails validation or cannot be saved, the manager does not ask to restart that map.
 
 ## Runtime Files
 
