@@ -9,7 +9,7 @@ require_docker_prereqs() {
   if ! command -v docker >/dev/null 2>&1; then
     echo "Docker is required but was not found in PATH."
     echo
-    echo "Install Docker Engine and Docker Compose first, then run:"
+    echo "Use this command to install Docker Engine and Docker Compose:"
     echo '  sudo apt-get update && sudo apt-get install -y ca-certificates curl && sudo install -m 0755 -d /etc/apt/keyrings && sudo curl -fsSL https://download.docker.com/linux/$(. /etc/os-release && echo "$ID")/gpg -o /etc/apt/keyrings/docker.asc && sudo chmod a+r /etc/apt/keyrings/docker.asc && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && sudo systemctl enable --now docker && docker --version && docker compose version'
     echo
     echo "Then run:"
