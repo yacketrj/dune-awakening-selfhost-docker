@@ -2,6 +2,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
+[ -f .env ] && . ./.env
+[ -f runtime/generated/battlegroup.env ] && . runtime/generated/battlegroup.env
+source runtime/scripts/runtime-env.sh
 
 fail=0
 warn=0
@@ -135,10 +138,12 @@ check_tcp 31982 "RabbitMQ game"
 check_tcp 31983 "RabbitMQ game HTTP"
 check_tcp 5059 "TextRouter"
 check_tcp 11717 "Director"
-check_udp 7777 "Overmap clients"
-check_udp 7778 "Survival_1 clients"
-check_udp 7888 "Survival_1 server-to-server"
-check_udp 7889 "Overmap server-to-server"
+client_port_base="$(resolve_client_port_base)"
+igw_port_base="$(resolve_igw_port_base)"
+check_udp "$client_port_base" "Overmap clients"
+check_udp "$((client_port_base + 1))" "Survival_1 clients"
+check_udp "$igw_port_base" "Survival_1 server-to-server"
+check_udp "$((igw_port_base + 1))" "Overmap server-to-server"
 
 echo
 echo "=== Steam server files ==="
@@ -212,7 +217,7 @@ fi
 case "$mode" in
   public)
     ok "Hosting mode: public"
-    echo "     Make sure your firewall/router allows TCP 31982, TCP 31983, and UDP 7777-7810."
+    echo "     Make sure your firewall/router allows TCP 31982, TCP 31983, and the configured UDP game ranges."
     ;;
   local)
     ok "Hosting mode: local/LAN"

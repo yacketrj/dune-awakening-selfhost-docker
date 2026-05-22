@@ -672,17 +672,21 @@ PY
   [ -n "$assigned_count" ] || assigned_count=0
 
   if [ "$map" = "Survival_1" ]; then
-    while [ "$assigned_count" -lt "$target" ]; do
-      next_partition="$(psql_value "
-        select partition_id
-        from dune.world_partition
-        where lower(map) = lower('$safe_map')
-          and partition_id <> $base_partition
-          and coalesce(server_id, '') = ''
-        order by dimension_index, partition_id
-        limit 1;
-      " | tr -d '[:space:]')"
-      [ -n "$next_partition" ] || break
+    mapfile -t survival_partitions < <(psql_value "
+      select partition_id || '|' || coalesce(server_id, '')
+      from dune.world_partition
+      where lower(map) = lower('$safe_map')
+        and partition_id <> $base_partition
+      order by dimension_index, partition_id;
+    ")
+
+    for partition_row in "${survival_partitions[@]}"; do
+      [ "$assigned_count" -lt "$target" ] || break
+      IFS='|' read -r next_partition next_server_id <<< "$partition_row"
+      [ -n "$next_partition" ] || continue
+      if [ -n "$next_server_id" ]; then
+        continue
+      fi
       runtime/scripts/spawn-server.sh "$next_partition"
       assigned_count=$((assigned_count + 1))
     done

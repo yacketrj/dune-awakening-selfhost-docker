@@ -24,6 +24,10 @@ SERVER_TITLE="$(resolve_server_title)"
 SERVER_REGION="$(resolve_server_region)"
 SERVER_IP="$(resolve_server_ip)"
 BATTLEGROUP_ID="$(resolve_battlegroup_id)"
+CLIENT_PORT_BASE="$(resolve_client_port_base)"
+IGW_PORT_BASE="$(resolve_igw_port_base)"
+GAME_PORT="$CLIENT_PORT_BASE"
+IGW_PORT="$((IGW_PORT_BASE + 1))"
 MEMORY="${DUNE_MEMORY_OVERMAP:-2g}"
 PARTITION_ID="${DUNE_OVERMAP_PARTITION_ID:-2}"
 if [ -n "${DUNE_FAKE_K8S_SERVICEACCOUNT_DIR:-}" ]; then
@@ -36,10 +40,26 @@ if [ "$SERVER_IP" = "auto" ]; then
   SERVER_IP="$(curl -4fsSL https://api.ipify.org || echo 127.0.0.1)"
 fi
 
-MULTIHOME_IP="${SERVER_BIND_IP:-auto}"
-if [ "$MULTIHOME_IP" = "auto" ]; then
-  MULTIHOME_IP="$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
-fi
+resolve_multihome_ip() {
+  local requested="${SERVER_BIND_IP:-}"
+  local host_ip
+
+  if [ -n "$requested" ] && ip -o -4 addr show up scope global     | awk '$2 !~ /^(docker|br-|veth)/ { sub(/\/.*/, "", $4); print $4 }'     | grep -qx "$requested"; then
+    printf '%s' "$requested"
+    return 0
+  fi
+
+  host_ip="$(ip -o -4 addr show up scope global     | awk '$2 !~ /^(docker|br-|veth)/ { sub(/\/.*/, "", $4); print $4; exit }')"
+
+  if [ -n "$host_ip" ]; then
+    printf '%s' "$host_ip"
+    return 0
+  fi
+
+  ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
+}
+
+MULTIHOME_IP="$(resolve_multihome_ip)"
 
 mkdir -p runtime/game/overmap/Saved
 mkdir -p runtime/game/artifacts
@@ -102,8 +122,8 @@ docker run -d \
   -DatabaseUser=dune \
   -DatabasePassword=dune \
   "-PartitionIndex=$PARTITION_ID" \
-  "-ini:engine:[URL]:Port=7777" \
-  "-ini:engine:[URL]:IGWPort=7889" \
+  "-ini:engine:[URL]:Port=$GAME_PORT" \
+  "-ini:engine:[URL]:IGWPort=$IGW_PORT" \
   -battlegroup-director-url=127.0.0.1:11717 \
   --RMQGameHostname=127.0.0.1 \
   --RMQGamePort=31982 \

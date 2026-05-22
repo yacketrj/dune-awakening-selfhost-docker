@@ -15,8 +15,7 @@ Examples:
 
 Notes:
   - Picks the first unassigned partition for a map.
-  - Uses UDP 7779-7810 for client/game ports.
-  - Uses UDP 7890-7921 for IGW/server-to-server ports.
+  - Dynamic ports are derived from the configured UserEngine Port and IGWPort values.
 EOF
 }
 
@@ -55,15 +54,33 @@ SERVER_TITLE="$(resolve_server_title)"
 SERVER_REGION="$(resolve_server_region)"
 SERVER_IP="$(resolve_server_ip)"
 BATTLEGROUP_ID="$(resolve_battlegroup_id)"
+CLIENT_PORT_BASE="$(resolve_client_port_base)"
+IGW_PORT_BASE="$(resolve_igw_port_base)"
 
 if [ "$SERVER_IP" = "auto" ]; then
   SERVER_IP="$(curl -4fsSL https://api.ipify.org || echo 127.0.0.1)"
 fi
 
-MULTIHOME_IP="${SERVER_BIND_IP:-auto}"
-if [ "$MULTIHOME_IP" = "auto" ]; then
-  MULTIHOME_IP="$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
-fi
+resolve_multihome_ip() {
+  local requested="${SERVER_BIND_IP:-}"
+  local host_ip
+
+  if [ -n "$requested" ] && ip -o -4 addr show up scope global     | awk '$2 !~ /^(docker|br-|veth)/ { sub(/\/.*/, "", $4); print $4 }'     | grep -qx "$requested"; then
+    printf '%s' "$requested"
+    return 0
+  fi
+
+  host_ip="$(ip -o -4 addr show up scope global     | awk '$2 !~ /^(docker|br-|veth)/ { sub(/\/.*/, "", $4); print $4; exit }')"
+
+  if [ -n "$host_ip" ]; then
+    printf '%s' "$host_ip"
+    return 0
+  fi
+
+  ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
+}
+
+MULTIHOME_IP="$(resolve_multihome_ip)"
 
 if ! docker ps --format '{{.Names}}' | grep -qx dune-postgres; then
   echo "dune-postgres is not running."
@@ -173,7 +190,11 @@ PY
 
 MEMORY="$(memory_for_map "$MAP_NAME")"
 mapfile -t SIETCH_RUNTIME_ARGS < <(runtime/scripts/sietches.sh runtime-args "$MAP_NAME" "$PARTITION_ID" 2>/dev/null || true)
-SERVER_INDEX="$PARTITION_ID"
+if [ "$MAP_NAME" = "Survival_1" ]; then
+  SERVER_INDEX="$((DIMENSION_INDEX + 1))"
+else
+  SERVER_INDEX="$PARTITION_ID"
+fi
 
 
 port_is_free() {
@@ -194,14 +215,34 @@ pick_port() {
   return 1
 }
 
-GAME_PORT="$(pick_port 7779 7810 || true)"
-IGW_PORT="$(pick_port 7890 7921 || true)"
+if [ "$MAP_NAME" = "Survival_1" ]; then
+  GAME_PORT="$((CLIENT_PORT_BASE + 1 + DIMENSION_INDEX))"
+  if [ "$DIMENSION_INDEX" -eq 0 ]; then
+    IGW_PORT="$IGW_PORT_BASE"
+  else
+    IGW_PORT="$((IGW_PORT_BASE + 1 + DIMENSION_INDEX))"
+  fi
 
-if [ -z "$GAME_PORT" ] || [ -z "$IGW_PORT" ]; then
-  echo "Could not find free UDP ports."
-  echo "Game port range checked: 7779-7810"
-  echo "IGW port range checked: 7890-7921"
-  exit 1
+  if ! port_is_free "$GAME_PORT" || ! port_is_free "$IGW_PORT"; then
+    echo "Required Survival_1 dynamic UDP ports are already in use."
+    echo "Expected game port: $GAME_PORT"
+    echo "Expected igw port:  $IGW_PORT"
+    exit 1
+  fi
+else
+  game_start="$((CLIENT_PORT_BASE + 2))"
+  game_end="$((CLIENT_PORT_BASE + 33))"
+  igw_start="$((IGW_PORT_BASE + 2))"
+  igw_end="$((IGW_PORT_BASE + 33))"
+  GAME_PORT="$(pick_port "$game_start" "$game_end" || true)"
+  IGW_PORT="$(pick_port "$igw_start" "$igw_end" || true)"
+
+  if [ -z "$GAME_PORT" ] || [ -z "$IGW_PORT" ]; then
+    echo "Could not find free UDP ports."
+    echo "Game port range checked: ${game_start}-${game_end}"
+    echo "IGW port range checked: ${igw_start}-${igw_end}"
+    exit 1
+  fi
 fi
 
 echo "Spawning dedicated server:"

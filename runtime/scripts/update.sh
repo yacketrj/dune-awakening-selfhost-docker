@@ -38,6 +38,12 @@ DUNE_AUTO_UPDATE_ENABLED=1
 DUNE_AUTO_UPDATE_TIME=$time_value
 EOF
 
+      if [ "$(id -u)" -ne 0 ] && command -v systemctl >/dev/null 2>&1; then
+        echo "Automatic updates need sudo because they install systemd units under /etc/systemd/system."
+        echo "Run: sudo runtime/scripts/dune update auto enable${time_value:+ $time_value}"
+        return 1
+      fi
+
       if ! command -v systemctl >/dev/null 2>&1; then
         echo "Auto-update preference saved, but systemctl was not found."
         echo "Saved: $AUTO_STATE_FILE"

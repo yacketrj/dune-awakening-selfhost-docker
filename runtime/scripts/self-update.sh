@@ -98,6 +98,32 @@ for release in data:
 raise SystemExit(1)'
 }
 
+previous_release_tag_from_releases_list() {
+  local json
+  json="$(releases_json 2>/dev/null)" || return 1
+  [ -n "$json" ] || return 1
+  printf '%s' "$json" | python3 -c 'import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+seen = 0
+for release in data:
+    if not isinstance(release, dict):
+        continue
+    if release.get("draft") or release.get("prerelease"):
+        continue
+    tag = release.get("tag_name") or ""
+    if not tag:
+        continue
+    if seen == 0:
+        seen = 1
+        continue
+    print(tag)
+    raise SystemExit(0)
+raise SystemExit(1)'
+}
+
 cache_latest_release_tag() {
   local tag="$1"
   mkdir -p runtime/generated
@@ -122,6 +148,33 @@ latest_release_tag() {
   fi
 
   latest_release_tag_from_releases_list
+}
+
+previous_release_tag() {
+  previous_release_tag_from_releases_list
+}
+
+list_release_rows() {
+  local json
+  json="$(releases_json 2>/dev/null)" || return 1
+  [ -n "$json" ] || return 1
+  printf '%s' "$json" | python3 -c 'import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+for release in data:
+    if not isinstance(release, dict):
+        continue
+    if release.get("draft") or release.get("prerelease"):
+        continue
+    tag = (release.get("tag_name") or "").strip()
+    if not tag:
+        continue
+    published = (release.get("published_at") or "").strip()
+    published = published[:10] if published else "unknown"
+    name = (release.get("name") or "").strip().replace("	", " ")
+    print(f"{tag}	{published}	{name}")'
 }
 
 release_tarball_url() {
@@ -307,6 +360,13 @@ case "$cmd" in
     exit 0
     ;;
 
+  list|releases)
+    if ! list_release_rows; then
+      echo "Could not fetch stack releases from GitHub."
+      exit 2
+    fi
+    ;;
+
   install|apply)
     if [ -z "$tag" ] || [ "$tag" = "latest" ]; then
       set +e
@@ -321,6 +381,16 @@ case "$cmd" in
         echo "If the repo is still private, publish releases first or configure DUNE_SELF_UPDATE_TOKEN."
         exit 2
       fi
+    elif [ "$tag" = "previous" ]; then
+      set +e
+      tag="$(previous_release_tag)"
+      rc=$?
+      set -e
+      if [ "$rc" -ne 0 ] || [ -z "$tag" ]; then
+        echo "Could not resolve the previous stack release."
+        echo "Make sure the GitHub repo has at least two published non-prerelease releases."
+        exit 2
+      fi
     fi
 
     cache_latest_release_tag "$tag"
@@ -330,7 +400,8 @@ case "$cmd" in
   *)
     echo "Usage:"
     echo "  runtime/scripts/self-update.sh check"
-    echo "  runtime/scripts/self-update.sh install [latest|<tag>]"
+    echo "  runtime/scripts/self-update.sh list"
+    echo "  runtime/scripts/self-update.sh install [latest|previous|<tag>]"
     exit 2
     ;;
 esac

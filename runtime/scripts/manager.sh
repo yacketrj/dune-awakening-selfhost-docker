@@ -187,6 +187,51 @@ repair_runtime_files() {
   fi
 }
 
+choose_stack_release_to_install() {
+  local rows=() row tag published name
+  local labels=()
+  local tags=()
+  local choice
+
+  set +e
+  mapfile -t rows < <("$DUNE" self-update list 2>/dev/null)
+  local rc=$?
+  set -e
+
+  if [ "$rc" -ne 0 ] || [ "${#rows[@]}" -eq 0 ]; then
+    echo "Could not fetch stack releases from GitHub."
+    echo "Make sure releases are published and DUNE_SELF_UPDATE_TOKEN is set if the repo is private."
+    return 1
+  fi
+
+  for row in "${rows[@]}"; do
+    IFS=$'	' read -r tag published name <<< "$row"
+    [ -n "${tag:-}" ] || continue
+    tags+=("$tag")
+    if [ -n "${name:-}" ]; then
+      labels+=("${tag}  ${published:-unknown}  ${name}")
+    else
+      labels+=("${tag}  ${published:-unknown}")
+    fi
+  done
+
+  [ "${#tags[@]}" -gt 0 ] || {
+    echo "No published stack releases were returned."
+    return 1
+  }
+
+  labels+=("Back")
+  menu_or_back "Restore Stack Release" "${labels[@]}" || return 1
+  choice="$MENU_CHOICE"
+
+  if [ "$choice" -gt "${#tags[@]}" ]; then
+    return 1
+  fi
+
+  CHOSEN_STACK_RELEASE_TAG="${tags[$((choice - 1))]}"
+  return 0
+}
+
 read_choice() {
   local prompt="${1:-Select An Option: }"
   local choice
@@ -429,6 +474,29 @@ run_cmd() {
     echo
     echo "Command exited with status $rc."
   fi
+}
+
+run_cmd_allow_codes() {
+  local allowed_csv="$1"
+  shift
+  local rc
+
+  echo
+
+  set +e
+  "$@"
+  rc=$?
+  set -e
+
+  case ",$allowed_csv," in
+    *,"$rc",*)
+      return 0
+      ;;
+  esac
+
+  echo
+  echo "Command exited with status $rc."
+  return "$rc"
 }
 
 run_cmd_status() {
@@ -1210,6 +1278,24 @@ edit_userengine_numeric_field() {
   save_userengine_field "$field_id" "$USERSETTINGS_INPUT_VALUE"
 }
 
+edit_userengine_port_field() {
+  local field_id="$1"
+  local title="$2"
+
+  echo
+  echo "$title"
+  echo "; The starting port that servers listen to for players. Each server"
+  echo "; will use the next available port in a sequence (7777, 7778 etc.). The range should"
+  echo "; not intersect with the IGWPort range bellow"
+  echo
+  prompt_usersettings_number "New value (/back to cancel):" int
+  if [ "${USERSETTINGS_INPUT_CANCELLED:-0}" = "1" ]; then
+    info "No changes made."
+    return
+  fi
+  save_userengine_field "$field_id" "$USERSETTINGS_INPUT_VALUE"
+}
+
 edit_usergame_numeric_field() {
   local map="$1"
   local field_id="$2"
@@ -1280,35 +1366,25 @@ edit_userengine_menu() {
   while true; do
     load_usersettings_values engine
     MENU_CONTEXT_TEXT="$(userengine_about_text)"
-    menu_or_back "Edit UserEngine (Global Defaults)" \
-      "Mining Output Multiplier  Current: $(usersettings_value mining_output_multiplier)" \
-      "Vehicle Mining Multiplier  Current: $(usersettings_value vehicle_mining_output_multiplier)" \
-      "PvP Resource Multiplier  Current: $(usersettings_value pvp_resource_multiplier)" \
-      "Vehicle Durability Damage  Current: $(usersettings_value vehicle_durability_damage_multiplier)" \
-      "Sandstorm Enabled  Current: $(usersettings_value sandstorm_enabled)" \
-      "Sandstorm Treasure Enabled  Current: $(usersettings_value sandstorm_treasure_enabled)" \
-      "Sandworm Enabled  Current: $(usersettings_value sandworm_enabled)" \
-      "Sandworm Collision Interaction  Current: $(usersettings_value sandworm_collision_interaction)" \
-      "Sandworm Danger Zones Enabled  Current: $(usersettings_value sandworm_danger_zones_enabled)" \
-      "Sandworm Invulnerability On Exit  Current: $(usersettings_value sandworm_invulnerability_on_exit)" \
-      "Sandworm Invulnerability On Restart  Current: $(usersettings_value sandworm_invulnerability_on_restart)" \
-      "Back" || return
+    menu_or_back "Edit UserEngine (Global Defaults)"       "Port  Current: $(usersettings_value port)"       "IGWPort  Current: $(usersettings_value igw_port)"       "Mining Output Multiplier  Current: $(usersettings_value mining_output_multiplier)"       "Vehicle Mining Multiplier  Current: $(usersettings_value vehicle_mining_output_multiplier)"       "PvP Resource Multiplier  Current: $(usersettings_value pvp_resource_multiplier)"       "Vehicle Durability Damage  Current: $(usersettings_value vehicle_durability_damage_multiplier)"       "Sandstorm Enabled  Current: $(usersettings_value sandstorm_enabled)"       "Sandstorm Treasure Enabled  Current: $(usersettings_value sandstorm_treasure_enabled)"       "Sandworm Enabled  Current: $(usersettings_value sandworm_enabled)"       "Sandworm Collision Interaction  Current: $(usersettings_value sandworm_collision_interaction)"       "Sandworm Danger Zones Enabled  Current: $(usersettings_value sandworm_danger_zones_enabled)"       "Sandworm Invulnerability On Exit  Current: $(usersettings_value sandworm_invulnerability_on_exit)"       "Sandworm Invulnerability On Restart  Current: $(usersettings_value sandworm_invulnerability_on_restart)"       "Back" || return
     MENU_CONTEXT_TEXT=""
     choice="$MENU_CHOICE"
 
     case "$choice" in
-      1) edit_userengine_numeric_field mining_output_multiplier "New mining output multiplier (example: 1.0 or 10.0, /back to cancel):" float; pause ;;
-      2) edit_userengine_numeric_field vehicle_mining_output_multiplier "New vehicle mining multiplier (example: 1.0 or 10.0, /back to cancel):" float; pause ;;
-      3) edit_userengine_numeric_field pvp_resource_multiplier "New PvP resource multiplier (example: 2.5, /back to cancel):" float; pause ;;
-      4) edit_userengine_numeric_field vehicle_durability_damage_multiplier "New vehicle durability damage multiplier (example: 1.0, /back to cancel):" float; pause ;;
-      5) edit_userengine_boolean_field sandstorm_enabled "Set Sandstorm" "Enabled (1)" "Disabled (0)" "1" "0"; pause ;;
-      6) edit_userengine_boolean_field sandstorm_treasure_enabled "Set Sandstorm Treasure" "Enabled (1)" "Disabled (0)" "1" "0"; pause ;;
-      7) edit_userengine_boolean_field sandworm_enabled "Set Sandworm" "Enabled (1)" "Disabled (0)" "1" "0"; pause ;;
-      8) edit_userengine_boolean_field sandworm_collision_interaction "Set Sandworm Collision Interaction" "True" "False" "true" "false"; pause ;;
-      9) edit_userengine_boolean_field sandworm_danger_zones_enabled "Set Sandworm Danger Zones" "True" "False" "true" "false"; pause ;;
-      10) edit_userengine_numeric_field sandworm_invulnerability_on_exit "Seconds of sandworm invulnerability on exit (/back to cancel):" float; pause ;;
-      11) edit_userengine_numeric_field sandworm_invulnerability_on_restart "Seconds of sandworm invulnerability after restart (/back to cancel):" float; pause ;;
-      12) return ;;
+      1) edit_userengine_port_field port "Port"; pause ;;
+      2) edit_userengine_port_field igw_port "IGWPort"; pause ;;
+      3) edit_userengine_numeric_field mining_output_multiplier "New mining output multiplier (example: 1.0 or 10.0, /back to cancel):" float; pause ;;
+      4) edit_userengine_numeric_field vehicle_mining_output_multiplier "New vehicle mining multiplier (example: 1.0 or 10.0, /back to cancel):" float; pause ;;
+      5) edit_userengine_numeric_field pvp_resource_multiplier "New PvP resource multiplier (example: 2.5, /back to cancel):" float; pause ;;
+      6) edit_userengine_numeric_field vehicle_durability_damage_multiplier "New vehicle durability damage multiplier (example: 1.0, /back to cancel):" float; pause ;;
+      7) edit_userengine_boolean_field sandstorm_enabled "Set Sandstorm" "Enabled (1)" "Disabled (0)" "1" "0"; pause ;;
+      8) edit_userengine_boolean_field sandstorm_treasure_enabled "Set Sandstorm Treasure" "Enabled (1)" "Disabled (0)" "1" "0"; pause ;;
+      9) edit_userengine_boolean_field sandworm_enabled "Set Sandworm" "Enabled (1)" "Disabled (0)" "1" "0"; pause ;;
+      10) edit_userengine_boolean_field sandworm_collision_interaction "Set Sandworm Collision Interaction" "True" "False" "true" "false"; pause ;;
+      11) edit_userengine_boolean_field sandworm_danger_zones_enabled "Set Sandworm Danger Zones" "True" "False" "true" "false"; pause ;;
+      12) edit_userengine_numeric_field sandworm_invulnerability_on_exit "Seconds of sandworm invulnerability on exit (/back to cancel):" float; pause ;;
+      13) edit_userengine_numeric_field sandworm_invulnerability_on_restart "Seconds of sandworm invulnerability after restart (/back to cancel):" float; pause ;;
+      14) return ;;
     esac
   done
 }
@@ -1321,34 +1397,40 @@ edit_usergame_menu() {
   while true; do
     if [ -n "$partition_id" ]; then
       load_usersettings_values partition "$map" "$partition_id"
+      MENU_CONTEXT_TEXT="$(usergame_about_text "$map" "$partition_id")"
+      menu_or_back "Edit UserGame: $map${partition_id:+ (Dimension $partition_id)}"         "Partition PvP Enabled  Current: $(usersettings_value partition_pvp_enabled)"         "Security Zones Enabled  Current: $(usersettings_value security_zones_enabled)"         "Item Deterioration Rate  Current: $(usersettings_value item_deterioration_rate)"         "Coriolis Storm Enabled  Current: $(usersettings_value coriolis_auto_spawn_enabled)"         "Max Landclaim Segments  Current: $(usersettings_value max_landclaim_segments)"         "Building Blueprint Max Extensions  Current: $(usersettings_value building_blueprint_max_extensions)"         "Base Backup Max Extensions  Current: $(usersettings_value base_backup_max_extensions)"         "Building Restriction Limits Enabled  Current: $(usersettings_value building_restriction_limits_enabled)"         "Back" || return
+      MENU_CONTEXT_TEXT=""
+      choice="$MENU_CHOICE"
+
+      case "$choice" in
+        1) edit_usergame_boolean_field "$map" partition_pvp_enabled "Set Partition PvP" "Enabled" "Disabled" "True" "False" "$partition_id"; pause ;;
+        2) edit_usergame_boolean_field "$map" security_zones_enabled "Set Security Zones" "True" "False" "True" "False" "$partition_id"; pause ;;
+        3) edit_usergame_numeric_field "$map" item_deterioration_rate "New deterioration rate (0-10, 0 disables, /back to cancel):" float "$partition_id"; pause ;;
+        4) edit_usergame_boolean_field "$map" coriolis_auto_spawn_enabled "Set Coriolis Storm Auto Spawn" "True" "False" "True" "False" "$partition_id"; pause ;;
+        5) edit_usergame_numeric_field "$map" max_landclaim_segments "Maximum landclaim segments (/back to cancel):" int "$partition_id"; pause ;;
+        6) edit_usergame_numeric_field "$map" building_blueprint_max_extensions "Building blueprint max extensions (/back to cancel):" int "$partition_id"; pause ;;
+        7) edit_usergame_numeric_field "$map" base_backup_max_extensions "Base backup max extensions (/back to cancel):" int "$partition_id"; pause ;;
+        8) edit_usergame_boolean_field "$map" building_restriction_limits_enabled "Set Building Restriction Limits" "True" "False" "True" "False" "$partition_id"; pause ;;
+        9) return ;;
+      esac
     else
       load_usersettings_values map "$map"
-    fi
-    MENU_CONTEXT_TEXT="$(usergame_about_text "$map" "$partition_id")"
-    menu_or_back "Edit UserGame: $map${partition_id:+ (Dimension $partition_id)}" \
-      "Force PvP On All Partitions  Current: $(usersettings_value force_enable_pvp_all_partitions)" \
-      "Security Zones Enabled  Current: $(usersettings_value security_zones_enabled)" \
-      "Item Deterioration Rate  Current: $(usersettings_value item_deterioration_rate)" \
-      "Coriolis Storm Enabled  Current: $(usersettings_value coriolis_auto_spawn_enabled)" \
-      "Max Landclaim Segments  Current: $(usersettings_value max_landclaim_segments)" \
-      "Building Blueprint Max Extensions  Current: $(usersettings_value building_blueprint_max_extensions)" \
-      "Base Backup Max Extensions  Current: $(usersettings_value base_backup_max_extensions)" \
-      "Building Restriction Limits Enabled  Current: $(usersettings_value building_restriction_limits_enabled)" \
-      "Back" || return
-    MENU_CONTEXT_TEXT=""
-    choice="$MENU_CHOICE"
+      MENU_CONTEXT_TEXT="$(usergame_about_text "$map" "$partition_id")"
+      menu_or_back "Edit UserGame: $map${partition_id:+ (Dimension $partition_id)}"         "Security Zones Enabled  Current: $(usersettings_value security_zones_enabled)"         "Item Deterioration Rate  Current: $(usersettings_value item_deterioration_rate)"         "Coriolis Storm Enabled  Current: $(usersettings_value coriolis_auto_spawn_enabled)"         "Max Landclaim Segments  Current: $(usersettings_value max_landclaim_segments)"         "Building Blueprint Max Extensions  Current: $(usersettings_value building_blueprint_max_extensions)"         "Base Backup Max Extensions  Current: $(usersettings_value base_backup_max_extensions)"         "Building Restriction Limits Enabled  Current: $(usersettings_value building_restriction_limits_enabled)"         "Back" || return
+      MENU_CONTEXT_TEXT=""
+      choice="$MENU_CHOICE"
 
-    case "$choice" in
-      1) edit_usergame_boolean_field "$map" force_enable_pvp_all_partitions "Set Force PvP On All Partitions" "True" "False" "True" "False" "$partition_id"; pause ;;
-      2) edit_usergame_boolean_field "$map" security_zones_enabled "Set Security Zones" "True" "False" "True" "False" "$partition_id"; pause ;;
-      3) edit_usergame_numeric_field "$map" item_deterioration_rate "New deterioration rate (0-10, 0 disables, /back to cancel):" float "$partition_id"; pause ;;
-      4) edit_usergame_boolean_field "$map" coriolis_auto_spawn_enabled "Set Coriolis Storm Auto Spawn" "True" "False" "True" "False" "$partition_id"; pause ;;
-      5) edit_usergame_numeric_field "$map" max_landclaim_segments "Maximum landclaim segments (/back to cancel):" int "$partition_id"; pause ;;
-      6) edit_usergame_numeric_field "$map" building_blueprint_max_extensions "Building blueprint max extensions (/back to cancel):" int "$partition_id"; pause ;;
-      7) edit_usergame_numeric_field "$map" base_backup_max_extensions "Base backup max extensions (/back to cancel):" int "$partition_id"; pause ;;
-      8) edit_usergame_boolean_field "$map" building_restriction_limits_enabled "Set Building Restriction Limits" "True" "False" "True" "False" "$partition_id"; pause ;;
-      9) return ;;
-    esac
+      case "$choice" in
+        1) edit_usergame_boolean_field "$map" security_zones_enabled "Set Security Zones" "True" "False" "True" "False"; pause ;;
+        2) edit_usergame_numeric_field "$map" item_deterioration_rate "New deterioration rate (0-10, 0 disables, /back to cancel):" float; pause ;;
+        3) edit_usergame_boolean_field "$map" coriolis_auto_spawn_enabled "Set Coriolis Storm Auto Spawn" "True" "False" "True" "False"; pause ;;
+        4) edit_usergame_numeric_field "$map" max_landclaim_segments "Maximum landclaim segments (/back to cancel):" int; pause ;;
+        5) edit_usergame_numeric_field "$map" building_blueprint_max_extensions "Building blueprint max extensions (/back to cancel):" int; pause ;;
+        6) edit_usergame_numeric_field "$map" base_backup_max_extensions "Base backup max extensions (/back to cancel):" int; pause ;;
+        7) edit_usergame_boolean_field "$map" building_restriction_limits_enabled "Set Building Restriction Limits" "True" "False" "True" "False"; pause ;;
+        8) return ;;
+      esac
+    fi
   done
 }
 
@@ -1441,10 +1523,12 @@ restart_partition_if_requested() {
 apply_survival_browser_change() {
   echo
   echo "Applying Survival_1 browser changes now."
-  echo "This restarts Survival_1, Director, and Gateway so the new name/password is republished cleanly."
+  echo "This restarts Survival_1, Director, Gateway, and the sietch override publisher so the new name/password is republished cleanly."
   run_cmd "$DUNE" restart survival
   run_cmd "$DUNE" restart director
   run_cmd "$DUNE" restart gateway
+  run_cmd runtime/scripts/publish-sietch-overrides.sh restart
+  run_cmd runtime/scripts/publish-sietch-overrides.sh once
 }
 
 apply_survival_partition_change() {
@@ -1460,6 +1544,8 @@ apply_survival_partition_change() {
   echo "This respawns the selected Survival_1 dimension and republishes the sietch overrides."
   run_cmd "$DUNE" despawn "$partition_id"
   run_cmd "$DUNE" spawn "$partition_id"
+  run_cmd runtime/scripts/publish-sietch-overrides.sh restart
+  run_cmd runtime/scripts/publish-sietch-overrides.sh once
 }
 
 set_display_name_for_map() {
@@ -1760,7 +1846,7 @@ battlegroup_overview_menu() {
 
     case "$choice" in
       1) run_cmd "$DUNE" status; pause ;;
-      2) run_cmd "$DUNE" ready; pause ;;
+      2) run_cmd_allow_codes "0,2" "$DUNE" ready; pause ;;
       3) run_cmd "$DUNE" version; pause ;;
       4) run_cmd "$DUNE" ps; pause ;;
       5) run_cmd "$DUNE" ports; pause ;;
@@ -2225,6 +2311,7 @@ updates_menu() {
       "Runtime Files Status" \
       "Repair Runtime Files" \
       "Check Stack Update" \
+      "Restore Previous Stack" \
       "Check Game Server Update" \
       "Automatic Updates" \
       "Back" || return
@@ -2261,6 +2348,20 @@ updates_menu() {
         ;;
       5)
         echo
+        if choose_stack_release_to_install; then
+          echo
+          if confirm "Install stack release '$CHOSEN_STACK_RELEASE_TAG' now?"; then
+            run_cmd "$DUNE" self-update install "$CHOSEN_STACK_RELEASE_TAG"
+          else
+            echo "Cancelled."
+          fi
+        else
+          echo "Cancelled."
+        fi
+        pause
+        ;;
+      6)
+        echo
         set +e
         "$DUNE" update check
         rc=$?
@@ -2276,8 +2377,8 @@ updates_menu() {
         fi
         pause
         ;;
-      6) automatic_updates_menu ;;
-      7) return ;;
+      7) automatic_updates_menu ;;
+      8) return ;;
     esac
   done
 }
@@ -2294,8 +2395,8 @@ automatic_updates_menu() {
 
     case "$choice" in
       1) run_cmd "$DUNE" update auto status; pause ;;
-      2) run_cmd "$DUNE" update auto enable; pause ;;
-      3) run_cmd "$DUNE" update auto disable; pause ;;
+      2) run_cmd sudo "$DUNE" update auto enable; pause ;;
+      3) run_cmd sudo "$DUNE" update auto disable; pause ;;
       4) return ;;
     esac
   done

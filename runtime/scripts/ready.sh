@@ -183,8 +183,8 @@ partition_mismatch_hint_needed() {
 
   logs="$(
     {
-      docker logs --tail 3000 dune-server-survival-1 2>&1 || true
-      docker logs --tail 3000 dune-server-overmap 2>&1 || true
+      docker logs --since 10m dune-server-survival-1 2>&1 || true
+      docker logs --since 10m dune-server-overmap 2>&1 || true
     }
   )"
 
@@ -214,10 +214,12 @@ check_tcp 31983 "RabbitMQ game HTTP public" "dune-rmq-game"
 check_tcp 5059  "TextRouter localhost" "dune-text-router"
 check_tcp 11717 "Director localhost" "dune-director"
 
-check_udp 7777 "Overmap clients" "dune-server-overmap"
-check_udp 7778 "Survival_1 clients" "dune-server-survival-1"
-check_udp 7888 "Survival_1 S2S" "dune-server-survival-1"
-check_udp 7889 "Overmap S2S" "dune-server-overmap"
+client_port_base="$(resolve_client_port_base)"
+igw_port_base="$(resolve_igw_port_base)"
+check_udp "$client_port_base" "Overmap clients" "dune-server-overmap"
+check_udp "$((client_port_base + 1))" "Survival_1 clients" "dune-server-survival-1"
+check_udp "$igw_port_base" "Survival_1 S2S" "dune-server-survival-1"
+check_udp "$((igw_port_base + 1))" "Overmap S2S" "dune-server-overmap"
 
 echo
 echo "=== Database world partition checks ==="

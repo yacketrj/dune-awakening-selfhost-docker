@@ -72,6 +72,9 @@ case "$cmd" in
       survival|survival-1)
         set -a; [ -f .env ] && . ./.env; set +a
         runtime/scripts/start-server-survival-1.sh
+        runtime/scripts/publish-sietch-overrides.sh restart || true
+        runtime/scripts/publish-sietch-overrides.sh once || true
+        runtime/scripts/sietches.sh reconcile Survival_1 || true
         ;;
       overmap)
         set -a; [ -f .env ] && . ./.env; set +a
@@ -166,7 +169,7 @@ Usage:
   runtime/scripts/dune logs <service> [--raw]
   runtime/scripts/dune restart <service>
   runtime/scripts/dune update [check|auto enable|auto disable|auto status|--yes]
-  runtime/scripts/dune self-update [check|install [latest|<tag>]]
+  runtime/scripts/dune self-update [check|list|install [latest|previous|<tag>]]
   runtime/scripts/dune restart-schedule [enable <hours>|disable|status]
   runtime/scripts/dune db backup [output-dir]
   runtime/scripts/dune db list

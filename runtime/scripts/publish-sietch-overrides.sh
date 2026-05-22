@@ -318,6 +318,8 @@ case "${1:-start}" in
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
       exit 0
     fi
+    pkill -f "bash runtime/scripts/publish-sietch-overrides.sh loop" 2>/dev/null || true
+    rm -f "$PID_FILE"
     prepare_runtime_generated_files
     setsid "$0" loop >>"$LOG_FILE" 2>&1 </dev/null &
     echo $! >"$PID_FILE"
@@ -331,6 +333,7 @@ case "${1:-start}" in
       kill "$(cat "$PID_FILE")" 2>/dev/null || true
       rm -f "$PID_FILE"
     fi
+    pkill -f "bash runtime/scripts/publish-sietch-overrides.sh loop" 2>/dev/null || true
     restore_route || true
     ;;
   restart)

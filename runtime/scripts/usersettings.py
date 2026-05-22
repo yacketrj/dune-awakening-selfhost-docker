@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import configparser
 import json
 import sys
 from pathlib import Path
@@ -9,8 +8,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "runtime" / "generated" / "usersettings.json"
+SIETCH_CONFIG_PATH = ROOT / "runtime" / "generated" / "sietch-config.json"
 
 ENGINE_FIELDS = {
+    "port": (None, None, "7777"),
+    "igw_port": (None, None, "7888"),
     "mining_output_multiplier": ("HarvestingSettings", "miningOutputMultiplier", "1.0"),
     "vehicle_mining_output_multiplier": ("HarvestingSettings", "vehicleMiningOutputMultiplier", "1.0"),
     "pvp_resource_multiplier": ("HarvestingSettings", "securityZonesPvpResourceMultiplier", "2.5"),
@@ -25,14 +27,18 @@ ENGINE_FIELDS = {
 }
 
 MAP_FIELDS = {
-    "force_enable_pvp_all_partitions": ("CombatSettings", "shouldForceEnablePvpOnAllPartitions", "False"),
-    "security_zones_enabled": ("CombatSettings", "areSecurityZonesEnabled", "True"),
-    "item_deterioration_rate": ("CombatSettings", "itemDeteriorationUpdateRate", "1.0"),
-    "coriolis_auto_spawn_enabled": ("SurvivalSettings", "sandStormCoriolisAutoSpawnEnabled", "True"),
-    "max_landclaim_segments": ("PersistenceSettings", "maxLandclaimSegments", ""),
-    "building_blueprint_max_extensions": ("PersistenceSettings", "buildingBlueprintMaxExtensions", "4"),
-    "base_backup_max_extensions": ("PersistenceSettings", "baseBackupMaxExtensions", "8"),
-    "building_restriction_limits_enabled": ("PersistenceSettings", "buildingRestrictionLimitsEnabled", ""),
+    "security_zones_enabled": ("/Script/DuneSandbox.SecurityZonesSubsystem", "m_bAreSecurityZonesEnabled", "True"),
+    "item_deterioration_rate": ("/Script/DuneSandbox.SecurityZonesSubsystem", "UpdateRateInSeconds", "1.0"),
+    "coriolis_auto_spawn_enabled": ("/Script/DuneSandbox.SandStormConfig", "m_bCoriolisAutoSpawnEnabled", "True"),
+    "max_landclaim_segments": ("/Script/DuneSandbox.BuildingSettings", "m_MaxNumLandclaimSegments", "6"),
+    "building_blueprint_max_extensions": ("/Script/DuneSandbox.BuildingSettings", "m_BuildingBlueprintMaxExtensions", "4"),
+    "base_backup_max_extensions": ("/Script/DuneSandbox.BuildingSettings", "m_BaseBackupMaxExtensions", "8"),
+    "building_restriction_limits_enabled": ("/Script/DuneSandbox.BuildingSettings", "m_bBuildingRestrictionLimitsEnabled", "True"),
+}
+
+PARTITION_FIELDS = {
+    "partition_pvp_enabled": (None, None, "False"),
+    **MAP_FIELDS,
 }
 
 
@@ -64,6 +70,40 @@ def canonical_map(value: str) -> str:
     return value
 
 
+def max_survival_dimensions() -> int:
+    if SIETCH_CONFIG_PATH.exists():
+        config = json.loads(SIETCH_CONFIG_PATH.read_text(encoding="utf-8"))
+        value = config.get("maps", {}).get("Survival_1", {}).get("max_dimensions")
+        try:
+            parsed = int(value)
+            if parsed > 0:
+                return parsed
+        except (TypeError, ValueError):
+            pass
+    return 4
+
+
+def validate_port_ranges(config: dict, field_id: str, value: str) -> None:
+    try:
+        candidate = int(value)
+    except ValueError as exc:
+        raise SystemExit(f"{field_id} must be a positive integer.") from exc
+    if candidate <= 0:
+        raise SystemExit(f"{field_id} must be a positive integer.")
+
+    engine = dict(config.get("engine", {}))
+    engine[field_id] = str(candidate)
+    client_start = int(engine.get("port") or ENGINE_FIELDS["port"][2])
+    igw_start = int(engine.get("igw_port") or ENGINE_FIELDS["igw_port"][2])
+    end_offset = max_survival_dimensions()
+    client_end = client_start + end_offset
+    igw_end = igw_start + end_offset
+    if not (client_end < igw_start or igw_end < client_start):
+        raise SystemExit(
+            f"Configured Port range {client_start}-{client_end} intersects with IGWPort range {igw_start}-{igw_end}."
+        )
+
+
 def merged_engine_values(config: dict) -> dict[str, str]:
     values = {key: spec[2] for key, spec in ENGINE_FIELDS.items()}
     values.update(config.get("engine", {}))
@@ -77,13 +117,14 @@ def merged_map_values(config: dict, map_name: str) -> dict[str, str]:
 
 
 def merged_partition_values(config: dict, map_name: str, partition_id: str) -> dict[str, str]:
-    values = merged_map_values(config, map_name)
+    values = {key: spec[2] for key, spec in PARTITION_FIELDS.items()}
+    values.update(config.get("maps", {}).get(map_name, {}))
     partition_entry = config.get("partitions", {}).get(str(partition_id), {})
     values.update(partition_entry.get("usergame", {}))
     return values
 
 
-def print_rows(rows: dict[str, str], order: dict[str, tuple[str, str, str]]) -> int:
+def print_rows(rows: dict[str, str], order: dict[str, tuple[str | None, str | None, str]]) -> int:
     for key in order:
         print(f"{key}\t{rows.get(key, '')}")
     return 0
@@ -94,6 +135,8 @@ def set_field(scope: str, name: str | None, field_id: str, value: str) -> int:
     if scope == "engine":
         if field_id not in ENGINE_FIELDS:
             raise SystemExit(f"Unknown engine field: {field_id}")
+        if field_id in {"port", "igw_port"}:
+            validate_port_ranges(config, field_id, value)
         config.setdefault("engine", {})[field_id] = value
     else:
         if field_id not in MAP_FIELDS:
@@ -105,8 +148,8 @@ def set_field(scope: str, name: str | None, field_id: str, value: str) -> int:
 
 
 def set_partition_field(map_name: str, partition_id: str, field_id: str, value: str) -> int:
-    if field_id not in MAP_FIELDS:
-        raise SystemExit(f"Unknown map field: {field_id}")
+    if field_id not in PARTITION_FIELDS:
+        raise SystemExit(f"Unknown partition field: {field_id}")
     config = load_config()
     entry = config.setdefault("partitions", {}).setdefault(str(partition_id), {})
     entry["map"] = canonical_map(map_name)
@@ -121,19 +164,58 @@ def reset_all() -> int:
     return 0
 
 
-def write_ini(path: Path, values: dict[str, str], schema: dict[str, tuple[str, str, str]]) -> None:
-    parser = configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str
-    for field_id, (section, key, _) in schema.items():
+def write_userengine_ini(path: Path, values: dict[str, str]) -> None:
+    section_order = ["HarvestingSettings", "CombatSettings", "SurvivalSettings"]
+    section_lines: dict[str, list[str]] = {section: [] for section in section_order}
+    for field_id, (section, key, _) in ENGINE_FIELDS.items():
+        if section is None or key is None:
+            continue
         value = values.get(field_id, "")
         if value == "":
             continue
-        if not parser.has_section(section):
-            parser.add_section(section)
-        parser.set(section, key, value)
-    path.write_text("", encoding="utf-8")
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        parser.write(handle, space_around_delimiters=False)
+        section_lines.setdefault(section, []).append(f"{key}={value}")
+
+    lines: list[str] = []
+    for section in section_order:
+        entries = section_lines.get(section, [])
+        if not entries:
+            continue
+        if lines:
+            lines.append("")
+        lines.append(f"[{section}]")
+        lines.extend(entries)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def write_usergame_ini(path: Path, values: dict[str, str], partition_id: str | None = None) -> None:
+    lines = ["[/Script/DuneSandbox.PvpPveSettings]"]
+    if partition_id:
+        prefix = "" if truthy(values.get("partition_pvp_enabled", "False")) else ";"
+        lines.append(f"{prefix}+m_PvpEnabledPartitions={partition_id}")
+    else:
+        lines.append(";+m_PvpEnabledPartitions=1")
+        lines.append(";+m_PvpEnabledPartitions=2")
+
+    lines.extend([
+        "",
+        "[/Script/DuneSandbox.SecurityZonesSubsystem]",
+        f"m_bAreSecurityZonesEnabled={values.get('security_zones_enabled', MAP_FIELDS['security_zones_enabled'][2])}",
+        f"UpdateRateInSeconds={values.get('item_deterioration_rate', MAP_FIELDS['item_deterioration_rate'][2])}",
+        "",
+        "[/Script/DuneSandbox.SandStormConfig]",
+        f"m_bCoriolisAutoSpawnEnabled={values.get('coriolis_auto_spawn_enabled', MAP_FIELDS['coriolis_auto_spawn_enabled'][2])}",
+        "",
+        "[/Script/DuneSandbox.BuildingSettings]",
+        f"m_MaxNumLandclaimSegments={values.get('max_landclaim_segments', MAP_FIELDS['max_landclaim_segments'][2])}",
+        f"m_BuildingBlueprintMaxExtensions={values.get('building_blueprint_max_extensions', MAP_FIELDS['building_blueprint_max_extensions'][2])}",
+        f"m_BaseBackupMaxExtensions={values.get('base_backup_max_extensions', MAP_FIELDS['base_backup_max_extensions'][2])}",
+        f"m_bBuildingRestrictionLimitsEnabled={values.get('building_restriction_limits_enabled', MAP_FIELDS['building_restriction_limits_enabled'][2])}",
+    ])
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def materialize(map_name: str, saved_dir: str, partition_id: str | None = None) -> int:
@@ -141,12 +223,12 @@ def materialize(map_name: str, saved_dir: str, partition_id: str | None = None) 
     target_map = canonical_map(map_name)
     user_settings_dir = Path(saved_dir) / "UserSettings"
     user_settings_dir.mkdir(parents=True, exist_ok=True)
-    write_ini(user_settings_dir / "UserEngine.ini", merged_engine_values(config), ENGINE_FIELDS)
+    write_userengine_ini(user_settings_dir / "UserEngine.ini", merged_engine_values(config))
     if partition_id:
         values = merged_partition_values(config, target_map, str(partition_id))
     else:
         values = merged_map_values(config, target_map)
-    write_ini(user_settings_dir / "UserGame.ini", values, MAP_FIELDS)
+    write_usergame_ini(user_settings_dir / "UserGame.ini", values, str(partition_id) if partition_id else None)
     return 0
 
 
@@ -162,7 +244,7 @@ def main(argv: list[str]) -> int:
     if command == "map-values" and len(argv) == 3:
         return print_rows(merged_map_values(config, canonical_map(argv[2])), MAP_FIELDS)
     if command == "partition-values" and len(argv) == 4:
-        return print_rows(merged_partition_values(config, canonical_map(argv[2]), argv[3]), MAP_FIELDS)
+        return print_rows(merged_partition_values(config, canonical_map(argv[2]), argv[3]), PARTITION_FIELDS)
     if command == "engine-set" and len(argv) == 4:
         return set_field("engine", None, argv[2], argv[3])
     if command == "map-set" and len(argv) == 5:

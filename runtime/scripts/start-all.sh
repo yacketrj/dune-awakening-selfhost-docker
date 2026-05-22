@@ -40,6 +40,12 @@ echo "=== Starting Overmap ==="
 runtime/scripts/start-server-overmap.sh
 
 echo
+echo "=== Starting Sietch Override Publisher ==="
+runtime/scripts/publish-sietch-overrides.sh restart || {
+  echo "Sietch override publisher did not start. Survival_1 custom browser names/passwords will not republish."
+}
+
+echo
 echo "=== Starting Autoscaler ==="
 runtime/scripts/start-autoscaler.sh || {
   echo "Autoscaler did not start. Dynamic maps will not spawn automatically."
@@ -61,9 +67,11 @@ echo
 echo "=== Required TCP listeners ==="
 ss -lntp | grep -E ':(15432|31982|31983|32573|5059|11717)' || true
 
+client_port_base="$(resolve_client_port_base)"
+igw_port_base="$(resolve_igw_port_base)"
 echo
 echo "=== Required UDP listeners ==="
-ss -lnup | grep -E ':(7777|7778|7888|7889)' || true
+ss -lnup | grep -E ":(${client_port_base}|$((client_port_base + 1))|${igw_port_base}|$((igw_port_base + 1)))" || true
 
 cat <<'EOF'
 

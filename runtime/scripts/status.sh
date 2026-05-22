@@ -198,20 +198,20 @@ auto_update_state() {
 }
 
 resolved_title="$(first_known_value \
-  "${SERVER_TITLE:-}" \
   "$(config_value .env SERVER_TITLE 2>/dev/null || true)" \
+  "${SERVER_TITLE:-}" \
   "$(container_env_value dune-director BATTLEGROUP_TITLE 2>/dev/null || true)" \
   "$(container_env_value dune-server-gateway gateway_display_name 2>/dev/null || true)" \
   || true)"
 resolved_region="$(first_known_value \
-  "${SERVER_REGION:-}" \
   "$(config_value .env SERVER_REGION 2>/dev/null || true)" \
+  "${SERVER_REGION:-}" \
   "$(container_env_value dune-director BATTLEGROUP_REGION_NAME 2>/dev/null || true)" \
   "$(container_env_value dune-server-gateway OnlineSubsystem_DatacenterId 2>/dev/null || true)" \
   || true)"
 resolved_server_ip="$(first_known_value \
-  "${SERVER_IP:-}" \
   "$(config_value .env SERVER_IP 2>/dev/null || true)" \
+  "${SERVER_IP:-}" \
   "$(container_env_value dune-director HOST_DATACENTER_IP_ADDRESS 2>/dev/null || true)" \
   "$(container_env_value dune-server-gateway HOST_DATACENTER_IP_ADDRESS 2>/dev/null || true)" \
   || true)"
@@ -262,10 +262,16 @@ rmq_game_tcp="$(check_tcp 31982)"
 rmq_game_http_tcp="$(check_tcp 31983)"
 text_router_tcp="$(check_tcp 5059)"
 director_tcp="$(check_tcp 11717)"
-overmap_udp="$(check_udp 7777)"
-survival_udp="$(check_udp 7778)"
-survival_s2s_udp="$(check_udp 7888)"
-overmap_s2s_udp="$(check_udp 7889)"
+client_port_base="$(resolve_client_port_base)"
+igw_port_base="$(resolve_igw_port_base)"
+overmap_client_port="$client_port_base"
+survival_client_port="$((client_port_base + 1))"
+survival_s2s_port="$igw_port_base"
+overmap_s2s_port="$((igw_port_base + 1))"
+overmap_udp="$(check_udp "$overmap_client_port")"
+survival_udp="$(check_udp "$survival_client_port")"
+survival_s2s_udp="$(check_udp "$survival_s2s_port")"
+overmap_s2s_udp="$(check_udp "$overmap_s2s_port")"
 
 partition_count="unknown"
 if is_running dune-postgres; then
@@ -434,10 +440,10 @@ printf "%-24s %-8s %s\n" "RabbitMQ game" "31982/tcp" "$rmq_game_tcp"
 printf "%-24s %-8s %s\n" "RabbitMQ game HTTP" "31983/tcp" "$rmq_game_http_tcp"
 printf "%-24s %-8s %s\n" "TextRouter" "5059/tcp" "$text_router_tcp"
 printf "%-24s %-8s %s\n" "Director" "11717/tcp" "$director_tcp"
-printf "%-24s %-8s %s\n" "Overmap clients" "7777/udp" "$overmap_udp"
-printf "%-24s %-8s %s\n" "Survival_1 clients" "7778/udp" "$survival_udp"
-printf "%-24s %-8s %s\n" "Survival_1 S2S" "7888/udp" "$survival_s2s_udp"
-printf "%-24s %-8s %s\n" "Overmap S2S" "7889/udp" "$overmap_s2s_udp"
+printf "%-24s %-8s %s\n" "Overmap clients" "${overmap_client_port}/udp" "$overmap_udp"
+printf "%-24s %-8s %s\n" "Survival_1 clients" "${survival_client_port}/udp" "$survival_udp"
+printf "%-24s %-8s %s\n" "Survival_1 S2S" "${survival_s2s_port}/udp" "$survival_s2s_udp"
+printf "%-24s %-8s %s\n" "Overmap S2S" "${overmap_s2s_port}/udp" "$overmap_s2s_udp"
 
 echo
 echo "=== Database ==="

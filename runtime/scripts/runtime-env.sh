@@ -108,30 +108,49 @@ first_known_value() {
 }
 
 resolve_server_title() {
-  first_known_value \
-    "${SERVER_TITLE:-}" \
-    "$(config_value .env SERVER_TITLE 2>/dev/null || true)" \
-    "$(container_env_value_any_state dune-director BATTLEGROUP_TITLE 2>/dev/null || true)" \
-    "$(container_env_value_any_state dune-server-gateway gateway_display_name 2>/dev/null || true)" \
-    "My Dune Server"
+  first_known_value     "$(config_value .env SERVER_TITLE 2>/dev/null || true)"     "${SERVER_TITLE:-}"     "$(container_env_value_any_state dune-director BATTLEGROUP_TITLE 2>/dev/null || true)"     "$(container_env_value_any_state dune-server-gateway gateway_display_name 2>/dev/null || true)"     "My Dune Server"
 }
 
 resolve_server_region() {
-  first_known_value \
-    "${SERVER_REGION:-}" \
-    "$(config_value .env SERVER_REGION 2>/dev/null || true)" \
-    "$(container_env_value_any_state dune-director BATTLEGROUP_REGION_NAME 2>/dev/null || true)" \
-    "$(container_env_value_any_state dune-server-gateway OnlineSubsystem_DatacenterId 2>/dev/null || true)" \
-    "Europe"
+  first_known_value     "$(config_value .env SERVER_REGION 2>/dev/null || true)"     "${SERVER_REGION:-}"     "$(container_env_value_any_state dune-director BATTLEGROUP_REGION_NAME 2>/dev/null || true)"     "$(container_env_value_any_state dune-server-gateway OnlineSubsystem_DatacenterId 2>/dev/null || true)"     "Europe"
 }
 
 resolve_server_ip() {
-  first_known_value \
-    "${SERVER_IP:-}" \
-    "$(config_value .env SERVER_IP 2>/dev/null || true)" \
-    "$(container_env_value_any_state dune-director HOST_DATACENTER_IP_ADDRESS 2>/dev/null || true)" \
-    "$(container_env_value_any_state dune-server-gateway HOST_DATACENTER_IP_ADDRESS 2>/dev/null || true)" \
-    "auto"
+  first_known_value     "$(config_value .env SERVER_IP 2>/dev/null || true)"     "${SERVER_IP:-}"     "$(container_env_value_any_state dune-director HOST_DATACENTER_IP_ADDRESS 2>/dev/null || true)"     "$(container_env_value_any_state dune-server-gateway HOST_DATACENTER_IP_ADDRESS 2>/dev/null || true)"     "auto"
+}
+
+usersettings_engine_value() {
+  local key="$1"
+  local fallback="$2"
+
+  python3 - "$key" "$fallback" <<'PY2'
+import json
+import sys
+from pathlib import Path
+
+key = sys.argv[1]
+fallback = sys.argv[2]
+path = Path("runtime/generated/usersettings.json")
+if not path.exists():
+    print(fallback)
+    raise SystemExit
+
+config = json.loads(path.read_text())
+value = str(config.get("engine", {}).get(key, "")).strip()
+if not value:
+    print(fallback)
+    raise SystemExit
+
+print(value)
+PY2
+}
+
+resolve_client_port_base() {
+  usersettings_engine_value port 7777
+}
+
+resolve_igw_port_base() {
+  usersettings_engine_value igw_port 7888
 }
 
 resolve_battlegroup_id() {

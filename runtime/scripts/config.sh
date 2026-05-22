@@ -137,6 +137,7 @@ the server name to the in-game server browser.
 New title: $new_title
 
 This will restart:
+  - director
   - gateway
 EOF
 
@@ -145,6 +146,7 @@ EOF
 
 --no-restart was provided. The title will be saved, but no services will restart.
 To apply it later, run:
+  dune restart director
   dune restart gateway
 EOF
     fi
@@ -161,13 +163,12 @@ EOF
     set_env_value SERVER_TITLE "$new_title"
     echo "Updated server title: $new_title"
 
-    # Gateway owns the explicit browser-facing gateway_display_name value.
-    # Director also reads the title for battlegroup metadata, but restarting
-    # only Gateway is the smallest restart that republishes the visible server
-    # name without interrupting maps or infrastructure services.
+    # Director and Gateway both publish battlegroup metadata. Restart both so
+    # title changes republish immediately without relying on stale cached env.
     if [ "$restart_services" = "1" ]; then
       echo
-      echo "Restarting gateway so the new title can be published..."
+      echo "Restarting director and gateway so the new title can be published..."
+      runtime/scripts/dune restart director
       runtime/scripts/dune restart gateway
     fi
 
