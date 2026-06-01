@@ -20,10 +20,34 @@ test("builds allowlisted command arguments without shell interpolation", () => {
   assert.deepEqual(buildDuneArgs("updateApply"), ["update", "--yes"]);
   assert.deepEqual(buildDuneArgs("selfUpdateApply"), ["self-update", "install", "latest"]);
   assert.deepEqual(buildDuneArgs("adminTeleport", { playerId: "FLS_TEST", x: 1, y: 2, z: 3, yaw: 90 }), ["admin", "teleport", "FLS_TEST", "1", "2", "3", "90"]);
+  assert.deepEqual(buildDuneArgs("adminGiveItemId", { playerId: "FLS_TEST", itemId: "WaterBottle_1", quantity: 2, durability: 0.5 }), ["admin", "grant-item-id", "FLS_TEST", "WaterBottle_1", "2", "0.5"]);
+  assert.deepEqual(buildDuneArgs("adminGiveItems", { playerId: "FLS_TEST", template: "scout-ornithopter-mk6" }), ["admin", "grant-template", "FLS_TEST", "scout-ornithopter-mk6"]);
+  assert.deepEqual(buildDuneArgs("adminSetSkillPoints", { playerId: "FLS_TEST", points: 12 }), ["admin", "skill-points", "FLS_TEST", "12"]);
+  assert.deepEqual(buildDuneArgs("adminSetSkillModule", { playerId: "FLS_TEST", module: "Training_Test", level: 2 }), ["admin", "skill-module", "FLS_TEST", "Training_Test", "2"]);
+  assert.deepEqual(buildDuneArgs("adminKickAllOnline"), ["admin", "kick", "--all-online", "--yes"]);
+  assert.deepEqual(buildDuneArgs("adminSpawnVehicle", { playerId: "FLS_TEST", vehicleId: "Sandbike", template: "T6", offset: 400 }), ["admin", "spawn-vehicle", "FLS_TEST", "Sandbike", "T6", "400"]);
+  assert.deepEqual(buildDuneArgs("adminCleanInventory", { playerId: "FLS_TEST" }), ["admin", "clean-inventory", "FLS_TEST"]);
+  assert.deepEqual(buildDuneArgs("adminResetProgression", { playerId: "FLS_TEST" }), ["admin", "reset-progression", "FLS_TEST"]);
   assert.throws(() => buildDuneArgs("adminAddXp", { playerId: "bad;id", amount: 1000 }));
   assert.throws(() => buildDuneArgs("backupRestore", { backup: "../dump.backup" }));
   assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "", quantity: 1 }));
+  assert.throws(() => buildDuneArgs("adminGiveItemId", { playerId: "FLS_TEST", itemId: "bad;id", quantity: 1 }));
+  assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 0 }));
+  assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 1, durability: 2 }));
+  assert.throws(() => buildDuneArgs("adminSetSkillPoints", { playerId: "FLS_TEST", points: -1 }));
+  assert.throws(() => buildDuneArgs("adminSpawnVehicle", { playerId: "FLS_TEST", vehicleId: "Sandbike;bad", template: "T6" }));
   assert.throws(() => buildDuneArgs("unknown"));
+});
+
+test("validates admin catalog wrapper arguments", () => {
+  assert.deepEqual(buildDuneArgs("adminItemSearch", { q: "water" }), ["admin", "item-search", "water"]);
+  assert.deepEqual(buildDuneArgs("adminItemList"), ["admin", "item-list"]);
+  assert.deepEqual(buildDuneArgs("adminItemListCategory", { category: "materials" }), ["admin", "item-list", "materials"]);
+  assert.deepEqual(buildDuneArgs("adminVehicleSearch", { q: "bike" }), ["admin", "vehicle-list", "bike"]);
+  assert.deepEqual(buildDuneArgs("adminSkillModulesSearch", { q: "blade" }), ["admin", "skill-modules", "blade"]);
+  assert.throws(() => buildDuneArgs("adminItemSearch", { q: "x" }));
+  assert.throws(() => buildDuneArgs("adminItemSearch", { q: "water\nbad" }));
+  assert.throws(() => buildDuneArgs("adminVehicleSearch", { q: "bike\nbad" }));
 });
 
 test("detects read-only SQL and requires explicit destructive allowance", () => {

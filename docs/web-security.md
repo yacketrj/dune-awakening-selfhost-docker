@@ -44,6 +44,17 @@ RabbitMQ live commands must:
 - audit every broadcast, whisper, kick, item grant, teleport, or live command
 - avoid exposing a generic message publisher to the browser
 
+Phase 4 web actions use the existing RedBlink `dune admin` CLI for RabbitMQ-backed live commands. The web API does not expose a generic RabbitMQ publisher. Broadcast, shutdown broadcast, and whisper currently return explicit unsupported capability responses because their RedBlink RabbitMQ wire path is not yet implemented in the local CLI.
+
+Destructive live actions require backend confirmation phrases in addition to frontend confirmation:
+
+- kick all online: `KICK ALL ONLINE PLAYERS`
+- clean inventory: `CLEAN INVENTORY`
+- reset progression: `RESET PROGRESSION`
+- inventory delete: `DELETE INVENTORY ITEM` before returning its current unsupported response
+- storage give item: `GIVE ITEM TO STORAGE` before returning its current unsupported response
+- shutdown broadcast: `SHUTDOWN BROADCAST` before returning its current unsupported response
+
 ## Docker Socket Risk
 
 Container mode may require mounting `/var/run/docker.sock`. That grants broad control over the host Docker daemon. Documentation and compose comments must warn that this is powerful and should be exposed only to trusted admins.

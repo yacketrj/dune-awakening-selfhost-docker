@@ -39,7 +39,10 @@ const simpleOperations = {
   sietchesList: ["sietches", "list"],
   deepdesertStatus: ["deepdesert", "dual", "status"],
   players: ["admin", "players", "--show-full-ids"],
-  adminHistory: ["admin", "history"]
+  adminHistory: ["admin", "history"],
+  adminItemList: ["admin", "item-list"],
+  adminVehicleList: ["admin", "vehicle-list"],
+  adminSkillModules: ["admin", "skill-modules"]
 };
 
 export function validateServiceName(value) {
@@ -75,13 +78,23 @@ export function buildDuneArgs(operation, payload = {}) {
     case "databaseExport":
       return ["database", "export", validateSql(payload.query, false)];
     case "adminGiveItem":
-      return ["admin", "grant-item", validatePlayerId(payload.playerId), validateItemName(payload.itemName), String(validateInteger(payload.quantity || 1, 1, 1000000)), String(validateInteger(payload.durability || 1, 1, 1000000000))];
+      return ["admin", "grant-item", validatePlayerId(payload.playerId), validateItemName(payload.itemName), String(validateInteger(payload.quantity ?? 1, 1, 1000000)), String(validateDurability(payload.durability ?? 1))];
+    case "adminGiveItems":
+      return ["admin", "grant-template", validatePlayerId(payload.playerId), validateTemplateName(payload.template || "scout-ornithopter-mk6")];
+    case "adminGiveItemId":
+      return ["admin", "grant-item-id", validatePlayerId(payload.playerId), validateItemId(payload.itemId), String(validateInteger(payload.quantity ?? 1, 1, 1000000)), String(validateDurability(payload.durability ?? 1))];
     case "adminAddXp":
       return ["admin", "award-xp", validatePlayerId(payload.playerId), String(validateInteger(payload.amount, 1, 100000000))];
+    case "adminSetSkillPoints":
+      return ["admin", "skill-points", validatePlayerId(payload.playerId), String(validateInteger(payload.points, 0, 100000))];
+    case "adminSetSkillModule":
+      return ["admin", "skill-module", validatePlayerId(payload.playerId), validateSkillModule(payload.module), String(validateInteger(payload.level, 0, 100))];
     case "adminRefillWater":
-      return ["admin", "refill-water", validatePlayerId(payload.playerId), String(validateInteger(payload.amount || 1000000, 1, 1000000000))];
+      return ["admin", "refill-water", validatePlayerId(payload.playerId), String(validateInteger(payload.amount ?? 1000000, 1, 1000000000))];
     case "adminKick":
       return ["admin", "kick", validatePlayerId(payload.playerId), "--yes", "--force"];
+    case "adminKickAllOnline":
+      return ["admin", "kick", "--all-online", "--yes"];
     case "adminTeleport":
       return [
         "admin",
@@ -92,6 +105,20 @@ export function buildDuneArgs(operation, payload = {}) {
         String(validateNumber(payload.z, -100000000, 100000000)),
         String(validateNumber(payload.yaw || 0, -360, 360))
       ];
+    case "adminSpawnVehicle":
+      return ["admin", "spawn-vehicle", validatePlayerId(payload.playerId), validateVehicleId(payload.vehicleId), validateVehicleTemplate(payload.template), String(validateNumber(payload.offset ?? 400, 0, 100000))];
+    case "adminCleanInventory":
+      return ["admin", "clean-inventory", validatePlayerId(payload.playerId)];
+    case "adminResetProgression":
+      return ["admin", "reset-progression", validatePlayerId(payload.playerId)];
+    case "adminItemSearch":
+      return ["admin", "item-search", validateSearchQuery(payload.q)];
+    case "adminItemListCategory":
+      return ["admin", "item-list", validateCatalogQuery(payload.category)];
+    case "adminVehicleSearch":
+      return ["admin", "vehicle-list", validateCatalogQuery(payload.q)];
+    case "adminSkillModulesSearch":
+      return ["admin", "skill-modules", validateCatalogQuery(payload.q)];
     case "adminSpecializationMax":
       return ["admin", "specialization-max", String(payload.character || ""), "--grant-keystones", "--yes"];
     default:
@@ -196,6 +223,55 @@ function validateItemName(value) {
   const raw = String(value || "").trim();
   if (raw && raw.length <= 200 && !/[\r\n]/.test(raw)) return raw;
   throw new Error("Invalid item name");
+}
+
+function validateItemId(value) {
+  const raw = String(value || "").trim();
+  if (/^[A-Za-z0-9_./:-]{1,240}$/.test(raw)) return raw;
+  throw new Error("Invalid item id");
+}
+
+function validateDurability(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error("Expected durability 0-1");
+  return n;
+}
+
+function validateTemplateName(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "scout-ornithopter-mk6") return raw;
+  throw new Error("Unsupported item bundle template");
+}
+
+function validateSkillModule(value) {
+  const raw = String(value || "").trim();
+  if (/^[A-Za-z0-9_./:-]{1,200}$/.test(raw) || (raw.length > 0 && raw.length <= 120 && !/[\r\n]/.test(raw))) return raw;
+  throw new Error("Invalid skill module");
+}
+
+function validateVehicleId(value) {
+  const raw = String(value || "").trim();
+  if (/^[A-Za-z0-9_./:-]{1,160}$/.test(raw)) return raw;
+  throw new Error("Invalid vehicle id");
+}
+
+function validateVehicleTemplate(value) {
+  const raw = String(value || "").trim();
+  if (/^[A-Za-z0-9_./:-]{1,160}$/.test(raw)) return raw;
+  throw new Error("Invalid vehicle template");
+}
+
+function validateSearchQuery(value) {
+  const raw = String(value || "").trim();
+  if (raw.length >= 2 && raw.length <= 120 && !/[\r\n]/.test(raw)) return raw;
+  throw new Error("Search query must be 2-120 characters");
+}
+
+function validateCatalogQuery(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.length <= 120 && !/[\r\n]/.test(raw)) return raw;
+  throw new Error("Catalog query is invalid");
 }
 
 function validateTableName(value) {

@@ -63,10 +63,22 @@ Base path for the native RedBlink API: `/api`.
 | `/api/players/:id/stats` | GET | Stats capability report | Returns unsupported reason until schema is mapped |
 | `/api/players/:id/history` | GET | History capability report | Returns unsupported reason until schema is mapped |
 | `/api/players/:id/give-item` | POST | Give item task | `dune admin grant-item` |
+| `/api/players/:id/give-items` | POST | Give bundled item template task | `dune admin grant-template` |
+| `/api/players/:id/give-item-id` | POST | Give raw item ID task | `dune admin grant-item-id` |
 | `/api/players/:id/add-xp` | POST | Add XP task | `dune admin award-xp` |
+| `/api/players/:id/set-skill-points` | POST | Set unspent skill points task | `dune admin skill-points` |
+| `/api/players/:id/set-skill-module` | POST | Set skill module level task | `dune admin skill-module` |
 | `/api/players/:id/refill-water` | POST | Refill water task | `dune admin refill-water` |
 | `/api/players/:id/kick` | POST | Kick task | `dune admin kick` |
+| `/api/players/kick-all-online` | POST | Kick all online task | `dune admin kick --all-online --yes`; requires confirmation phrase `KICK ALL ONLINE PLAYERS` |
 | `/api/players/:id/teleport` | POST | Teleport task | `dune admin teleport` |
+| `/api/players/:id/spawn-vehicle` | POST | Spawn vehicle in front of player task | `dune admin spawn-vehicle` |
+| `/api/players/:id/clean-inventory` | POST | Clean inventory task | `dune admin clean-inventory`; requires confirmation phrase `CLEAN INVENTORY` |
+| `/api/players/:id/reset-progression` | POST | Reset progression task | `dune admin reset-progression`; requires confirmation phrase `RESET PROGRESSION` |
+| `/api/admin/items/search` | GET | Search admin item catalog | `dune admin item-search <q>` |
+| `/api/admin/items` | GET | List admin item catalog/categories | `dune admin item-list [category]` |
+| `/api/admin/vehicles` | GET | List/search vehicle catalog | `dune admin vehicle-list [q]` |
+| `/api/admin/skill-modules` | GET | List/search skill module catalog | `dune admin skill-modules [q]` |
 | `/api/admin/history` | GET | Admin history | `dune admin history` |
 | `/api/maps` | GET | Map list | `dune maps list` |
 | `/api/sietches` | GET | Sietch state | `dune sietches list` |
@@ -84,6 +96,12 @@ Base path for the native RedBlink API: `/api`.
 
 
 - `/api/players/:id/set-currency`
+- `/api/players/:id/add-currency` returns explicit unsupported capability response until Solaris/currency write schema is verified
+- `/api/players/:id/add-faction-reputation` returns explicit unsupported capability response until faction reputation write schema is verified
+- `/api/players/:id/repair-gear` and `/api/players/:id/refuel-vehicle` return explicit unsupported capability responses until direct DB stat updates are ported safely
+- `DELETE /api/players/:id/inventory/:itemId` returns explicit unsupported capability response until ownership checks and `dune.delete_item` availability are verified
+- `POST /api/storage/:id/give-item` returns explicit unsupported capability response until direct DB item insert logic is ported safely
+- `/api/admin/broadcast`, `/api/admin/broadcast-shutdown`, and `/api/admin/whisper` return explicit unsupported capability responses until RedBlink RabbitMQ broadcast/chat publishing is implemented or exposed by CLI
 - player progression/events/stats/history deep schema mapping
 - `/api/maps/update`
 - `/api/sietches/update`

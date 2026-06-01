@@ -15,7 +15,20 @@ export const playersApi = {
   stats: (playerId: string) => api<Record<string, unknown>>(`/api/players/${encodeURIComponent(playerId)}/stats`),
   history: (playerId: string) => api<Record<string, unknown>>(`/api/players/${encodeURIComponent(playerId)}/history`),
   giveItem: (playerId: string, body: { itemName: string; quantity: number; durability: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/give-item`, body),
+  giveItems: (playerId: string, template = "scout-ornithopter-mk6") => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/give-items`, { template }),
+  giveItemId: (playerId: string, body: { itemId: string; quantity: number; durability: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/give-item-id`, body),
   addXp: (playerId: string, amount: number) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/add-xp`, { amount }),
-  refillWater: (playerId: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/refill-water`),
-  kick: (playerId: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/kick`)
+  setSkillPoints: (playerId: string, points: number) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/set-skill-points`, { points }),
+  setSkillModule: (playerId: string, body: { module: string; level: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/set-skill-module`, body),
+  refillWater: (playerId: string, amount = 1000000) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/refill-water`, { amount }),
+  kick: (playerId: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/kick`),
+  teleport: (playerId: string, body: { x: number; y: number; z: number; yaw: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/teleport`, body),
+  spawnVehicle: (playerId: string, body: { vehicleId: string; template: string; offset: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/spawn-vehicle`, body),
+  cleanInventory: (playerId: string, confirmation: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/clean-inventory`, { confirmation }),
+  resetProgression: (playerId: string, confirmation: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/reset-progression`, { confirmation }),
+  addCurrency: (playerId: string, body: { currencyId: number; amount: number }) => post<{ supported: false; reason: string }>(`/api/players/${encodeURIComponent(playerId)}/add-currency`, body),
+  addFactionReputation: (playerId: string, body: { factionId: number; amount: number }) => post<{ supported: false; reason: string }>(`/api/players/${encodeURIComponent(playerId)}/add-faction-reputation`, body),
+  repairGear: (playerId: string) => post<{ supported: false; reason: string }>(`/api/players/${encodeURIComponent(playerId)}/repair-gear`),
+  refuelVehicle: (playerId: string) => post<{ supported: false; reason: string }>(`/api/players/${encodeURIComponent(playerId)}/refuel-vehicle`),
+  deleteInventoryItem: (playerId: string, itemId: string, confirmation: string) => api<{ supported: false; reason: string }>(`/api/players/${encodeURIComponent(playerId)}/inventory/${encodeURIComponent(itemId)}`, { method: "DELETE", body: JSON.stringify({ confirmation }) })
 };
