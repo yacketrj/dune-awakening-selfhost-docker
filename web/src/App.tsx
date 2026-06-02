@@ -346,16 +346,20 @@ function AdminToolsPanel({ setTask, onError }: { setTask: (task: Task) => void; 
       </div>
       <pre className="mini-output">{catalog || "Use the catalog tools to find item names, raw item IDs, vehicles, and skill modules."}</pre>
       <h3>Global Live Tools</h3>
-      <p className="danger-note">Broadcast is publish-verified only. The web API can publish to RabbitMQ, but in-game visibility was not confirmed on the live server.</p>
-      <div className="action-row">
+      <p className="danger-note">Experimental: RabbitMQ publish works, but in-game display is not working/verified on the live server.</p>
+      <div className="action-line">
         <button className="danger" onClick={() => run(async () => window.confirm("Kick every online player? This publishes PlayerId='*'.") && setTask((await adminApi.kickAllOnline("KICK ALL ONLINE PLAYERS")).task))}>Kick All Online Players</button>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Broadcast or whisper message" />
+      </div>
+      <div className="action-line broadcast-line">
+        <label className="broadcast-message">Broadcast Message<input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Broadcast or whisper message" /></label>
         <label className="inline-field">Duration seconds<input type="number" min="1" max="3600" value={broadcastDuration} onChange={(event) => setBroadcastDuration(event.target.value)} /></label>
         <button onClick={() => run(async () => setLiveToolResult(JSON.stringify(await adminApi.broadcast(message, Number(broadcastDuration || 30)), null, 2)))}>Broadcast Publish Test</button>
+      </div>
+      <div className="action-line">
         <button className="danger" onClick={() => run(async () => window.confirm("Send shutdown broadcast publish test? In-game visibility is unverified.") && setLiveToolResult(JSON.stringify(await adminApi.shutdownBroadcast({ confirmation: "SHUTDOWN BROADCAST", delayMinutes: 15, shutdownType: "Restart" }), null, 2)))}>Shutdown Broadcast Publish Test</button>
         <button onClick={() => run(async () => setLiveToolResult(JSON.stringify(await adminApi.whisper(playerId, message), null, 2)))}>Whisper</button>
       </div>
-      <pre className="mini-output">{liveToolResult || "Broadcast, shutdown broadcast, and whisper results appear here. Broadcast publish success does not prove in-game delivery."}</pre>
+      <pre className="mini-output">{liveToolResult || "Broadcast, shutdown broadcast, and whisper results appear here. Broadcast publish success does not prove in-game display."}</pre>
       <h3>Command History</h3>
       <button onClick={() => run(async () => setHistory((await adminApi.history()).stdout))}>Refresh Command History</button>
       <pre className="mini-output">{history || "History comes from runtime/generated/admin-command-history.tsv."}</pre>

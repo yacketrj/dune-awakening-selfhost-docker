@@ -636,7 +636,7 @@ async function broadcastRoute(req, res) {
     const result = config.mockMode ? { code: 0, stdout: "mock broadcast\n", stderr: "", args: [] } : await publishServerCommand(config, command, "web-broadcast");
     audit(config, req, "admin.broadcast", { supported: true, command });
     recordAdminHistory(config, { command: "web-broadcast", target: "all", friendly: "Broadcast publish test", path: "rmq:heartbeats/notifications", result: "published", message: body.message });
-    return json(res, 200, { supported: true, ok: true, stdout: result.stdout, stderr: result.stderr, note: "Broadcast publish succeeded. In-game visibility still requires manual verification." });
+    return json(res, 200, { supported: true, ok: true, stdout: result.stdout, stderr: result.stderr, note: "Broadcast was published to RabbitMQ, but it has not been verified to appear in-game." });
   } catch (error) {
     audit(config, req, "admin.broadcast", { supported: false, error: redact(error.message || error) });
     recordAdminHistory(config, { command: "web-broadcast", target: "all", friendly: "Broadcast publish test", path: "rmq:heartbeats/notifications", result: "blocked", message: body.message });

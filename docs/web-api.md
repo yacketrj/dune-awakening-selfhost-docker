@@ -86,7 +86,7 @@ Base path for the native RedBlink API: `/api`.
 | `/api/admin/vehicles/structured` | GET | Structured vehicle catalog | Parses `dune admin vehicle-list` into `{ id, name, actor, templates[] }` for Spawn Vehicle dropdowns |
 | `/api/admin/skill-modules` | GET | List/search skill module catalog | `dune admin skill-modules [q]` |
 | `/api/admin/history` | GET | Admin history | `dune admin history`; web broadcast/shutdown/whisper attempts append safe rows to the same TSV |
-| `/api/admin/broadcast-shutdown` | POST | Shutdown broadcast publish test | Publishes RedBlink `ServiceBroadcast` ServerShutdown envelope to `dune-rmq-game` `heartbeats/notifications`; requires `SHUTDOWN BROADCAST`; live in-game visibility remains unverified |
+| `/api/admin/broadcast-shutdown` | POST | Experimental shutdown broadcast publish test | Publishes RedBlink `ServiceBroadcast` ServerShutdown envelope to `dune-rmq-game` `heartbeats/notifications`; requires `SHUTDOWN BROADCAST`; publish path exists but in-game display is not verified |
 | `/api/admin/whisper` | POST | Whisper capability response | Returns unsupported until RedBlink exposes the GM courier account/persona, sender Funcom ID, sender hex FLS ID, recipient Funcom ID mapping, and verified `chat.whispers` routing |
 | `/api/map/status` | GET | Live map status bundle | `dune maps list`, `dune servers`, `dune ready`, `dune autoscaler status` |
 | `/api/map/capabilities` | GET | Live map overlay capabilities | Direct PostgreSQL table/function capability detection |
