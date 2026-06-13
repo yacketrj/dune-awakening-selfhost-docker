@@ -1,234 +1,140 @@
-# RedBlink Dune Awakening Self-Host Docker
+<p align="center">
+  <img src="assets/cover.png" alt="RedBlink Dune Docker Console" width="100%">
+</p>
 
-## With RedBlink Dune Docker Console
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
+  <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-server_console-blue">
+  <img alt="Guided setup" src="https://img.shields.io/badge/setup-guided%20browser%20wizard-orange">
+  <img alt="Docker managed" src="https://img.shields.io/badge/Docker-checked%20automatically-2496ED">
+</p>
 
-This project packages the Dune Awakening Docker server stack together with **RedBlink Dune Docker Console**, a built-in browser admin panel for setup, operations, player tools, backups, logs, updates, and care packages.
+# RedBlink Dune Docker Console
 
-RedBlink Dune Docker Console helps server owners manage:
+RedBlink Dune Docker Console is a browser-based admin console for running the Dune Awakening dedicated server stack on your own self-hosted server.
 
-- setup, status, and readiness
-- services and logs
-- backups and updates
-- players and admin actions
-- Care Packages
-- maps, sietches, Deep Desert, memory, and autoscaler controls
-- read-only database tools
-- live map marker/list view
+It is built for fresh servers and first-time admins. The installer prepares the host, starts the Web UI, generates a strong local admin password, and then the browser setup wizard walks through the rest. Running directly on Linux is the most efficient option, but Docker Desktop on Windows/WSL2 and virtual machines can also work when networking and resources are configured correctly.
 
 This project is unofficial. It is not affiliated with, endorsed by, sponsored by, or supported by Funcom.
 
-## Requirements
+## First-Time Install
 
-- Ubuntu Linux recommended
-- Docker Engine with Docker Compose v2 plugin
-- Steam/game server requirements expected by this stack
-- Required game ports opened in your firewall/router
-- Enough disk and RAM for your server layout
-- Funcom self-host token or required game auth token
-- Browser access to RedBlink Dune Docker Console
-
-## Fresh Ubuntu Quick Start
-
-Install basic tools:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl git gnupg
-```
-
-Install Docker Engine and the Compose v2 plugin:
-
-```bash
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$USER"
-newgrp docker
-```
-
-Clone and configure the stack:
-
-```bash
-git clone https://github.com/Red-Blink/dune-awakening-selfhost-docker.git
-cd dune-awakening-selfhost-docker
-cp .env.example .env
-nano .env
-```
-
-Start the Docker server stack:
-
-```bash
-docker compose up -d
-```
-
-Start RedBlink Dune Docker Console:
-
-```bash
-docker compose -f docker-compose.web.yml up -d --build
-```
-
-Get the generated web admin password:
-
-```bash
-cat runtime/secrets/admin-web-password.txt
-```
-
-Open:
+Download the latest release from:
 
 ```text
-http://SERVER_IP:8088
+https://github.com/Red-Blink/dune-awakening-selfhost-docker/releases/latest
 ```
 
-Replace `SERVER_IP` with your server IP address. Continue setup in the web UI.
+Unpack it on the server, then run the included installer, `install.sh`.
 
-## First-Time Web Setup
+The installer is meant to do the setup work for you:
 
-1. Open RedBlink Dune Docker Console.
-2. Sign in with the generated admin password.
-3. Go to **Setup**.
-4. Enter or confirm required server values.
-5. Save the Funcom token when prompted.
-6. Run the setup/init flow.
-7. Return to **Home** and wait for status/readiness checks.
-8. Use **Services** and **Logs** if something is still warming up.
+- checks whether Docker is installed
+- installs Docker automatically on supported Linux servers
+- starts and enables Docker when it is installed but not running
+- checks Docker Compose
+- starts the RedBlink Dune Docker Console Web UI
+- prints the browser address to open
+- tells the local server admin where the generated first-login password was saved
 
-Readiness can take a few minutes while Docker containers, game services, and health checks start.
+The README does not publish the password location. The installer and local console output show it only on the server that created it.
 
-## Access and Ports
+## What Happens In The Browser
 
-Game ports and the admin panel are separate concerns. Open game ports for players, but protect the web admin.
+Open the Web UI address shown by the installer and sign in with the generated admin password. First-time setup stays focused on the wizard; the main operational menu remains hidden until setup is complete.
 
-| Port | Purpose | Public exposure |
+The wizard guides you through:
+
+1. checking the server
+2. fixing missing requirements where the installer can do that safely
+3. naming the Dune server
+4. choosing region and network mode
+5. saving the Funcom self-host token
+6. reviewing ports and firewall expectations
+7. initializing and starting the Dune server stack
+8. opening the dashboard when the server is ready
+
+If Docker is missing, stopped, unavailable, or missing Compose, the setup flow detects that automatically. On supported Linux servers, the installer handles those repairs before the Web UI starts. On Docker Desktop, Windows/WSL2, or VM setups, the wizard points out what still needs attention, such as starting Docker Desktop, assigning enough resources, or forwarding ports.
+
+## Server Requirements
+
+Best experience:
+
+- Linux server, VPS, dedicated machine, or home server
+- Docker running directly on the host
+- enough CPU, memory, disk, and network capacity for your server size
+
+Also supported with extra care:
+
+- Docker Desktop on Windows/WSL2
+- Linux inside a virtual machine
+- other VM software that exposes CPU features, storage, and ports correctly
+
+You will need:
+
+- Funcom self-host token
+- AVX/AVX2-capable CPU
+- enough RAM and disk space
+- browser access to the Web UI from a trusted network
+- router/firewall access if players connect from the internet
+
+## Ports
+
+Keep the Web UI private. Use LAN, VPN, SSH tunnel, protected reverse proxy, or firewall allowlisting for admin access.
+
+| Port | Purpose | Exposure |
 |---|---|---|
-| `8088/tcp` | RedBlink Dune Docker Console web admin | Prefer local/LAN/VPN only. Do not casually expose to the whole internet. |
-| `7777/udp` | Default Overmap client game port | Public game port if players connect from the internet. |
-| `7778/udp` | Default Survival_1 client game port | Public game port if players connect from the internet. |
-| `7888/udp` | Default Survival_1 inter-server/IGW port | Usually internal/server-to-server; expose only if your deployment requires it. |
-| `7889/udp` | Default Overmap inter-server/IGW port | Usually internal/server-to-server; expose only if your deployment requires it. |
-| `15432/tcp` | Local Postgres | Do not expose publicly. |
-| `31982/tcp`, `31983/tcp`, `32573/tcp` | RabbitMQ/game admin internals | Do not expose publicly. |
+| `8088/tcp` | Web admin console | Private admin access only |
+| `7777-7810/udp` | Normal Dune game traffic | Forward for public servers |
+| `31982/tcp` | Game stack messaging | Forward only when your setup requires it |
+| `15432/tcp` | Local database | Never public |
+| `31983/tcp`, `32573/tcp` | Internal admin services | Never public |
+| `7888+/udp` | Internal map traffic | Keep private for normal single-host installs |
 
-Dynamic maps can use additional sequential game ports. Check **Home**, **Services**, or the advanced `dune ports` command after changing map settings.
+The wizard repeats the important port guidance during setup.
 
-For remote admin access, use a VPN such as Tailscale/WireGuard, SSH tunnel, reverse proxy with strong auth, or firewall allowlisting. Do not leave `8088/tcp` open to the public internet.
+## After Setup
 
-## Network IP Setup
-
-The stack separates the local bind address from the public/client address.
-
-- `SERVER_BIND_IP` is the local IP the Docker host listens on.
-- `SERVER_IP` is the address players should connect to.
-- `SERVER_IP_MODE=local` is for LAN-only servers.
-- `SERVER_IP_MODE=public` is for internet/NAT/direct-public servers.
-
-For LAN-only hosting, both addresses are normally the LAN IP:
-
-```env
-SERVER_BIND_IP=10.0.0.240
-SERVER_IP_MODE=local
-SERVER_IP=10.0.0.240
-```
-
-For NAT, router, OPNsense, pfSense, or home-server hosting, bind to the host LAN IP and advertise the WAN IP:
-
-```env
-SERVER_BIND_IP=10.0.0.240
-SERVER_IP_MODE=public
-SERVER_IP=109.150.247.52
-```
-
-Do not bind game sockets to the public IP unless the Docker host actually owns that IP. In NAT mode, router/firewall DNAT should forward the public UDP ports to `SERVER_BIND_IP`.
-
-For dynamic public IPs, use:
-
-```env
-SERVER_BIND_IP=10.0.0.240
-SERVER_IP_MODE=public
-SERVER_IP=auto
-```
-
-On startup, the stack resolves the current public IP, keeps game sockets bound to `SERVER_BIND_IP`, updates public metadata, and reconciles `dune.farm_state` so map travel advertises `SERVER_IP` while IGW traffic stays on the bind IP.
-
-Same-LAN players connecting through the public address may need NAT reflection/hairpin NAT enabled on the router.
-
-## Common Web Tasks
+Once setup is complete, the dashboard unlocks the normal tools:
 
 | Task | Where |
 |---|---|
-| Check status/readiness | Home |
-| View services | Services |
-| View logs | Logs |
-| Create or list backups | Backups |
-| Check/apply updates | Updates |
-| Manage players | Players |
-| Grant items, XP, water, teleport, kick, spawn vehicle | Players |
-| Configure and grant Care Packages | Care Package |
-| Manage maps, sietches, Deep Desert, memory, autoscaler | Maps |
-| Browse database safely | Database |
-| View item/vehicle/skill catalogs and command history | Admin Tools |
+| Status and readiness | Home |
+| Service control | Services |
+| Logs | Logs |
+| Backups | Backups |
+| Updates | Updates |
+| Player admin tools | Players |
+| Care Packages | Care Package |
+| Maps, sietches, Deep Desert, memory, autoscaler | Maps |
+| Read-only database browser | Database |
+| Item, vehicle, skill, and command history tools | Admin Tools |
 
-Advanced CLI usage still exists, but normal admins should start with RedBlink Dune Docker Console.
+## Safety
 
-## Feature Status
-
-| Status | Features |
-|---|---|
-| Working | Home/status/readiness, Services/logs, Backups create/list, Updates check game/stack, Database read-only browser, Players/profile/inventory, Give Item, Give Item by ID, Add XP, Set Skill Points, Give Water, Teleport, Kick Player, Spawn Vehicle, Care Package grants, Admin Tools actions/history |
-| Partial / experimental | Broadcast publishes to RabbitMQ and logs history but does not appear in-game, Care Package auto-grant runs only while RedBlink Dune Docker Console is running, Live Map shows markers/list without a calibrated background map, progression/events/stats/history schema mappings are incomplete |
-| Blocked / not implemented | Verified Shutdown Broadcast delivery, unsafe import/restore flows without explicit confirmation |
-
-## Security Notes
-
-RedBlink Dune Docker Console controls Docker and game admin operations. Protect it like a production admin console.
+RedBlink Dune Docker Console controls Docker and game admin operations. Treat it like a private server admin panel.
 
 - Keep authentication enabled.
-- Use a strong admin password and do not share it.
-- Use a firewall, VPN, SSH tunnel, or trusted reverse proxy for remote access.
-- `docker-compose.web.yml` mounts `/var/run/docker.sock`; this gives the web container powerful Docker control.
-- Back up before destructive operations.
-- Dangerous actions require backend confirmation phrases, not only frontend prompts.
-- Do not expose RedBlink Dune Docker Console directly to the public internet.
+- Keep the Web UI off the public internet.
+- Do not share the admin password.
+- Back up before destructive actions.
+- The console uses Docker access to manage the stack, so only trusted admins should use it.
+- Dangerous actions require backend confirmation phrases, not only browser prompts.
 
 ## Troubleshooting
 
-### RedBlink Dune Docker Console is not loading
+The installer and wizard are designed to explain problems in plain language. The most common cases are:
 
-```bash
-docker compose -f docker-compose.web.yml ps
-docker compose -f docker-compose.web.yml logs -f redblink-dune-docker-console
-```
+| What happened | What the installer or wizard does |
+|---|---|
+| Docker is not installed | Installs Docker automatically on supported Linux servers |
+| Docker is installed but not running | Starts and enables Docker on supported Linux servers |
+| Docker is running but your user cannot access it | Fixes Linux group access when possible, then asks you to sign out and back in |
+| Docker Compose is missing | Installs the Compose plugin on supported Linux servers |
+| Docker Desktop is stopped | Asks you to start Docker Desktop |
+| VM networking is incomplete | Points you back to the VM/router port settings |
 
-Confirm `8088/tcp` is reachable from your browser or admin network.
-
-### Readiness says not ready
-
-This can be normal during startup. Open **Home**, **Services**, and **Logs** in the web UI. Give game services time to warm up before restarting anything.
-
-### Logs are empty or stale
-
-Use **Logs** in the web UI and refresh the selected service. If the web admin itself is the issue:
-
-```bash
-docker compose -f docker-compose.web.yml restart redblink-dune-docker-console
-```
-
-### Docker disk space issue
-
-```bash
-df -h
-docker system df
-```
-
-Free space carefully. Do not delete runtime backups or generated state unless you know what you are removing.
-
-### Restart RedBlink Dune Docker Console
-
-```bash
-docker compose -f docker-compose.web.yml restart redblink-dune-docker-console
-```
+If the Web UI does not load, check the installer output first. It prints the address the console is listening on.
 
 ## License
 

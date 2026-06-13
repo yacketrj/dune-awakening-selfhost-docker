@@ -3,7 +3,6 @@ import { setupApi, type Check, type Task } from "../api/setup";
 import { PreflightCheckCard } from "./PreflightCheckCard";
 import { SecretInput } from "./SecretInput";
 import { TaskProgress } from "./TaskProgress";
-import { CommandPreview } from "./CommandPreview";
 
 const steps = ["Welcome", "Host Check", "Docker Setup", "Runtime Location", "Server Identity", "Funcom Token", "Ports", "Review", "Install", "Finish"];
 const regions = ["Europe", "North America", "South America", "Asia", "Oceania", "Africa"];
@@ -46,9 +45,9 @@ export function SetupWizard({ initialStep = 0, jumpNonce = 0 }: { initialStep?: 
           <h2>Welcome to Dune Docker Console</h2>
           <p>A Docker-powered Dune server stack with a built-in web admin panel. It is an unofficial community self-hosting tool.</p>
           <ul className="requirements">
-            <li>Linux host with Docker Engine and Compose plugin</li>
-            <li>Funcom self-host token</li>
-            <li>AVX/AVX2-capable CPU, enough RAM, disk space, and open game ports</li>
+            <li>Best experience: run it directly on a Linux server.</li>
+            <li>Also possible: Docker Desktop on Windows/WSL2 or a virtual machine.</li>
+            <li>You will need your Funcom self-host token and a server with enough CPU, memory, disk, and open game ports.</li>
           </ul>
         </>}
         {step === 1 && <>
@@ -59,8 +58,7 @@ export function SetupWizard({ initialStep = 0, jumpNonce = 0 }: { initialStep?: 
         </>}
         {step === 2 && <>
           <h2>Docker Setup</h2>
-          <p>If Docker is missing, install it manually or start the backend with host bootstrap enabled.</p>
-          <CommandPreview>sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin</CommandPreview>
+          <p>The console checks Docker for you. If Docker, Compose, or the Docker service is missing, stopped, or unavailable, the installer handles the Linux repair before the Web UI opens. If you are using Docker Desktop or a VM, the wizard tells you what needs attention.</p>
         </>}
         {step === 3 && <>
           <h2>Runtime Location</h2>
@@ -69,7 +67,7 @@ export function SetupWizard({ initialStep = 0, jumpNonce = 0 }: { initialStep?: 
         {step === 4 && <>
           <h2>Server Identity</h2>
           <div className="setup-form-grid">
-            <label>Server title<input value={config.SERVER_TITLE} onChange={(event) => setConfig({ ...config, SERVER_TITLE: event.target.value })} /></label>
+            <label>Server Title<input value={config.SERVER_TITLE} onChange={(event) => setConfig({ ...config, SERVER_TITLE: event.target.value })} /></label>
             <label>Region<select value={config.SERVER_REGION} onChange={(event) => setConfig({ ...config, SERVER_REGION: event.target.value })}>{regions.map((region) => <option key={region} value={region}>{region}</option>)}</select></label>
             <label>Install mode<select value={config.SERVER_IP_MODE} onChange={(event) => setConfig({ ...config, SERVER_IP_MODE: event.target.value })}><option value="public">Public</option><option value="local">Local</option></select></label>
             <label>Server IP<input value={config.SERVER_IP} onChange={(event) => setConfig({ ...config, SERVER_IP: event.target.value })} /></label>
@@ -85,24 +83,33 @@ export function SetupWizard({ initialStep = 0, jumpNonce = 0 }: { initialStep?: 
         {step === 6 && <>
           <h2>Ports and Firewall</h2>
           <div className="action-sections">
+            <section className="action-section success-panel">
+              <h4>Public Router Forwarding</h4>
+              <p>For a normal public server, forward these ports from your router/firewall to this Docker host:</p>
+              <ul className="requirements">
+                <li><strong>UDP 7777-7810</strong> for Dune game server traffic.</li>
+                <li><strong>TCP 31982</strong> for RabbitMQ game traffic.</li>
+              </ul>
+              <p className="muted">This is the port guidance most users need.</p>
+            </section>
             <section className="action-section">
               <h4>Admin Panel</h4>
-              <p>Dune Docker Console listens on 8088/tcp by default. Keep it local, VPN-only, or protected by a reverse proxy/firewall.</p>
+              <p>Dune Docker Console listens on 8088/tcp by default. Do not expose it publicly. Use LAN access, VPN, SSH tunnel, or a protected reverse proxy.</p>
             </section>
             <section className="action-section">
-              <h4>Game Client Ports</h4>
-              <p>Game client UDP ports start at 7777 and increment sequentially for each game server/map. Overmap commonly uses 7777 and Survival 1 commonly uses 7778.</p>
+              <h4>Game Map Ports</h4>
+              <p>Game UDP ports start at 7777 and increase as maps are started. Overmap commonly uses 7777 and Survival_1 commonly uses 7778. The 7777-7810 range covers normal map growth.</p>
             </section>
             <section className="action-section">
-              <h4>Server-to-Server / IGW Ports</h4>
-              <p>IGW/S2S UDP ports start at 7888 and increment sequentially for each game server/map. These ranges must not overlap with game client ports.</p>
+              <h4>Internal Map Traffic</h4>
+              <p>IGW/S2S UDP ports start at 7888 for map-to-map traffic inside the stack. Do not forward these publicly for a normal single-host Docker setup.</p>
             </section>
             <section className="action-section">
-              <h4>Internal Services</h4>
-              <p>RabbitMQ Game uses 31982/tcp and 31983/tcp. Postgres and other internal ports should not be exposed publicly unless intentionally configured.</p>
+              <h4>Do Not Publicly Expose</h4>
+              <p>Keep the web admin, Postgres, Director, TextRouter, RabbitMQ admin, RabbitMQ HTTP, and other internal service ports private.</p>
             </section>
           </div>
-          <p className="danger-note">Additional deployed maps or sietches may require additional sequential game and IGW ports.</p>
+          <p className="danger-note">Only forward internal ports if you are intentionally building an advanced multi-host setup and know why they are needed.</p>
         </>}
         {step === 7 && <>
           <h2>Review</h2>
@@ -121,10 +128,10 @@ export function SetupWizard({ initialStep = 0, jumpNonce = 0 }: { initialStep?: 
             <section className="action-section">
               <h4>Network / Ports</h4>
               <ReviewGrid items={[
-                ["Game UDP", "7777, 7778, 7888, 7889"],
-                ["RabbitMQ Game", "31982/tcp"],
-                ["RabbitMQ Game HTTP", "31983/tcp"],
-                ["Web Admin", "8088/tcp"]
+                ["Public Game UDP", "7777-7810/udp"],
+                ["Public RabbitMQ Game", "31982/tcp"],
+                ["Admin Panel", "8088/tcp private only"],
+                ["Internal Services", "Do not expose publicly"]
               ]} />
             </section>
             <section className="action-section">

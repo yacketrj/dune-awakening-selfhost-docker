@@ -13,9 +13,9 @@ export async function preflight(config) {
   checks.push(cpuFlags());
   checks.push(check("RAM", totalmem() >= 16 * 1024 ** 3 ? "pass" : "warn", `${gb(totalmem())} GiB total, ${gb(freemem())} GiB free`));
   checks.push(diskCheck(config.repoRoot));
-  checks.push(commandCheck("Docker CLI", "docker", ["--version"]));
-  checks.push(commandCheck("Docker Compose", "docker", ["compose", "version"]));
-  checks.push(commandCheck("Docker daemon", "docker", ["info"]));
+  checks.push(dockerCliCheck());
+  checks.push(dockerComposeCheck());
+  checks.push(dockerDaemonCheck());
   checks.push(fileCheck("Runtime directory", config.repoRoot));
   checks.push(fileCheck("docker-compose.yml", resolve(config.repoRoot, "docker-compose.yml")));
   checks.push(fileCheck("dune command", config.duneScript));
@@ -45,6 +45,55 @@ function commandCheck(name, cmd, args) {
     return check(name, "pass", out.split(/\r?\n/)[0]);
   } catch (error) {
     return check(name, "fail", "Not available or not reachable", String(error.message || error));
+  }
+}
+
+function dockerCliCheck() {
+  try {
+    const out = execFileSync("docker", ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] });
+    return check("Docker CLI", "pass", out.split(/\r?\n/)[0]);
+  } catch (error) {
+    return check(
+      "Docker CLI",
+      "fail",
+      "Docker is missing.",
+      [
+        "Run the included installer on the server so it can install Docker for you.",
+        "If you use Docker Desktop, install and start Docker Desktop first."
+      ].join("\n")
+    );
+  }
+}
+
+function dockerComposeCheck() {
+  try {
+    const out = execFileSync("docker", ["compose", "version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] });
+    return check("Docker Compose", "pass", out.split(/\r?\n/)[0]);
+  } catch (error) {
+    return check(
+      "Docker Compose",
+      "fail",
+      "Docker Compose is missing.",
+      "Run the included installer again so it can add Compose where supported. If you use Docker Desktop, make sure Docker Desktop is fully started."
+    );
+  }
+}
+
+function dockerDaemonCheck() {
+  try {
+    const out = execFileSync("docker", ["info"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] });
+    const line = out.split(/\r?\n/).map((part) => part.trim()).find(Boolean) || "Docker daemon is reachable";
+    return check("Docker daemon", "pass", line);
+  } catch (error) {
+    return check(
+      "Docker daemon",
+      "fail",
+      "Docker is installed but is not running or cannot be reached.",
+      [
+        "Run the included installer again so it can start Docker and repair access where supported.",
+        "If you use Docker Desktop, open Docker Desktop and wait until it says the engine is running."
+      ].join("\n")
+    );
   }
 }
 
