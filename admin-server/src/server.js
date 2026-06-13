@@ -318,9 +318,9 @@ async function handleApi(req, res) {
   if (path === "/api/admin/broadcast" && req.method === "POST") return broadcastRoute(req, res);
   if (path === "/api/admin/broadcast-shutdown" && req.method === "POST") return shutdownBroadcastRoute(req, res);
   if (path === "/api/admin/whisper" && req.method === "POST") return whisperRoute(req, res);
-  if (path.match(/^\/api\/players\/[^/]+\/give-item$/) && req.method === "POST") return playerTask(req, res, path, "adminGiveItem");
+  if (path.match(/^\/api\/players\/[^/]+\/give-item$/) && req.method === "POST") return giveSingleItemRoute(req, res, path, "adminGiveItem");
   if (path.match(/^\/api\/players\/[^/]+\/give-items$/) && req.method === "POST") return giveItemsRoute(req, res, path);
-  if (path.match(/^\/api\/players\/[^/]+\/give-item-id$/) && req.method === "POST") return playerTask(req, res, path, "adminGiveItemId");
+  if (path.match(/^\/api\/players\/[^/]+\/give-item-id$/) && req.method === "POST") return giveSingleItemRoute(req, res, path, "adminGiveItemId");
   if (path.match(/^\/api\/players\/[^/]+\/add-xp$/) && req.method === "POST") return playerTask(req, res, path, "adminAddXp");
   if (path.match(/^\/api\/players\/[^/]+\/set-skill-points$/) && req.method === "POST") return playerTask(req, res, path, "adminSetSkillPoints");
   if (path.match(/^\/api\/players\/[^/]+\/set-skill-module$/) && req.method === "POST") return playerTask(req, res, path, "adminSetSkillModule");
@@ -1581,7 +1581,22 @@ async function resolveCarePackagePlayerIdentity(playerId) {
     funcomId: player.funcom_id || player.fls_id || player.action_player_id || "",
     flsId: player.fls_id || player.funcom_id || player.action_player_id || "",
     characterName: player.character_name || "",
-    actorId: player.actor_id || player.player_pawn_id || ""
+    actorId: player.actor_id || player.player_pawn_id || "",
+    onlineStatus: player.online_status || ""
+  };
+}
+
+async function resolvePlayerGrantTarget(playerId) {
+  const players = await duneDb.listPlayers(db, {}).catch(() => ({ rows: [] }));
+  const rows = players.rows || [];
+  const target = String(playerId || "").toLowerCase();
+  const player = rows.find((row) => [row.action_player_id, row.funcom_id, row.fls_id, row.account_id, row.actor_id, row.player_pawn_id]
+    .some((value) => String(value || "").toLowerCase() === target));
+  return {
+    actionId: String(player?.action_player_id || player?.funcom_id || player?.fls_id || playerId || ""),
+    actorId: String(player?.actor_id || player?.player_pawn_id || (/^\d+$/.test(String(playerId || "")) ? playerId : "") || ""),
+    characterName: player?.character_name || "",
+    online: String(player?.online_status || "").toLowerCase() === "online"
   };
 }
 
@@ -1636,25 +1651,10 @@ async function giveItemsRoute(req, res, path) {
   if (body.items.length < 1 || body.items.length > 25) return json(res, 400, { error: "Give Multiple Items requires 1-25 items" });
 
   const results = [];
+  const target = await resolvePlayerGrantTarget(playerId);
   for (const [index, item] of body.items.entries()) {
     try {
-      const resolved = item.itemId ? { itemId: item.itemId } : resolveCatalogItem(config.repoRoot, item);
-      const operation = resolved.itemId ? "adminGiveItemId" : "adminGiveItem";
-      const payload = {
-        playerId,
-        itemId: resolved.itemId,
-        itemName: item.itemName,
-        quantity: item.quantity ?? 1,
-        quality: item.quality ?? item.grade ?? item.durability ?? 1,
-        durability: 1
-      };
-      const command = buildDuneArgs(operation, payload);
-      if (config.mockMode) {
-        results.push({ index, ok: true, operation, command });
-      } else {
-        const result = await runDune(config, command);
-        results.push({ index, ok: true, operation, item: payload, stdout: result.stdout, stderr: result.stderr, exitCode: result.code });
-      }
+      results.push({ index, ...(await grantPlayerItem(playerId, item, target)) });
     } catch (error) {
       results.push({ index, ok: false, item, error: redact(error.message || error) });
     }
@@ -1666,6 +1666,64 @@ async function giveItemsRoute(req, res, path) {
     recordAdminHistory(config, { command: "web-hydrate-all", target: "all", friendly, path: "players.give-items", result: ok ? "published" : "failed", message: `${friendly} for ${playerId}` });
   }
   return json(res, ok ? 200 : 207, { ok, results });
+}
+
+async function giveSingleItemRoute(req, res, path, operation) {
+  const body = await readJson(req);
+  const playerId = decodeURIComponent(path.split("/")[3]);
+  if (body.quality === undefined && body.grade === undefined) {
+    return task(req, res, "admin", operation, { ...body, playerId });
+  }
+  const item = operation === "adminGiveItemId"
+    ? { itemId: body.itemId, quantity: body.quantity, quality: body.quality, grade: body.grade, durability: body.durability }
+    : { itemName: body.itemName, quantity: body.quantity, quality: body.quality, grade: body.grade, durability: body.durability };
+  try {
+    const target = await resolvePlayerGrantTarget(playerId);
+    const result = await grantPlayerItem(playerId, item, target);
+    audit(config, req, operation === "adminGiveItemId" ? "players.give-item-id" : "players.give-item", { playerId, ok: result.ok, result });
+    return json(res, result.ok ? 200 : 207, result);
+  } catch (error) {
+    audit(config, req, operation === "adminGiveItemId" ? "players.give-item-id" : "players.give-item", { playerId, ok: false, error: redact(error.message || error) });
+    return json(res, 400, { ok: false, error: redact(error.message || error) });
+  }
+}
+
+async function grantPlayerItem(playerId, item, target) {
+  const resolved = item.itemId ? { itemId: item.itemId } : resolveCatalogItem(config.repoRoot, item);
+  const operation = resolved.itemId ? "adminGiveItemId" : "adminGiveItem";
+  const hasExplicitGrade = item.quality !== undefined || item.grade !== undefined;
+  const selectedGrade = hasExplicitGrade ? validateGrantGrade(item.quality ?? item.grade) : undefined;
+  const usesDatabaseGrade = selectedGrade !== undefined && selectedGrade > 0;
+  const payload = {
+    playerId: target.actionId || playerId,
+    itemId: resolved.itemId,
+    itemName: item.itemName,
+    quantity: item.quantity ?? 1,
+    quality: hasExplicitGrade ? selectedGrade : undefined,
+    durability: 1
+  };
+  if (usesDatabaseGrade) {
+    if (!config.mockMode && !target.actorId) throw new Error("A database actor ID is required to grant graded items");
+    const result = config.mockMode
+      ? { ok: true, inserted: { template_id: resolved.itemId || payload.itemName, stack_size: payload.quantity, quality_level: payload.quality } }
+      : await duneDb.giveItemToPlayer(db, target.actorId, {
+          templateId: resolved.itemId || "",
+          itemName: payload.itemName,
+          quantity: payload.quantity,
+          quality: payload.quality
+        });
+    return { ok: true, operation: "dbGiveItemToPlayer", item: payload, result };
+  }
+  const command = buildDuneArgs(operation, payload);
+  if (config.mockMode) return { ok: true, operation, command };
+  const result = await runDune(config, command);
+  return { ok: true, operation, item: payload, stdout: result.stdout, stderr: result.stderr, exitCode: result.code };
+}
+
+function validateGrantGrade(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 0 || n > 5) throw new Error("Expected item grade 0-5");
+  return n;
 }
 
 async function broadcastRoute(req, res) {

@@ -24,8 +24,8 @@ Usage:
   runtime/scripts/dune admin kick --all-online [--dry-run] [--yes]
   runtime/scripts/dune admin item-search <query>
   runtime/scripts/dune admin item-list [category]
-  runtime/scripts/dune admin grant-item <player-id|*> <item-name-or-id> [quantity] [durability]
-  runtime/scripts/dune admin grant-item-id <player-id|*> <item-id> [quantity] [durability]
+  runtime/scripts/dune admin grant-item <player-id|*> <item-name-or-id> [quantity] [durability] [grade]
+  runtime/scripts/dune admin grant-item-id <player-id|*> <item-id> [quantity] [durability] [grade]
   runtime/scripts/dune admin grant-template <player-id|*> scout-ornithopter-mk6
   runtime/scripts/dune admin player-location <player-id>
   runtime/scripts/dune admin award-xp <player-id|*> <amount>
@@ -249,6 +249,21 @@ if not 0 <= value <= 1:
 PY
 }
 
+validate_quality() {
+  local quality="$1"
+  python3 - "$quality" <<'PY'
+import sys
+try:
+    value = int(sys.argv[1])
+except Exception:
+    print("Grade must be a whole number between 0 and 5.", file=sys.stderr)
+    raise SystemExit(1)
+if value < 0 or value > 5:
+    print("Grade must be a whole number between 0 and 5.", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
 item_search() {
   local query="${1:-}"
   if [ -z "$query" ]; then
@@ -405,17 +420,21 @@ build_inner_json() {
   local item_id="$2"
   local quantity="$3"
   local durability="$4"
-  python3 - "$player_id" "$item_id" "$quantity" "$durability" <<'PY'
+  local quality="${5:-0}"
+  python3 - "$player_id" "$item_id" "$quantity" "$durability" "$quality" <<'PY'
 import json
 import sys
 
-player_id, item_id, quantity, durability = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4])
+player_id, item_id, quantity, durability, quality = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5])
 print(json.dumps({
     "ServerCommand": "AddItemToInventory",
     "PlayerId": player_id,
     "ItemName": item_id,
     "Quantity": quantity,
     "Durability": durability,
+    "Quality": quality,
+    "Grade": quality,
+    "ItemQuality": quality,
 }, separators=(",", ":")))
 PY
 }
@@ -1301,6 +1320,7 @@ grant_item() {
   local item_value="${3:-}"
   local quantity="${4:-1}"
   local durability="${5:-1.0}"
+  local quality="${6:-0}"
   local original_player_id item_json item_id item_name item_category item_source inner_json
   local verify_account_id before_count after_count
   local status_row status_rc online_status online_map error_text
@@ -1313,6 +1333,7 @@ grant_item() {
   require_items_file
   validate_quantity "$quantity"
   validate_durability "$durability"
+  validate_quality "$quality"
 
   original_player_id="$player_id"
   player_id="$(resolve_player_id "$player_id")"
@@ -1322,7 +1343,7 @@ grant_item() {
   item_category="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["category"])' "$item_json")"
   item_source="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["source"])' "$item_json")"
 
-  inner_json="$(build_inner_json "$player_id" "$item_id" "$quantity" "$durability")"
+  inner_json="$(build_inner_json "$player_id" "$item_id" "$quantity" "$durability" "$quality")"
 
   echo "Grant item:"
   if [ "$original_player_id" != "$player_id" ]; then
@@ -1337,6 +1358,7 @@ grant_item() {
   echo "  Resolved id: $item_id"
   echo "  Quantity: $quantity"
   echo "  Durability: $durability"
+  echo "  Grade: $quality"
 
   if [ "${DUNE_ADMIN_DRY_RUN:-0}" = "1" ]; then
     echo

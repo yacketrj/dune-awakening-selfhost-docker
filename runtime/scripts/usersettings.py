@@ -454,6 +454,20 @@ def profile_get_key(profile: dict, scope: str, section: str, key: str, map_name:
     return None
 
 
+def profile_get_raw_key(profile: dict, section: str, key: str) -> str | None:
+    for block in profile.get("sections", []):
+        if block.get("scope") != "Raw" or block.get("ini_section") != section:
+            continue
+        for raw in reversed(block.get("lines", [])):
+            parsed = split_ini_assignment(raw)
+            if not parsed:
+                continue
+            prefix, left, right = parsed
+            if not prefix and left == key:
+                return right.strip().strip('"')
+    return None
+
+
 def profile_array_contains(profile: dict, scope: str, section: str, key: str, value: str, map_name: str = "", partition_id: str = "") -> bool:
     block = find_profile_section(profile, scope, section, map_name, partition_id)
     if not block:
@@ -799,6 +813,8 @@ def profile_engine_values(profile: dict) -> dict[str, str]:
         if not section or not ini_key:
             continue
         profile_value = profile_get_key(profile, "engine", section, ini_key)
+        if profile_value is None:
+            profile_value = profile_get_raw_key(profile, section, ini_key)
         if profile_value is not None:
             values[key] = profile_value
     return values
@@ -1421,6 +1437,9 @@ CustomPartitionKey=True
 [Engine:ConsoleVariables]
 Dune.GlobalMiningOutputMultiplier=1.0
 UnknownEngine=xyz
+
+[ConsoleVariables]
+Dune.GlobalVehicleMiningOutputMultiplier=10
 """
     profile = parse_profile_text(text)
     serialized = serialize_profile(profile)
@@ -1439,6 +1458,8 @@ UnknownEngine=xyz
         raise SystemExit("Compiled UserGame dropped unknown profile lines.")
     if "UnknownEngine=xyz" not in compiled_engine:
         raise SystemExit("Compiled UserEngine dropped unknown profile lines.")
+    if profile_engine_values(reparsed)["vehicle_mining_output_multiplier"] != "10":
+        raise SystemExit("Plain UserEngine raw section did not feed interactive engine values.")
     profile_set_key(reparsed, "global", "/Script/DuneSandbox.DuneGameMode", "m_GlobalFameMultiplier", "3.0")
     if "UnknownGlobal=abc" not in serialize_profile(reparsed):
         raise SystemExit("Interactive profile update dropped unknown keys.")

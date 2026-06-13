@@ -106,11 +106,11 @@ export function buildDuneArgs(operation, payload = {}) {
     case "databaseExport":
       return ["database", "export", validateSql(payload.query, false)];
     case "adminGiveItem":
-      return ["admin", "grant-item", validatePlayerId(payload.playerId), validateItemName(payload.itemName), String(validateInteger(payload.quantity ?? 1, 1, 1000000)), String(validateDurability(1))];
+      return ["admin", "grant-item", validatePlayerId(payload.playerId), validateItemName(payload.itemName), String(validateInteger(payload.quantity ?? 1, 1, 1000000)), String(validateDurability(1)), String(validateItemQuality(payload.quality ?? payload.grade ?? 0))];
     case "adminGiveItems":
       return ["admin", "grant-template", validatePlayerId(payload.playerId), validateTemplateName(payload.template || "scout-ornithopter-mk6")];
     case "adminGiveItemId":
-      return ["admin", "grant-item-id", validatePlayerId(payload.playerId), validateItemId(payload.itemId), String(validateInteger(payload.quantity ?? 1, 1, 1000000)), String(validateDurability(1))];
+      return ["admin", "grant-item-id", validatePlayerId(payload.playerId), validateItemId(payload.itemId), String(validateInteger(payload.quantity ?? 1, 1, 1000000)), String(validateDurability(1)), String(validateItemQuality(payload.quality ?? payload.grade ?? 0))];
     case "adminAddXp":
       return ["admin", "award-xp", validatePlayerId(payload.playerId), String(validateInteger(payload.amount, 1, 100000000))];
     case "adminSetSkillPoints":
@@ -441,6 +441,12 @@ function validateItemId(value) {
 function validateDurability(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error("Expected durability 0-1");
+  return n;
+}
+
+function validateItemQuality(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 5 || Math.trunc(n) !== n) throw new Error("Expected item grade 0-5");
   return n;
 }
 

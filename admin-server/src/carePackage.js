@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { buildDuneArgs, runDune } from "./runner.js";
 import { resolveCatalogItem } from "./adminCatalog.js";
 import { publishCarePackageWhisper } from "./rmq.js";
+import { giveItemToPlayer } from "./duneDb.js";
 
 const DEFAULT_KIT_ID = "care-package-v1";
 const CARE_PACKAGE_SERVER_PERSONA = {
@@ -154,7 +155,8 @@ export async function grantEligibleCarePackages(config, players = [], body = {},
         characterName: player.character_name,
         actorId: player.actor_id,
         funcomId: player.funcom_id || player.fls_id || player.action_player_id,
-        flsId: player.fls_id || player.action_player_id
+        flsId: player.fls_id || player.action_player_id,
+        onlineStatus: player.online_status
       }, context));
     } catch (error) {
       const row = failedGrant(config, kit, player, error.message || String(error), "bulk");
@@ -199,7 +201,8 @@ export async function runCarePackageAutoScan(config, players = [], source = "aut
           characterName: player.character_name,
           actorId: player.actor_id,
           funcomId: player.funcom_id || player.fls_id || player.action_player_id,
-          flsId: player.fls_id || player.action_player_id
+          flsId: player.fls_id || player.action_player_id,
+          onlineStatus: player.online_status
         }, context));
         if (kit.grantWhen === "last_seen") pendingChanged = clearPendingReturn(pendingReturns, kit, rule, player) || pendingChanged;
       } catch (error) {
@@ -267,9 +270,16 @@ export async function grantCarePackage(config, playerId, body = {}, context = {}
         quality: item.quality,
         durability: 1
       };
-      const command = buildDuneArgs(operation, payload);
-      const result = config.mockMode ? { code: 0, stdout: "mock package item grant\n", stderr: "" } : await runDune(config, command);
-      results.push({ ok: true, operation, item: payload, stdout: result.stdout, stderr: result.stderr, exitCode: result.code });
+      if (Number(item.quality || 0) > 0 && context.db && body.actorId) {
+        const result = config.mockMode
+          ? { ok: true, inserted: { template_id: resolved.itemId, stack_size: item.quantity, quality_level: item.quality } }
+          : await (context.dbGiveItemToPlayer || ((actorId, itemPayload) => giveItemToPlayer(context.db, actorId, itemPayload)))(body.actorId, { templateId: resolved.itemId, quantity: item.quantity, quality: item.quality });
+        results.push({ ok: true, operation: "dbGiveItemToPlayer", item: payload, result });
+      } else {
+        const command = buildDuneArgs(operation, payload);
+        const result = config.mockMode ? { code: 0, stdout: "mock package item grant\n", stderr: "" } : await runDune(config, command);
+        results.push({ ok: true, operation, item: payload, stdout: result.stdout, stderr: result.stderr, exitCode: result.code, warning: item.quality ? "Grade could not be persisted because the player actor ID was unavailable." : undefined });
+      }
     } catch (error) {
       results.push({ ok: false, item, error: error.message || String(error) });
     }
@@ -561,15 +571,15 @@ function validateCarePackageItem(item = {}) {
     itemName,
     itemId,
     quantity: validateInteger(item.quantity ?? 1, "quantity", 1, 1000000),
-    quality: validateItemQuality(item.quality ?? item.grade ?? item.durability ?? 1),
+    quality: validateItemQuality(item.quality ?? item.grade ?? item.durability ?? 0),
     durability: 1
   };
 }
 
 function validateItemQuality(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return 1;
-  return Math.max(1, Math.min(5, Math.trunc(number)));
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(5, Math.trunc(number)));
 }
 
 function validateSendMessage(value) {

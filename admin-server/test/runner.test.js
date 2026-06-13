@@ -40,7 +40,10 @@ test("builds allowlisted command arguments without shell interpolation", () => {
   assert.deepEqual(buildDuneArgs("restartScheduleEnable", { time: "04:30", notifyMinutes: 30 }), ["restart-schedule", "enable", "04:30", "30"]);
   assert.deepEqual(buildDuneArgs("restartScheduleDisable"), ["restart-schedule", "disable"]);
   assert.deepEqual(buildDuneArgs("adminTeleport", { playerId: "FLS_TEST", x: 1, y: 2, z: 3, yaw: 90 }), ["admin", "teleport", "FLS_TEST", "1", "2", "3", "90"]);
-  assert.deepEqual(buildDuneArgs("adminGiveItemId", { playerId: "FLS_TEST", itemId: "WaterBottle_1", quantity: 2, durability: 0.5, quality: 5 }), ["admin", "grant-item-id", "FLS_TEST", "WaterBottle_1", "2", "1"]);
+  assert.deepEqual(buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 2 }), ["admin", "grant-item", "FLS_TEST", "Water", "2", "1", "0"]);
+  assert.deepEqual(buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 2, quality: 3 }), ["admin", "grant-item", "FLS_TEST", "Water", "2", "1", "3"]);
+  assert.deepEqual(buildDuneArgs("adminGiveItemId", { playerId: "FLS_TEST", itemId: "WaterBottle_1", quantity: 2, quality: 0 }), ["admin", "grant-item-id", "FLS_TEST", "WaterBottle_1", "2", "1", "0"]);
+  assert.deepEqual(buildDuneArgs("adminGiveItemId", { playerId: "FLS_TEST", itemId: "WaterBottle_1", quantity: 2, durability: 0.5, quality: 5 }), ["admin", "grant-item-id", "FLS_TEST", "WaterBottle_1", "2", "1", "5"]);
   assert.deepEqual(buildDuneArgs("adminGiveItems", { playerId: "FLS_TEST", template: "scout-ornithopter-mk6" }), ["admin", "grant-template", "FLS_TEST", "scout-ornithopter-mk6"]);
   assert.deepEqual(buildDuneArgs("adminSetSkillPoints", { playerId: "FLS_TEST", points: 12 }), ["admin", "skill-points", "FLS_TEST", "12"]);
   assert.deepEqual(buildDuneArgs("adminSetSkillModule", { playerId: "FLS_TEST", module: "Training_Test", level: 2 }), ["admin", "skill-module", "FLS_TEST", "Training_Test", "2"]);
@@ -66,6 +69,8 @@ test("builds allowlisted command arguments without shell interpolation", () => {
   assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "", quantity: 1 }));
   assert.throws(() => buildDuneArgs("adminGiveItemId", { playerId: "FLS_TEST", itemId: "bad;id", quantity: 1 }));
   assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 0 }));
+  assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 1, quality: -1 }));
+  assert.throws(() => buildDuneArgs("adminGiveItem", { playerId: "FLS_TEST", itemName: "Water", quantity: 1, quality: 6 }));
   assert.throws(() => buildDuneArgs("adminSetSkillPoints", { playerId: "FLS_TEST", points: -1 }));
   assert.throws(() => buildDuneArgs("adminSpawnVehicle", { playerId: "FLS_TEST", vehicleId: "Sandbike;bad", template: "T6" }));
   assert.throws(() => buildDuneArgs("mapsSetMode", { map: "DeepDesert_1;bad", mode: "dynamic" }));

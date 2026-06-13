@@ -61,6 +61,17 @@ function confirmDialog(message: string, options: Partial<Omit<ConfirmDialogReque
   });
 }
 
+function confirmSettingsRestart(kind: "UserEngine" | "UserGame") {
+  return confirmDialog(
+    `Save ${kind} changes? To apply these changes, the Dune server services need to restart.`,
+    {
+      title: "Restart Required",
+      confirmLabel: "Yes, Save And Restart",
+      cancelLabel: "No, Cancel"
+    }
+  );
+}
+
 function formatUiSentence(value: unknown, pending = false) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   if (!text) return "";
@@ -1615,10 +1626,10 @@ function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId, player
   const [playerAdmin_itemName, playerAdmin_setItemName] = useState("");
   const [playerAdmin_itemId, playerAdmin_setItemId] = useState("");
   const [playerAdmin_quantity, playerAdmin_setQuantity] = useState("1");
-  const [playerAdmin_grade, playerAdmin_setGrade] = useState("1");
+  const [playerAdmin_grade, playerAdmin_setGrade] = useState("0");
   const [playerAdmin_multiList, playerAdmin_setMultiList] = useState<{ itemName?: string; itemId?: string; image?: string; quantity: number; durability?: number; quality?: number; grade?: number }[]>([]);
   const [playerAdmin_itemEditIndex, playerAdmin_setItemEditIndex] = useState<number | null>(null);
-  const [playerAdmin_itemEditDraft, playerAdmin_setItemEditDraft] = useState({ quantity: "1", grade: "1" });
+  const [playerAdmin_itemEditDraft, playerAdmin_setItemEditDraft] = useState({ quantity: "1", grade: "0" });
   const [playerAdmin_actionResult, playerAdmin_setActionResult] = useState<{ key: string; tone: "success" | "danger" | "neutral"; text: string; pending?: boolean } | null>(null);
   const [playerAdmin_characterLog, playerAdmin_setCharacterLog] = useState<Record<string, string>[]>([]);
   const [playerAdmin_adminLog, playerAdmin_setAdminLog] = useState<Record<string, string>[]>([]);
@@ -1726,6 +1737,8 @@ function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId, player
       playerAdmin_showResult("giveMultiple", "Select at least one item before granting.", "danger");
       return;
     }
+    const isSingleSelectedItemGrant = !playerAdmin_multiList.length && items.length === 1;
+    const actionLabel = isSingleSelectedItemGrant ? "Give Item" : "Give Multiple Items";
     await playerAdmin_runAction(
       "giveMultiple",
       `Granting ${items.length} item entr${items.length === 1 ? "y" : "ies"} to ${playerName}`,
@@ -1734,7 +1747,7 @@ function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId, player
         if (!result.ok) throw new Error(playerAdmin_bulkItemFailure(result.results));
       },
       `${items.length} item entr${items.length === 1 ? "y was" : "ies were"} granted to ${playerName}.`,
-      { actionType: "Give Multiple Items", target: playerName, amount: String(items.length) },
+      { actionType: actionLabel, target: playerName, amount: String(items.length) },
       "success",
       (error) => playerAdmin_friendlyFailure(error, "Give Items", playerName)
     );
@@ -2377,7 +2390,7 @@ function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId, player
           {playerAdmin_actionRow("intel", "Give Intel", <input type="number" min="1" value={playerAdmin_intelAmount} onChange={(event) => playerAdmin_setIntelAmount(event.target.value)} />, "Give", () => playerAdmin_runAction("intel", `Giving ${Number(playerAdmin_intelAmount) || 0} Intel to ${playerName}`, () => playersApi.addIntel(dbPlayerId, { amount: Number(playerAdmin_intelAmount) || 0, confirmation: "ADD INTEL" }), `${playerName}'s Intel was updated. Relog required.`, { actionType: "Give Intel", target: playerName, amount: String(Number(playerAdmin_intelAmount) || 0) }), !dbPlayerId, "A relog is required to see the change.")}
           {playerAdmin_actionRow("faction", "Give Faction Reputation", <><select value={playerAdmin_factionName} onChange={(event) => playerAdmin_setFactionName(event.target.value)}><option>Atreides</option><option>Harkonnen</option><option>Smuggler</option></select><input type="number" min="1" max="12474" value={playerAdmin_factionAmount} onChange={(event) => playerAdmin_setFactionAmount(event.target.value)} /></>, "Give", () => playerAdmin_runAction("faction", `Giving ${Number(playerAdmin_factionAmount) || 0} ${playerAdmin_factionName} reputation to ${playerName}`, () => playersApi.addFactionReputation(dbPlayerId, { factionId: playerAdmin_factionIds[playerAdmin_factionName] || 1, amount: Number(playerAdmin_factionAmount) || 0, confirmation: "ADD FACTION REPUTATION" }), `${playerName}'s faction reputation was updated. Relog required.`, { actionType: "Give Faction Reputation", target: playerAdmin_factionName, amount: String(Number(playerAdmin_factionAmount) || 0) }), !dbPlayerId, "A relog is required to see the change.")}
         </div></section>
-        <div className={`playerAdmin_toggle ${playerAdmin_openToggles.give_items ? "open" : ""}`}><button className="playerAdmin_toggleHeader" onClick={() => playerAdmin_toggle("give_items")}>{playerAdmin_openToggles.give_items ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Give Items</span></button>{playerAdmin_openToggles.give_items && <div className="playerAdmin_toggleBody"><div className="playerAdmin_section"><p className="action-help-note">The player must be online.</p><ItemCatalogSelector selected={playerAdmin_selectedItem} onSelect={playerAdmin_chooseItem} /><div className="playerAdmin_itemActionStack"><div className="playerAdmin_itemInputLine"><span className="playerAdmin_actionLabel playerAdmin_itemSelectedLabel">Selected Item</span><label className="playerAdmin_itemNumberField">Quantity<input className="package-item-quantity-input" type="number" min="1" value={playerAdmin_quantity} onChange={(event) => playerAdmin_setQuantity(event.target.value)} /></label><label className="playerAdmin_itemNumberField">Grade<ItemGradeSelect value={playerAdmin_grade} onChange={playerAdmin_setGrade} /></label><div className="playerAdmin_actionRow playerAdmin_itemActionRow"><button disabled={!playerAdmin_canRunLiveAction || (!playerAdmin_multiList.length && !playerAdmin_selectedItem) || playerAdmin_actionResult?.pending} onClick={() => void playerAdmin_giveMultipleItems()}>{playerAdmin_multiList.length ? "Give Package" : "Give Item"}</button><button disabled={!playerAdmin_selectedItem} onClick={playerAdmin_addSelectedItem}>Add Item</button><InlineActionResult result={playerAdmin_actionResult} resultKey="giveMultiple" /></div></div></div>
+        <div className={`playerAdmin_toggle ${playerAdmin_openToggles.give_items ? "open" : ""}`}><button className="playerAdmin_toggleHeader" onClick={() => playerAdmin_toggle("give_items")}>{playerAdmin_openToggles.give_items ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Give Items</span></button>{playerAdmin_openToggles.give_items && <div className="playerAdmin_toggleBody"><div className="playerAdmin_section"><p className="action-help-note">The player must be online. Grade 0 is instant. Grades 1-5 are saved to the player inventory and may require a relog before they appear correctly.</p><ItemCatalogSelector selected={playerAdmin_selectedItem} onSelect={playerAdmin_chooseItem} /><div className="playerAdmin_itemActionStack"><div className="playerAdmin_itemInputLine"><span className="playerAdmin_actionLabel playerAdmin_itemSelectedLabel">Selected Item</span><label className="playerAdmin_itemNumberField">Quantity<input className="package-item-quantity-input" type="number" min="1" value={playerAdmin_quantity} onChange={(event) => playerAdmin_setQuantity(event.target.value)} /></label><label className="playerAdmin_itemNumberField">Grade<ItemGradeSelect value={playerAdmin_grade} onChange={playerAdmin_setGrade} /></label><div className="playerAdmin_actionRow playerAdmin_itemActionRow"><button disabled={!playerAdmin_canRunLiveAction || (!playerAdmin_multiList.length && !playerAdmin_selectedItem) || playerAdmin_actionResult?.pending} onClick={() => void playerAdmin_giveMultipleItems()}>{playerAdmin_multiList.length ? "Give Package" : "Give Item"}</button><button disabled={!playerAdmin_selectedItem} onClick={playerAdmin_addSelectedItem}>Add Item</button><InlineActionResult result={playerAdmin_actionResult} resultKey="giveMultiple" /></div></div></div>
           {playerAdmin_multiList.length ? <div className="table-wrap package-items-table playerAdmin_itemsTable"><table><thead><tr><th>Preview</th><th>Item Name</th><th>Item ID</th><th>Quantity</th><th>Grade</th><th>Actions</th></tr></thead><tbody>{playerAdmin_multiList.map((item, index) => {
             const editing = playerAdmin_itemEditIndex === index;
             return <tr key={`${item.itemName || item.itemId}-${index}`}><td><PackageItemPreview item={item} /></td><td>{catalogItemName(item)}</td><td>{catalogItemId(item)}</td><td>{editing ? <input className="package-item-quantity-input" type="number" min="1" value={playerAdmin_itemEditDraft.quantity} onChange={(event) => playerAdmin_setItemEditDraft({ ...playerAdmin_itemEditDraft, quantity: event.target.value })} /> : item.quantity}</td><td>{editing ? <ItemGradeSelect value={playerAdmin_itemEditDraft.grade} onChange={(grade) => playerAdmin_setItemEditDraft({ ...playerAdmin_itemEditDraft, grade })} /> : itemGrade(item)}</td><td className="package-actions-cell"><div className="service-actions">{editing ? <><button onClick={() => playerAdmin_saveQueuedItem(index)}>Save</button><button onClick={() => playerAdmin_setItemEditIndex(null)}>Cancel</button></> : <button onClick={() => playerAdmin_editQueuedItem(index)}>Edit</button>}<button className="danger" onClick={() => playerAdmin_setMultiList(playerAdmin_multiList.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div></td></tr>;
@@ -2552,7 +2565,7 @@ function PlayerActions({ dbPlayerId, actionPlayerId, playerName, setTask, onErro
   const [itemId, setItemId] = useState("");
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
   const [quantity, setQuantity] = useState("1");
-  const [grade, setGrade] = useState("1");
+  const [grade, setGrade] = useState("0");
   const [multiItems, setMultiItems] = useState("");
   const [multiList, setMultiList] = useState<{ itemName?: string; itemId?: string; quantity: number; durability?: number; quality?: number; grade?: number }[]>([]);
   const [xp, setXp] = useState("1000");
@@ -2608,7 +2621,7 @@ function PlayerActions({ dbPlayerId, actionPlayerId, playerName, setTask, onErro
   function parsedMultiItems() {
     if (multiList.length) return multiList;
     return multiItems.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-      const [nameOrId, qty = "1", gradeValue = "1"] = line.split(",").map((part) => part.trim());
+      const [nameOrId, qty = "1", gradeValue = "0"] = line.split(",").map((part) => part.trim());
       const item = /^[A-Za-z0-9_./:-]{16,}$/.test(nameOrId) ? { itemId: nameOrId } : { itemName: nameOrId };
       return { ...item, quantity: Number(qty), quality: normalizeItemGrade(gradeValue), durability: grantItemDurability() };
     });
@@ -2656,14 +2669,14 @@ function PlayerActions({ dbPlayerId, actionPlayerId, playerName, setTask, onErro
     <div className="action-sections">
       <section className="action-section">
         <h4>Give Items</h4>
-        <p>The player must be online.</p>
+        <p>The player must be online. Grade 0 is instant. Grades 1-5 are saved to the player inventory and may require a relog before they appear correctly.</p>
         <ItemCatalogSelector selected={selectedItem} onSelect={choosePlayerItem} />
         <div className="action-line item-grant-row">
           <label className="compact-field">Quantity<input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
           <label className="compact-field">Grade<ItemGradeSelect value={grade} onChange={setGrade} /></label>
           <button disabled={!canRunCliAction || !selectedItem || actionResult?.pending} title={!canRunCliAction ? cliDisabledReason : !selectedItem ? "Select an item from the catalog first." : undefined} onClick={() => run(async () => {
             if (!(await confirmDialog(`Give ${quantity} x ${itemName} to ${playerName}?`))) return;
-            await runPlayerAction("giveItem", `Giving x${Number(quantity) || 1} ${itemName} to ${playerName}`, () => runTask(() => playersApi.giveItem(actionPlayerId, { itemName, quantity: Number(quantity), quality: normalizeItemGrade(grade), durability: grantItemDurability() })), `x${Number(quantity) || 1} ${itemName} was granted to ${playerName}.`, "success", (error) => `Failed to grant x${Number(quantity) || 1} ${itemName} to ${playerName}. ${friendlyInlineError(error)}`);
+            await runPlayerAction("giveItem", `Giving x${Number(quantity) || 1} ${itemName} to ${playerName}`, () => runDirect(() => playersApi.giveItems(actionPlayerId, [{ itemName, quantity: Number(quantity), quality: normalizeItemGrade(grade), durability: grantItemDurability() }])), `x${Number(quantity) || 1} ${itemName} was granted to ${playerName}. The player may need to relog or refresh inventory before the grade appears.`, "success", (error) => `Failed to grant x${Number(quantity) || 1} ${itemName} to ${playerName}. ${friendlyInlineError(error)}`);
           })}>Give Item</button>
           <InlineActionResult result={actionResult} resultKey="giveItem" />
         </div>
@@ -2671,7 +2684,7 @@ function PlayerActions({ dbPlayerId, actionPlayerId, playerName, setTask, onErro
           <label>Raw Item ID<input value={itemId} onChange={(event) => setItemId(event.target.value)} /></label>
           <button disabled={!canRunCliAction || actionResult?.pending} title={!canRunCliAction ? cliDisabledReason : undefined} onClick={() => run(async () => {
             if (!(await confirmDialog(`Give raw item id ${itemId} to ${playerName}?`))) return;
-            await runPlayerAction("giveItemId", `Giving x${Number(quantity) || 1} ${itemId} to ${playerName}`, () => runTask(() => playersApi.giveItemId(actionPlayerId, { itemId, quantity: Number(quantity), quality: normalizeItemGrade(grade), durability: grantItemDurability() })), `x${Number(quantity) || 1} ${itemId} was granted to ${playerName}.`, "success", (error) => `Failed to grant x${Number(quantity) || 1} ${itemId} to ${playerName}. ${friendlyInlineError(error)}`);
+            await runPlayerAction("giveItemId", `Giving x${Number(quantity) || 1} ${itemId} to ${playerName}`, () => runDirect(() => playersApi.giveItems(actionPlayerId, [{ itemId, quantity: Number(quantity), quality: normalizeItemGrade(grade), durability: grantItemDurability() }])), `x${Number(quantity) || 1} ${itemId} was granted to ${playerName}. The player may need to relog or refresh inventory before the grade appears.`, "success", (error) => `Failed to grant x${Number(quantity) || 1} ${itemId} to ${playerName}. ${friendlyInlineError(error)}`);
           })}>Give Item by ID</button>
           <InlineActionResult result={actionResult} resultKey="giveItemId" />
         </div></details>
@@ -2681,7 +2694,7 @@ function PlayerActions({ dbPlayerId, actionPlayerId, playerName, setTask, onErro
           <button disabled={!multiList.length} onClick={() => setMultiList([])}>Clear List</button>
         </div>
         {multiList.length ? <div className="table-wrap package-items-table"><table><thead><tr><th>Item Name</th><th>Item ID</th><th>Quantity</th><th>Grade</th><th>Actions</th></tr></thead><tbody>{multiList.map((item, index) => <tr key={`${item.itemName || item.itemId}-${index}`}><td>{catalogItemName(item)}</td><td>{catalogItemId(item)}</td><td>{item.quantity}</td><td>{itemGrade(item)}</td><td><button className="danger" onClick={() => setMultiList(multiList.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></td></tr>)}</tbody></table></div> : <div className="empty">No multi-item entries yet. Search/select an item, set quantity, then Add Selected Item.</div>}
-        <details className="technical-details"><summary>Developer raw multi-item textarea</summary><label>Multiple Items<textarea value={multiItems} onChange={(event) => setMultiItems(event.target.value)} placeholder="One item per line: name or raw id, quantity, grade" rows={4} /></label></details>
+        <details className="technical-details"><summary>Developer raw multi-item textarea</summary><label>Multiple Items<textarea value={multiItems} onChange={(event) => setMultiItems(event.target.value)} placeholder="One item per line: name or raw id, quantity, grade. Use grade 0 for instant grants." rows={4} /></label></details>
         <div className="action-line">
           <button disabled={!canRunCliAction || actionResult?.pending} title={!canRunCliAction ? cliDisabledReason : undefined} onClick={() => run(async () => {
             const items = parsedMultiItems();
@@ -3874,9 +3887,9 @@ function CarePackagePanel({ onError }: { onError: (text: string) => void }) {
   });
   const [itemsText, setItemsText] = useState("");
   const [selectedPackageItem, setSelectedPackageItem] = useState<CatalogItem | null>(null);
-  const [packageDraft, setPackageDraft] = useState({ itemName: "", itemId: "", quantity: "1", grade: "1" });
+  const [packageDraft, setPackageDraft] = useState({ itemName: "", itemId: "", quantity: "1", grade: "0" });
   const [editingPackageIndex, setEditingPackageIndex] = useState<number | null>(null);
-  const [packageEditDraft, setPackageEditDraft] = useState({ quantity: "1", grade: "1" });
+  const [packageEditDraft, setPackageEditDraft] = useState({ quantity: "1", grade: "0" });
   const [players, setPlayers] = useState<Record<string, unknown>[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState("");
   const [manualPlayerId, setManualPlayerId] = useState("");
@@ -3950,7 +3963,7 @@ function CarePackagePanel({ onError }: { onError: (text: string) => void }) {
       allowRepeatGrants: false,
       grantWhen: source.grantWhen,
       items: source.kits.length === 0 ? [] : sourceActiveKit.items?.length ? sourceActiveKit.items : itemsText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-        const [nameOrId, qty = "1", gradeValue = "1"] = line.split(",").map((part) => part.trim());
+        const [nameOrId, qty = "1", gradeValue = "0"] = line.split(",").map((part) => part.trim());
         const item = /^[A-Za-z0-9_./:-]{16,}$/.test(nameOrId) ? { itemId: nameOrId } : { itemName: nameOrId };
         return { ...item, quantity: Number(qty), quality: normalizeItemGrade(gradeValue), durability: grantItemDurability() };
       }),
@@ -4009,7 +4022,7 @@ function CarePackagePanel({ onError }: { onError: (text: string) => void }) {
       setCarePackageTab("configure");
       setEditingPackageIndex(null);
       setSelectedPackageItem(null);
-      setPackageDraft({ itemName: "", itemId: "", quantity: "1", grade: "1" });
+      setPackageDraft({ itemName: "", itemId: "", quantity: "1", grade: "0" });
     });
   }
   async function deleteActiveKit() {
@@ -4184,6 +4197,7 @@ function CarePackagePanel({ onError }: { onError: (text: string) => void }) {
               <label>Grade<ItemGradeSelect value={packageDraft.grade} onChange={(grade) => setPackageDraft({ ...packageDraft, grade })} /></label>
               <button disabled={!selectedPackageItem} onClick={addPackageItem}>Add Item</button>
             </div>
+            <p className="action-help-note">Grade 0 is instant for online players. Grades 1-5 are saved to the player inventory and may require a relog before they appear correctly.</p>
           </div></div>}
         </div>
         {activeKit.items?.length ? <div className="table-wrap package-items-table"><table><thead><tr><th>Preview</th><th>Item Name</th><th>Item ID</th><th>Quantity</th><th>Grade</th><th>Actions</th></tr></thead><tbody>{activeKit.items.map((item, index) => {
@@ -4195,7 +4209,7 @@ function CarePackagePanel({ onError }: { onError: (text: string) => void }) {
           if (editingPackageIndex === index) setEditingPackageIndex(null);
         }}>Remove</button></div></td></tr>;
         })}</tbody></table></div> : null}
-        <details className="technical-details"><summary>Developer raw package item textarea</summary><p>One item per line: item name or raw item ID, quantity, grade.</p><label>Package Items<textarea value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder="Plant Fiber,10,1&#10;cup of water,1,1" /></label></details>
+        <details className="technical-details"><summary>Developer raw package item textarea</summary><p>One item per line: item name or raw item ID, quantity, grade. Use grade 0 for instant grants.</p><label>Package Items<textarea value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder="Plant Fiber,10,0&#10;cup of water,1,0" /></label></details>
         <div className="action-line">
           <button onClick={() => run(async () => {
             if (!(await confirmDialog("These settings will be saved.", {
@@ -4601,12 +4615,12 @@ function describeCarePackageAction(action: Record<string, unknown>) {
 
 function normalizeItemGrade(value: unknown) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 1;
-  return Math.max(1, Math.min(5, Math.trunc(numeric)));
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(5, Math.trunc(numeric)));
 }
 
 function itemGrade(item: { quality?: unknown; grade?: unknown; durability?: unknown }) {
-  return normalizeItemGrade(item.quality ?? item.grade ?? item.durability ?? 1);
+  return normalizeItemGrade(item.quality ?? item.grade ?? item.durability ?? 0);
 }
 
 function grantItemDurability() {
@@ -4619,7 +4633,7 @@ function packageItemTextLine(item: { itemName?: string; itemId?: string; quantit
 
 function ItemGradeSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return <select className="package-item-durability-input" value={String(normalizeItemGrade(value))} onChange={(event) => onChange(event.target.value)}>
-    {[1, 2, 3, 4, 5].map((grade) => <option key={grade} value={grade}>{grade}</option>)}
+    {[0, 1, 2, 3, 4, 5].map((grade) => <option key={grade} value={grade}>{grade}</option>)}
   </select>;
 }
 
@@ -5841,6 +5855,7 @@ function MapsPanel({ setTask, onError }: { setTask: (task: Task) => void; onErro
     void loadSelectedSettings(target.map, target.partitionId || undefined).catch((error) => onError(error instanceof Error ? error.message : String(error)));
   }
   async function saveEngine() {
+    if (!(await confirmSettingsRestart("UserEngine"))) return;
     await runTaskAndRefresh(() => mapsApi.saveUserSettings({ scope: "engine", values: valuesForDirtyFields(engineValues, engineDraft, engineFields) }), "Saving UserEngine and restarting servers", "UserEngine Saved");
     await loadUserEngine();
   }
@@ -6068,11 +6083,13 @@ function MapsPanel({ setTask, onError }: { setTask: (task: Task) => void; onErro
   }
   async function saveGame() {
     if (!userGameName) return;
+    if (!(await confirmSettingsRestart("UserGame"))) return;
     const scope = effectiveUserGamePartitionId ? "partition" : "map";
     await runTaskAndRefresh(() => mapsApi.saveUserSettings({ scope, map: userGameName, partitionId: effectiveUserGamePartitionId || undefined, values: valuesForDirtyFields(gameValues, gameDraft, userGameFields) }), `Saving ${userGameName} UserGame`, "UserGame Saved");
     await loadSelectedSettings(userGameName, effectiveUserGamePartitionId || undefined);
   }
   async function saveRaw(kind: "engine" | "game") {
+    if (!(await confirmSettingsRestart(kind === "engine" ? "UserEngine" : "UserGame"))) return;
     if (kind === "engine") {
       await runTaskAndRefresh(() => mapsApi.saveRawUserSettings({ scope: "engine", content: rawEngine }), "Saving raw UserEngine and restarting servers", "Raw UserEngine Saved");
       await loadUserEngine();
@@ -6080,6 +6097,26 @@ function MapsPanel({ setTask, onError }: { setTask: (task: Task) => void; onErro
       await runTaskAndRefresh(() => mapsApi.saveRawUserSettings({ scope: "global", map: userGameName || "Survival_1", partitionId: effectiveUserGamePartitionId || undefined, content: rawGame }), "Saving raw UserGame and restarting servers", "Raw UserGame Saved");
       if (userGameName) await loadSelectedSettings(userGameName, effectiveUserGamePartitionId || undefined);
     }
+  }
+  async function restoreRawGameDefaults() {
+    if (userGameName) {
+      if (!(await confirmDialog(`Restore UserGame defaults for ${userGameName}${effectiveUserGamePartitionId ? ` partition ${effectiveUserGamePartitionId}` : ""}?`))) return;
+      await runTaskAndRefresh(() => mapsApi.resetUserSettings({ scope: effectiveUserGamePartitionId ? "partition" : "map", map: userGameName, partitionId: effectiveUserGamePartitionId || undefined, confirmation: "RESTORE MAP DEFAULTS" }), "Restoring UserGame defaults", "UserGame Defaults Restored");
+      await loadSelectedSettings(userGameName, effectiveUserGamePartitionId || undefined);
+      return;
+    }
+    if (!(await confirmDialog("Restore all UserGame defaults? This removes custom UserGame overrides for maps and partitions."))) return;
+    const defaultGameProfile = [
+      "; UserGame.ini managed by Docker.",
+      "; Edit this single file for all map and partition UserGame settings.",
+      "; Docker applies the correct values to each server when maps start or restart.",
+      ""
+    ].join("\n");
+    await runTaskAndRefresh(() => mapsApi.saveRawUserSettings({ scope: "global", map: "Survival_1", content: defaultGameProfile }), "Restoring all UserGame defaults", "UserGame Defaults Restored");
+    setRawGame(defaultGameProfile);
+    setRawGameOriginal(defaultGameProfile);
+    setGameValues({});
+    setGameDraft({});
   }
   async function importIni(kind: "engine" | "game", file: File | null) {
     if (!file) return;
@@ -6222,7 +6259,7 @@ function MapsPanel({ setTask, onError }: { setTask: (task: Task) => void; onErro
       <button className="playerAdmin_toggleHeader" disabled={!advancedAvailable} onClick={() => run(toggleAdvanced)}>{advancedOpen && advancedAvailable ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Advanced</span></button>
       {advancedOpen && advancedAvailable && <div className="playerAdmin_toggleBody"><div className="advanced-grid">
         <article className="raw-editor-card"><div className="panel-title"><h4>UserEngine.ini</h4><div className="action-row"><button onClick={() => downloadIni("engine")}>Download</button><label className="button-link">Import<input className="hidden-file-input" type="file" accept=".ini,text/plain" onChange={(event) => run(async () => { await importIni("engine", event.target.files?.[0] || null); })} /></label></div></div><textarea value={rawEngine} onChange={(event) => setRawEngine(event.target.value)} rows={14} /><div className="action-row"><button disabled={!rawEngineDirty} onClick={() => run(() => saveRaw("engine"))}>Save</button><button disabled={!rawEngineDirty} onClick={() => setRawEngine(rawEngineOriginal)}>Discard Changes</button><button className="danger" onClick={() => run(async () => { if (await confirmDialog("Restore UserEngine gameplay defaults? Server name, password, Port, and IGWPort will be preserved.")) await runTaskAndRefresh(() => mapsApi.resetUserSettings({ scope: "engine", confirmation: "RESTORE MAP DEFAULTS" }), "Restoring UserEngine defaults", "UserEngine Defaults Restored"); await loadUserEngine(); })}>Restore Defaults</button></div></article>
-        <article className="raw-editor-card"><div className="panel-title"><h4>UserGame.ini</h4><div className="action-row"><button onClick={() => downloadIni("game")}>Download</button><label className="button-link">Import<input className="hidden-file-input" type="file" accept=".ini,text/plain" onChange={(event) => run(async () => { await importIni("game", event.target.files?.[0] || null); })} /></label></div></div><textarea value={rawGame} onChange={(event) => setRawGame(event.target.value)} rows={14} /><div className="action-row"><button disabled={!rawGameDirty} onClick={() => run(() => saveRaw("game"))}>Save</button><button disabled={!rawGameDirty} onClick={() => setRawGame(rawGameOriginal)}>Discard Changes</button><button disabled={!userGameName} className="danger" onClick={() => run(async () => { if (await confirmDialog(`Restore UserGame defaults for ${userGameName}${effectiveUserGamePartitionId ? ` partition ${effectiveUserGamePartitionId}` : ""}?`)) await runTaskAndRefresh(() => mapsApi.resetUserSettings({ scope: effectiveUserGamePartitionId ? "partition" : "map", map: userGameName, partitionId: effectiveUserGamePartitionId || undefined, confirmation: "RESTORE MAP DEFAULTS" }), "Restoring UserGame defaults", "UserGame Defaults Restored"); await loadSelectedSettings(userGameName, effectiveUserGamePartitionId || undefined); })}>Restore Defaults</button></div></article>
+        <article className="raw-editor-card"><div className="panel-title"><h4>UserGame.ini</h4><div className="action-row"><button onClick={() => downloadIni("game")}>Download</button><label className="button-link">Import<input className="hidden-file-input" type="file" accept=".ini,text/plain" onChange={(event) => run(async () => { await importIni("game", event.target.files?.[0] || null); })} /></label></div></div><textarea value={rawGame} onChange={(event) => setRawGame(event.target.value)} rows={14} /><div className="action-row"><button disabled={!rawGameDirty} onClick={() => run(() => saveRaw("game"))}>Save</button><button disabled={!rawGameDirty} onClick={() => setRawGame(rawGameOriginal)}>Discard Changes</button><button className="danger" onClick={() => run(restoreRawGameDefaults)}>{userGameName ? "Restore Defaults" : "Restore All UserGame Defaults"}</button></div></article>
       </div></div>}
     </div>
   </section>;
@@ -6340,7 +6377,7 @@ function normalizeBooleanText(value: string) {
 }
 
 function parseUserSettingsMap(text: string) {
-  return Object.fromEntries(parseUserSettingRows(text).map((row) => [String(row.setting), String(row.value ?? "")]));
+  return Object.fromEntries(parseUserSettingRows(text).map((row) => [String(row.key || row.setting), String(row.value ?? "")]));
 }
 
 function changedKeys(original: Record<string, string>, draft: Record<string, string>, keys: string[]) {
@@ -7275,7 +7312,7 @@ function parseUserSettingRows(text: string) {
   return stripAnsi(text).split(/\r?\n/).map((line) => {
     const [key, value] = line.split(/\t/);
     if (!key) return null;
-    return { setting: friendlySettingName(key), value: value || "" };
+    return { key, setting: friendlySettingName(key), value: value || "" };
   }).filter(Boolean) as Record<string, string>[];
 }
 

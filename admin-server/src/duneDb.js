@@ -1801,6 +1801,52 @@ export async function giveItemToStorage(db, storageId, { itemName = "", itemId =
   });
 }
 
+export async function giveItemToPlayer(db, playerId, { itemName = "", itemId = "", templateId = "", quantity = 1, quality = 1 }) {
+  await requireCapability(await supportsPlayerGiveItem(db), "Player give-item requires compatible dune.inventories and dune.items insert columns.");
+  const target = intParam(playerId, "player id", 1);
+  const resolvedTemplate = validateTemplateId(templateId || itemId || itemName);
+  const stackSize = intParam(quantity, "quantity", 1, 1000000);
+  const qualityLevel = intParam(quality, "grade", 0, 5);
+  return db.transaction(async (tx) => {
+    const inventory = await tx.query(`
+      select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
+      from dune.inventories
+      where actor_id = $1 and inventory_type = 0
+      order by id
+      limit 1
+      for update`, [target]);
+    const fallbackInventory = inventory.rows[0] ? inventory : await tx.query(`
+      select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
+      from dune.inventories
+      where actor_id = $1
+      order by id
+      limit 1
+      for update`, [target]);
+    if (!fallbackInventory.rows[0]) throw new Error("Player inventory was not found");
+    const inv = fallbackInventory.rows[0];
+    const count = await tx.query("select count(*)::int as count from dune.items where inventory_id = $1", [inv.id]);
+    const currentCount = Number(count.rows[0]?.count || 0);
+    if (inv.max_item_count > 0 && currentCount >= inv.max_item_count) throw new Error("Player inventory is full by item slot count");
+    const position = await tx.query("select coalesce(max(position_index), -1)::int + 1 as position_index from dune.items where inventory_id = $1", [inv.id]);
+    const stats = {
+      FCustomizationStats: [[], {}],
+      FItemStackAndDurabilityStats: [[], {}]
+    };
+    const inserted = await tx.query(`
+      insert into dune.items (inventory_id, template_id, stack_size, quality_level, position_index, stats)
+      values ($1, $2, $3, $4, $5, $6::jsonb)
+      returning id, template_id, stack_size, quality_level, position_index, inventory_id`, [
+      inv.id,
+      resolvedTemplate,
+      stackSize,
+      qualityLevel,
+      Number(position.rows[0]?.position_index || 0),
+      JSON.stringify(stats)
+    ]);
+    return { ok: true, playerId: target, inserted: inserted.rows[0], message: `${resolvedTemplate} was added at Grade ${qualityLevel}. The player may need to relog or refresh inventory before it appears in-game.` };
+  });
+}
+
 export async function repairGear(db, id) {
   await requireCapability(await supportsRepairGear(db), "Repair gear requires dune.items.stats and dune.inventories.inventory_type.");
   return db.transaction(async (tx) => {
@@ -2211,6 +2257,14 @@ async function supportsStorageGiveItem(db) {
   const inventoryColumns = await columnsFor(db, "inventories");
   const itemColumns = await columnsFor(db, "items");
   return ["id", "actor_id", "max_item_count", "max_item_volume"].every((column) => inventoryColumns.has(column)) &&
+    ["inventory_id", "template_id", "stack_size", "quality_level", "position_index", "stats"].every((column) => itemColumns.has(column));
+}
+
+async function supportsPlayerGiveItem(db) {
+  if (!(await tableExists(db, "items")) || !(await tableExists(db, "inventories"))) return false;
+  const inventoryColumns = await columnsFor(db, "inventories");
+  const itemColumns = await columnsFor(db, "items");
+  return ["id", "actor_id", "inventory_type", "max_item_count", "max_item_volume"].every((column) => inventoryColumns.has(column)) &&
     ["inventory_id", "template_id", "stack_size", "quality_level", "position_index", "stats"].every((column) => itemColumns.has(column));
 }
 

@@ -37,6 +37,13 @@ check_json_array runtime/data/admin-vehicles.json "vehicle catalog"
 check_json_array runtime/data/admin-skill-modules.json "skill module catalog"
 check_json_array runtime/data/admin-xp-event-tags.json "XP event tag catalog"
 
+grant_json="$(bash -c 'source runtime/scripts/admin-tools.sh >/dev/null 2>&1 || true; build_inner_json FLS_TEST WaterBottle_1 2 1 4' 2>/dev/null || true)"
+if printf '%s' "$grant_json" | grep -q '"Quality":4' && printf '%s' "$grant_json" | grep -q '"Durability":1'; then
+  ok "grant item payload includes selected grade and full durability"
+else
+  fail "grant item payload is missing selected grade or full durability"
+fi
+
 python3 - <<'PY' || fail "catalog required fields"
 import json
 from pathlib import Path
