@@ -47,8 +47,6 @@ jobs:
     name: Semgrep CE SAST
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
-    container:
-      image: semgrep/semgrep
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -58,7 +56,12 @@ jobs:
         run: mkdir -p artifacts/security
 
       - name: Run Semgrep JSON scan
-        run: semgrep scan --config auto --json --output artifacts/security/semgrep.json .
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            semgrep/semgrep \
+            semgrep scan --config auto --json --output artifacts/security/semgrep.json .
 
       - name: Generate Semgrep vulnerability report
         if: always()
@@ -79,7 +82,12 @@ jobs:
 
       - name: Run Semgrep SARIF scan
         if: always()
-        run: semgrep scan --config auto --sarif --output artifacts/security/semgrep.sarif .
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            semgrep/semgrep \
+            semgrep scan --config auto --sarif --output artifacts/security/semgrep.sarif .
 
       - name: Upload Semgrep SARIF to code scanning
         if: always()
