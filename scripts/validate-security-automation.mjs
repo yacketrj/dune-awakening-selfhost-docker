@@ -8,6 +8,7 @@ const scriptsToCheck = [
   "scripts/generate-vulnerability-report.mjs",
   "scripts/generate-stride-report.mjs",
   "scripts/sync-vulnerability-issues.mjs",
+  "scripts/sync-stride-issues.mjs",
   "scripts/soc2-readiness-check.mjs"
 ];
 
@@ -26,6 +27,16 @@ try {
   assertFileIncludes("artifacts/security/stride-report.md", "Tampering");
   assertFileIncludes("artifacts/security/stride-report.md", "Elevation of Privilege");
   assertFileIncludes("artifacts/security/stride-report.json", "trustBoundaries");
+
+  const strideDryRun = run("node", ["scripts/sync-stride-issues.mjs", "artifacts/security/stride-report.json", "--dry-run"], {
+    label: "dry-run STRIDE issue sync",
+    env: {
+      ...process.env,
+      GITHUB_REPOSITORY: "example/repository"
+    }
+  });
+  assertIncludes(strideDryRun.stdout, "unique open MEDIUM/HIGH/CRITICAL STRIDE findings");
+  assertIncludes(strideDryRun.stdout, "Would check previously auto-tracked STRIDE issues and close resolved ones.");
 
   const semgrepPath = join(temp, "semgrep.json");
   writeFileSync(semgrepPath, JSON.stringify(sampleSemgrepReport(), null, 2), "utf8");
@@ -80,6 +91,16 @@ try {
   assertIncludes(syncScript, "status:resolved");
   assertIncludes(syncScript, "closeResolvedAutoTrackedIssues");
   assertIncludes(syncScript, "state_reason");
+
+  const strideSyncScript = run("node", ["-e", "console.log(require('fs').readFileSync('scripts/sync-stride-issues.mjs','utf8'))"], {
+    label: "read STRIDE issue sync script"
+  }).stdout;
+  assertIncludes(strideSyncScript, "dune-stride-key");
+  assertIncludes(strideSyncScript, "type:threat");
+  assertIncludes(strideSyncScript, "status:active");
+  assertIncludes(strideSyncScript, "status:resolved");
+  assertIncludes(strideSyncScript, "closeResolvedAutoTrackedIssues");
+  assertIncludes(strideSyncScript, "state_reason");
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
