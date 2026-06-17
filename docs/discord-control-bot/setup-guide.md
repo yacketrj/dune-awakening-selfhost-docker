@@ -12,6 +12,45 @@ The actual network Discord client is still deferred. Use the smoke runner to val
 - Node.js 22 for local smoke testing.
 - A local Dune bot API token file.
 - Console API reachable on `127.0.0.1:8088` or the configured admin bind port.
+- Semgrep and Trivy for local security/SOC 2 readiness scans.
+
+## Install Local Security Runtimes
+
+From the repository root:
+
+```bash
+bash scripts/ensure-security-runtimes.sh
+```
+
+The script checks for:
+
+```text
+node
+npm
+curl
+tar
+docker
+semgrep
+trivy
+```
+
+It installs Semgrep if missing using the first available method:
+
+1. `pipx install semgrep`
+2. `uv tool install semgrep`
+3. Python user install of `pipx`, then `pipx install semgrep`
+4. Docker wrapper fallback using `semgrep/semgrep`
+
+It installs Trivy if missing using:
+
+1. Homebrew when available.
+2. Latest GitHub release tarball into `$HOME/.local/bin` on Linux/macOS.
+
+If `$HOME/.local/bin` is not on your shell PATH, add it:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ## Create Local Bot API Token
 
@@ -109,6 +148,30 @@ Run SOC 2 readiness check:
 ```bash
 cd ~/dune-awakening-selfhost-docker-WSL
 node scripts/soc2-readiness-check.mjs
+```
+
+If Semgrep or Trivy are missing, run:
+
+```bash
+bash scripts/ensure-security-runtimes.sh
+node scripts/soc2-readiness-check.mjs
+```
+
+## Local Vulnerability Report
+
+After Trivy is installed, generate filesystem scan input and the CVSS-ranked report:
+
+```bash
+mkdir -p artifacts/security
+trivy fs --scanners vuln,secret,misconfig --format json --output artifacts/security/trivy-fs.json .
+node scripts/generate-vulnerability-report.mjs
+```
+
+Read:
+
+```text
+artifacts/security/vulnerability-report.md
+artifacts/security/vulnerability-report.json
 ```
 
 ## Smoke Test Troubleshooting
