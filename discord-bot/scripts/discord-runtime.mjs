@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const EPHEMERAL = 1 << 6;
 
 const config = loadConfig();
-const discordToken = readSecret(config.discordBotTokenFile);
-const duneApiToken = readSecret(config.duneBotApiTokenFile);
+const discordToken = readSecret(config.discordBotTokenFile, "DISCORD_BOT_TOKEN_FILE");
+const duneApiToken = readSecret(config.duneBotApiTokenFile, "DUNE_BOT_API_TOKEN_FILE");
+validateRuntimeConfig(config, discordToken, duneApiToken);
 
 await registerGuildCommands();
 await startGateway();
@@ -268,19 +269,41 @@ function loadConfig() {
     discordBotTokenFile: requiredEnv("DISCORD_BOT_TOKEN_FILE"),
     duneBotApiTokenFile: requiredEnv("DUNE_BOT_API_TOKEN_FILE"),
     duneConsoleApiUrl: requiredEnv("DUNE_CONSOLE_API_URL"),
-    discordClientId: requiredEnv("DISCORD_CLIENT_ID"),
-    discordGuildId: requiredEnv("DISCORD_GUILD_ID")
+    discordClientId: requiredDiscordSnowflakeEnv("DISCORD_CLIENT_ID"),
+    discordGuildId: requiredDiscordSnowflakeEnv("DISCORD_GUILD_ID")
   };
+}
+
+function validateRuntimeConfig(config, discordToken, duneApiToken) {
+  const url = new URL(config.duneConsoleApiUrl);
+  if (!/^https?:$/.test(url.protocol)) throw new Error("DUNE_CONSOLE_API_URL must use http or https.");
+  if (!looksLikeDiscordBotToken(discordToken)) throw new Error("DISCORD_BOT_TOKEN_FILE does not contain a Discord bot token-shaped value.");
+  if (!duneApiToken || duneApiToken.length < 12) throw new Error("DUNE_BOT_API_TOKEN_FILE is empty or too short.");
+}
+
+function requiredDiscordSnowflakeEnv(name) {
+  const value = requiredEnv(name);
+  if (!/^\d{15,25}$/.test(value)) {
+    throw new Error(`${name} must be a numeric Discord ID. Replace the placeholder value with the real ID from Discord.`);
+  }
+  return value;
 }
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  if (/^your-|^role-/i.test(value)) throw new Error(`${name} is still a placeholder: ${value}`);
   return value;
 }
 
-function readSecret(path) {
+function readSecret(path, name) {
+  if (/^your-|^role-/i.test(path)) throw new Error(`${name} points to a placeholder path: ${path}`);
+  if (!existsSync(path)) throw new Error(`${name} file does not exist: ${path}`);
   return readFileSync(path, "utf8").trim();
+}
+
+function looksLikeDiscordBotToken(value) {
+  return /^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{20,}$/.test(value);
 }
 
 function safeErrorMessage(error) {
