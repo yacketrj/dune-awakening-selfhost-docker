@@ -52,6 +52,10 @@ export function discordRolePolicyHealth(mapping = discordRoleMappingFromEnv()) {
   };
 }
 
+export function validateDiscordActor(actorPayload) {
+  return normalizeDiscordActor(actorPayload);
+}
+
 export async function discordAdapterHealth(config) {
   return {
     ok: true,
@@ -68,7 +72,7 @@ export async function discordAdapterHealth(config) {
 }
 
 export async function discordAdapterStatus({ config, actorPayload, diagnostic = false, statusProvider }) {
-  const actor = normalizeDiscordActor(actorPayload);
+  const actor = validateDiscordActor(actorPayload);
   const capability = diagnostic ? DISCORD_CAPABILITIES.LOGS_READ : DISCORD_CAPABILITIES.STATUS_READ;
   const mapping = discordRoleMappingFromEnv();
   requireDiscordCapability(actor, mapping, capability);
@@ -119,7 +123,7 @@ export async function discordAdapterServices({ config, actorPayload, servicesPro
 }
 
 async function discordAdapterReadOnlyOperation({ config, actorPayload, provider, capability, action, targetType }) {
-  const actor = normalizeDiscordActor(actorPayload);
+  const actor = validateDiscordActor(actorPayload);
   const mapping = discordRoleMappingFromEnv();
   requireDiscordCapability(actor, mapping, capability);
 
