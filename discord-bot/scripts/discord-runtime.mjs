@@ -1,0 +1,288 @@
+#!/usr/bin/env node
+import { readFileSync } from "node:fs";
+
+const DISCORD_API = "https://discord.com/api/v10";
+const EPHEMERAL = 1 << 6;
+
+const config = loadConfig();
+const discordToken = readSecret(config.discordBotTokenFile);
+const duneApiToken = readSecret(config.duneBotApiTokenFile);
+
+await registerGuildCommands();
+await startGateway();
+
+async function registerGuildCommands() {
+  const url = `${DISCORD_API}/applications/${encodeURIComponent(config.discordClientId)}/guilds/${encodeURIComponent(config.discordGuildId)}/commands`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: discordHeaders(),
+    body: JSON.stringify(duneCommandDefinition())
+  });
+  if (!response.ok) {
+    throw new Error(`Discord command registration failed: ${response.status} ${await response.text()}`);
+  }
+  const body = await response.json();
+  console.log(JSON.stringify({ service: "dune-discord-companion-bot", event: "slash_commands_registered", count: body.length }));
+}
+
+async function startGateway() {
+  const gateway = await discordGet("/gateway/bot");
+  const gatewayUrl = `${gateway.url}/?v=10&encoding=json`;
+  const socket = new WebSocket(gatewayUrl);
+  let heartbeatTimer = null;
+  let sequence = null;
+
+  socket.addEventListener("open", () => {
+    console.log(JSON.stringify({ service: "dune-discord-companion-bot", event: "gateway_open" }));
+  });
+
+  socket.addEventListener("message", async (event) => {
+    const packet = JSON.parse(String(event.data));
+    if (packet.s !== null && packet.s !== undefined) sequence = packet.s;
+
+    if (packet.op === 10) {
+      heartbeatTimer = startHeartbeat(socket, packet.d.heartbeat_interval, () => sequence);
+      socket.send(JSON.stringify({
+        op: 2,
+        d: {
+          token: discordToken,
+          intents: 0,
+          properties: {
+            os: process.platform,
+            browser: "dune-discord-companion-bot",
+            device: "dune-discord-companion-bot"
+          }
+        }
+      }));
+      return;
+    }
+
+    if (packet.op === 11) return;
+
+    if (packet.t === "READY") {
+      console.log(JSON.stringify({ service: "dune-discord-companion-bot", event: "gateway_ready", user: packet.d?.user?.username || "unknown" }));
+      return;
+    }
+
+    if (packet.t === "INTERACTION_CREATE") {
+      await handleInteraction(packet.d).catch(async (error) => {
+        console.error(JSON.stringify({ service: "dune-discord-companion-bot", event: "interaction_error", error: safeErrorMessage(error) }));
+        await replyToInteraction(packet.d, { content: "Dune command failed. Check Console adapter logs for details.", ephemeral: true }).catch(() => undefined);
+      });
+    }
+  });
+
+  socket.addEventListener("close", (event) => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    console.error(JSON.stringify({ service: "dune-discord-companion-bot", event: "gateway_closed", code: event.code, reason: event.reason }));
+    process.exitCode = 1;
+  });
+
+  socket.addEventListener("error", () => {
+    console.error(JSON.stringify({ service: "dune-discord-companion-bot", event: "gateway_error" }));
+  });
+}
+
+function startHeartbeat(socket, intervalMs, sequenceProvider) {
+  const sendHeartbeat = () => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ op: 1, d: sequenceProvider() }));
+    }
+  };
+  sendHeartbeat();
+  return setInterval(sendHeartbeat, intervalMs);
+}
+
+async function handleInteraction(interaction) {
+  if (interaction.type !== 2 || interaction.data?.name !== "dune") return;
+  const parsed = parseDuneInteraction(interaction);
+  const actor = actorFromInteraction(interaction, parsed.commandLabel);
+
+  if (parsed.command === "help") {
+    await replyToInteraction(interaction, {
+      ephemeral: true,
+      content: "**Dune bot help**\n`/dune health` - adapter health\n`/dune status public` - public redacted status\n`/dune status detail` - admin-only diagnostics\n`/dune readiness` - readiness summary\n`/dune services` - service summary\n`/dune version` - bot/runtime version"
+    });
+    return;
+  }
+
+  if (parsed.command === "version") {
+    await replyToInteraction(interaction, {
+      ephemeral: true,
+      content: "**Dune bot version**\n`0.1.0`\nRead-only Discord companion runtime."
+    });
+    return;
+  }
+
+  const result = await callDuneCommand(parsed.command, actor);
+  await replyToInteraction(interaction, result);
+}
+
+function parseDuneInteraction(interaction) {
+  const first = interaction.data?.options?.[0];
+  if (!first) return { command: "help", commandLabel: "/dune help" };
+
+  if (first.name === "health") return { command: "health", commandLabel: "/dune health" };
+  if (first.name === "readiness") return { command: "readiness", commandLabel: "/dune readiness" };
+  if (first.name === "services") return { command: "services", commandLabel: "/dune services" };
+  if (first.name === "help") return { command: "help", commandLabel: "/dune help" };
+  if (first.name === "version") return { command: "version", commandLabel: "/dune version" };
+
+  if (first.name === "status") {
+    const second = first.options?.[0];
+    if (second?.name === "detail") return { command: "statusDetail", commandLabel: "/dune status detail" };
+    return { command: "status", commandLabel: "/dune status public" };
+  }
+
+  return { command: "help", commandLabel: "/dune help" };
+}
+
+function actorFromInteraction(interaction, commandName) {
+  const member = interaction.member || {};
+  const user = member.user || interaction.user || {};
+  return {
+    guildId: interaction.guild_id || config.discordGuildId,
+    channelId: interaction.channel_id || "unknown-channel",
+    userId: user.id || "unknown-user",
+    username: user.username || user.global_name || "unknown-user",
+    roleIds: Array.isArray(member.roles) ? member.roles : [],
+    interactionId: interaction.id,
+    commandName
+  };
+}
+
+async function callDuneCommand(command, actor) {
+  if (command === "health") {
+    const response = await callConsole("GET", "/api/integrations/discord/health");
+    return { ephemeral: true, content: formatJsonBlock("Dune adapter health", response) };
+  }
+  if (command === "status") {
+    const response = await callConsole("POST", "/api/integrations/discord/status", { actor, diagnostic: false });
+    return { ephemeral: false, content: formatJsonBlock("Dune status", response) };
+  }
+  if (command === "statusDetail") {
+    const response = await callConsole("POST", "/api/integrations/discord/status", { actor, diagnostic: true });
+    return { ephemeral: true, content: formatJsonBlock("Dune detailed status", response) };
+  }
+  if (command === "readiness") {
+    const response = await callConsole("POST", "/api/integrations/discord/readiness", { actor });
+    return { ephemeral: true, content: formatJsonBlock("Dune readiness", response) };
+  }
+  if (command === "services") {
+    const response = await callConsole("POST", "/api/integrations/discord/services", { actor });
+    return { ephemeral: true, content: formatJsonBlock("Dune services", response) };
+  }
+  throw new Error(`Unsupported Dune command: ${command}`);
+}
+
+async function callConsole(method, path, body) {
+  const response = await fetch(`${config.duneConsoleApiUrl.replace(/\/$/, "")}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${duneApiToken}`,
+      ...(body ? { "content-type": "application/json" } : {})
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const payload = await response.json().catch(() => ({ ok: false, code: "invalid_response", error: "Console returned non-JSON output." }));
+  if (!response.ok) {
+    return { ok: false, status: response.status, payload };
+  }
+  return payload;
+}
+
+async function replyToInteraction(interaction, result) {
+  const response = await fetch(`${DISCORD_API}/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: 4,
+      data: {
+        content: truncateDiscordMessage(result.content || "No output."),
+        flags: result.ephemeral ? EPHEMERAL : undefined
+      }
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Discord interaction reply failed: ${response.status} ${await response.text()}`);
+  }
+}
+
+async function discordGet(path) {
+  const response = await fetch(`${DISCORD_API}${path}`, { headers: discordHeaders() });
+  if (!response.ok) throw new Error(`Discord API request failed: ${response.status} ${await response.text()}`);
+  return response.json();
+}
+
+function discordHeaders() {
+  return {
+    authorization: `Bot ${discordToken}`,
+    "content-type": "application/json"
+  };
+}
+
+function duneCommandDefinition() {
+  return [{
+    name: "dune",
+    description: "Read-only Dune server visibility commands.",
+    dm_permission: false,
+    options: [
+      { type: 1, name: "health", description: "Show Discord adapter health." },
+      {
+        type: 2,
+        name: "status",
+        description: "Show server status.",
+        options: [
+          { type: 1, name: "public", description: "Show public redacted server status." },
+          { type: 1, name: "detail", description: "Show admin-only detailed status." }
+        ]
+      },
+      { type: 1, name: "readiness", description: "Show server readiness summary." },
+      { type: 1, name: "services", description: "Show service summary." },
+      { type: 1, name: "help", description: "Show safe command help." },
+      { type: 1, name: "version", description: "Show bot version." }
+    ]
+  }];
+}
+
+function formatJsonBlock(title, value) {
+  const body = JSON.stringify(redact(value), null, 2).slice(0, 1800);
+  return `**${title}**\n~~~json\n${body}\n~~~`;
+}
+
+function redact(value) {
+  return JSON.parse(JSON.stringify(value, (key, item) => {
+    if (/token|secret|password|authorization|cookie|api[-_]?key/i.test(key)) return "[REDACTED]";
+    if (typeof item === "string" && /(Bearer\s+|Bot\s+|[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{20,})/.test(item)) return "[REDACTED]";
+    return item;
+  }));
+}
+
+function truncateDiscordMessage(value) {
+  const text = String(value || "");
+  return text.length > 1900 ? `${text.slice(0, 1880)}\n…truncated` : text;
+}
+
+function loadConfig() {
+  return {
+    discordBotTokenFile: requiredEnv("DISCORD_BOT_TOKEN_FILE"),
+    duneBotApiTokenFile: requiredEnv("DUNE_BOT_API_TOKEN_FILE"),
+    duneConsoleApiUrl: requiredEnv("DUNE_CONSOLE_API_URL"),
+    discordClientId: requiredEnv("DISCORD_CLIENT_ID"),
+    discordGuildId: requiredEnv("DISCORD_GUILD_ID")
+  };
+}
+
+function requiredEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+}
+
+function readSecret(path) {
+  return readFileSync(path, "utf8").trim();
+}
+
+function safeErrorMessage(error) {
+  return String(error?.message || error || "Unknown error").replace(/(Bot|Bearer)\s+\S+/g, "$1 [REDACTED]");
+}
