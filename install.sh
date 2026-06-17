@@ -284,7 +284,7 @@ next_available_port() {
 
 existing_web_port() {
   if [ -f .env ]; then
-    awk -F= '/^ADMIN_BIND_PORT=/ {print $2; exit}' .env | sed 's/[[:space:]"'\''']//g'
+    awk -F= '$1 == "ADMIN_BIND_PORT" { value = substr($0, length($1) + 2); gsub(/[[:space:]\"\047]/, "", value); print value; exit }' .env
   fi
 }
 
