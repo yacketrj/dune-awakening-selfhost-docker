@@ -11,6 +11,7 @@ const requiredFiles = [
   "docs/discord-control-bot/api-adapter-contract.md",
   "docs/discord-control-bot/security-gates.md",
   "docs/discord-control-bot/roadmap.md",
+  "docs/discord-control-bot/issue-tracking-policy.md",
   "discord-bot/README.md",
   "discord-bot/src/security/authorization.ts",
   "console/api/src/integrations/discord/adapter.js",
@@ -18,6 +19,13 @@ const requiredFiles = [
   ".github/workflows/soc2-readiness-check.yml",
   ".github/workflows/semgrep-sast.yml",
   ".github/workflows/trivy-vulnerability-scan.yml",
+  ".github/ISSUE_TEMPLATE/config.yml",
+  ".github/ISSUE_TEMPLATE/bug-report.yml",
+  ".github/ISSUE_TEMPLATE/soc2-evidence-gap.yml",
+  ".github/ISSUE_TEMPLATE/vulnerability-remediation.yml",
+  ".github/ISSUE_TEMPLATE/security-exception.yml",
+  ".github/ISSUE_TEMPLATE/access-review.yml",
+  ".github/ISSUE_TEMPLATE/feature-request.yml",
   "scripts/generate-vulnerability-report.mjs",
   "scripts/ensure-security-runtimes.sh"
 ];
@@ -35,7 +43,8 @@ const requiredDocTerms = new Map([
   ["docs/discord-control-bot/admin-guide.md", ["role mapping", "no write actions", "detailed status"]],
   ["docs/discord-control-bot/user-guide.md", ["commands", "public status", "detailed status"]],
   ["docs/discord-control-bot/setup-guide.md", ["dune_bot_api_token_file", "start:discord-adapter", "smoke test"]],
-  ["docs/discord-control-bot/security-gates.md", ["semgrep", "trivy", "vulnerability report", "cvss"]]
+  ["docs/discord-control-bot/security-gates.md", ["semgrep", "trivy", "vulnerability report", "cvss"]],
+  ["docs/discord-control-bot/issue-tracking-policy.md", ["issue tracking", "soc 2 readiness", "vulnerability remediation", "access review", "security exception"]]
 ]);
 
 let failed = false;
@@ -114,7 +123,7 @@ if (failed) {
   process.exit(1);
 }
 
-console.log("SOC 2 readiness check passed. Evidence files, runtimes, and read-only safety markers are present.");
+console.log("SOC 2 readiness check passed. Evidence files, runtimes, issue tracking, and read-only safety markers are present.");
 
 function commandExists(command) {
   const result = spawnSync("bash", ["-lc", `command -v ${shellQuote(command)} >/dev/null 2>&1`], { stdio: "ignore" });
