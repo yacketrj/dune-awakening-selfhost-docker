@@ -62,9 +62,11 @@ function actor(roleIds = []) {
 test.beforeEach(resetEnv);
 test.afterEach(cleanupEnv);
 
-test("identifies only experimental Discord adapter routes", () => {
+test("identifies experimental Discord adapter routes", () => {
   assert.equal(isDiscordAdapterRoute(DISCORD_ADAPTER_ROUTES.HEALTH), true);
   assert.equal(isDiscordAdapterRoute(DISCORD_ADAPTER_ROUTES.STATUS), true);
+  assert.equal(isDiscordAdapterRoute(DISCORD_ADAPTER_ROUTES.READINESS), true);
+  assert.equal(isDiscordAdapterRoute(DISCORD_ADAPTER_ROUTES.SERVICES), true);
   assert.equal(isDiscordAdapterRoute("/api/integrations/discord/backups/delete"), false);
   assert.equal(isDiscordAdapterRoute("/api/admin/broadcast"), false);
 });
@@ -99,7 +101,7 @@ test("rejects missing bot API credential", async () => {
 });
 
 test("rejects invalid bot API credential", () => {
-  assert.throws(() => requireDiscordBotToken(req({ authorization: "Bearer xyz" }), config), /Invalid Dune bot API token/);
+  assert.throws(() => requireDiscordBotToken(req({ authorization: "Bearer xyz" }), config), /Invalid adapter credential/);
 });
 
 test("allows health with valid bot API credential", async () => {
@@ -116,6 +118,8 @@ test("allows health with valid bot API credential", async () => {
   assert.equal(out.calls[0].body.ok, true);
   assert.equal(out.calls[0].body.readOnly, true);
   assert.equal(out.calls[0].body.writesEnabled, false);
+  assert.ok(out.calls[0].body.liveRoutes.includes(DISCORD_ADAPTER_ROUTES.STATUS));
+  assert.ok(out.calls[0].body.plannedRoutes.includes(DISCORD_ADAPTER_ROUTES.LOGS));
 });
 
 test("allows sanitized status with valid bot API credential", async () => {
@@ -133,4 +137,34 @@ test("allows sanitized status with valid bot API credential", async () => {
   assert.equal(out.calls[0].body.ok, true);
   assert.equal(out.calls[0].body.result.db_connected, true);
   assert.equal(Object.hasOwn(out.calls[0].body.result, "ssh_host"), false);
+});
+
+test("allows readiness with observer role", async () => {
+  const out = captureJson();
+  await handleDiscordAdapterRoute({
+    req: req({ method: "POST" }),
+    res: {},
+    path: DISCORD_ADAPTER_ROUTES.READINESS,
+    config,
+    readJson: async () => ({ actor: actor(["role-observer"]) }),
+    json: out.json,
+    readinessProvider: async () => ({ ready: true, overall: "READY", issues: [] })
+  });
+  assert.equal(out.calls[0].status, 200);
+  assert.equal(out.calls[0].body.result.ready, true);
+});
+
+test("allows services with observer role", async () => {
+  const out = captureJson();
+  await handleDiscordAdapterRoute({
+    req: req({ method: "POST" }),
+    res: {},
+    path: DISCORD_ADAPTER_ROUTES.SERVICES,
+    config,
+    readJson: async () => ({ actor: actor(["role-observer"]) }),
+    json: out.json,
+    servicesProvider: async () => ({ overall: "OK", services: [{ name: "Database", status: "up" }], issues: [] })
+  });
+  assert.equal(out.calls[0].status, 200);
+  assert.equal(out.calls[0].body.result.services[0].name, "Database");
 });
