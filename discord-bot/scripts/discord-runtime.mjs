@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
+import { formatCommandResponse } from "./discord-formatters.mjs";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const EPHEMERAL = 1 << 6;
@@ -163,36 +164,51 @@ function actorFromInteraction(interaction, commandName) {
 async function callDuneCommand(command, actor) {
   if (command === "health") {
     const response = await callConsole("GET", "/api/integrations/discord/health");
-    return { ephemeral: true, content: formatJsonBlock("Dune adapter health", response) };
+    return { ephemeral: true, ...formatCommandResponse("health", response) };
   }
   if (command === "status") {
     const response = await callConsole("POST", "/api/integrations/discord/status", { actor, diagnostic: false });
-    return { ephemeral: false, content: formatJsonBlock("Dune status", response) };
+    return { ephemeral: false, ...formatCommandResponse("status", response) };
   }
   if (command === "statusDetail") {
     const response = await callConsole("POST", "/api/integrations/discord/status", { actor, diagnostic: true });
-    return { ephemeral: true, content: formatJsonBlock("Dune detailed status", response) };
+    return { ephemeral: true, ...formatCommandResponse("statusDetail", response) };
   }
   if (command === "readiness") {
     const response = await callConsole("POST", "/api/integrations/discord/readiness", { actor });
-    return { ephemeral: true, content: formatJsonBlock("Dune readiness", response) };
+    return { ephemeral: true, ...formatCommandResponse("readiness", response) };
   }
   if (command === "services") {
     const response = await callConsole("POST", "/api/integrations/discord/services", { actor });
-    return { ephemeral: true, content: formatJsonBlock("Dune services", response) };
+    return { ephemeral: true, ...formatCommandResponse("services", response) };
   }
   throw new Error(`Unsupported Dune command: ${command}`);
 }
 
 async function callConsole(method, path, body) {
-  const response = await fetch(`${config.duneConsoleApiUrl.replace(/\/$/, "")}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${duneApiToken}`,
-      ...(body ? { "content-type": "application/json" } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined
-  });
+  const url = `${config.duneConsoleApiUrl.replace(/\/$/, "")}${path}`;
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: {
+        authorization: `Bearer ${duneApiToken}`,
+        ...(body ? { "content-type": "application/json" } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      payload: {
+        code: "console_unreachable",
+        error: "Discord bot could not reach the Console adapter URL.",
+        url,
+        cause: safeErrorMessage(error)
+      }
+    };
+  }
   const payload = await response.json().catch(() => ({ ok: false, code: "invalid_response", error: "Console returned non-JSON output." }));
   if (!response.ok) {
     return { ok: false, status: response.status, payload };
@@ -221,9 +237,7 @@ async function editDeferredInteraction(interaction, result) {
   const response = await fetch(`${DISCORD_API}/webhooks/${applicationId}/${interaction.token}/messages/@original`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      content: truncateDiscordMessage(result.content || "No output.")
-    })
+    body: JSON.stringify(discordMessagePayload(result))
   });
   if (!response.ok) {
     throw new Error(`Discord deferred interaction edit failed: ${response.status} ${await response.text()}`);
@@ -237,7 +251,7 @@ async function replyToInteraction(interaction, result) {
     body: JSON.stringify({
       type: 4,
       data: {
-        content: truncateDiscordMessage(result.content || "No output."),
+        ...discordMessagePayload(result),
         flags: result.ephemeral ? EPHEMERAL : undefined
       }
     })
@@ -245,6 +259,14 @@ async function replyToInteraction(interaction, result) {
   if (!response.ok) {
     throw new Error(`Discord interaction reply failed: ${response.status} ${await response.text()}`);
   }
+}
+
+function discordMessagePayload(result) {
+  return {
+    content: truncateDiscordMessage(result.content || ""),
+    embeds: Array.isArray(result.embeds) ? result.embeds.slice(0, 10) : [],
+    allowed_mentions: { parse: [] }
+  };
 }
 
 async function discordGet(path) {
@@ -282,19 +304,6 @@ function duneCommandDefinition() {
       { type: 1, name: "version", description: "Show bot version." }
     ]
   }];
-}
-
-function formatJsonBlock(title, value) {
-  const body = JSON.stringify(redact(value), null, 2).slice(0, 1800);
-  return `**${title}**\n` + "```json\n" + body + "\n```";
-}
-
-function redact(value) {
-  return JSON.parse(JSON.stringify(value, (key, item) => {
-    if (/token|secret|password|authorization|cookie|api[-_]?key/i.test(key)) return "[REDACTED]";
-    if (typeof item === "string" && /(Bearer\s+|Bot\s+|[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{20,})/.test(item)) return "[REDACTED]";
-    return item;
-  }));
 }
 
 function truncateDiscordMessage(value) {
