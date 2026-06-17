@@ -1,7 +1,7 @@
 import { audit } from "../../audit.js";
 import { DISCORD_CAPABILITIES, normalizeDiscordActor, requireDiscordCapability } from "./policy.js";
 import { discordAuditEvent, discordBlockedAuditEvent } from "./audit.js";
-import { discordSafeError, sanitizeDiscordPublicStatus } from "./sanitize.js";
+import { discordSafeError, sanitizeDiscordPublicStatus, sanitizeDiscordValue } from "./sanitize.js";
 
 export const DISCORD_ADAPTER_ROUTES = Object.freeze({
   HEALTH: "/api/integrations/discord/health",
@@ -13,6 +13,17 @@ export const DISCORD_ADAPTER_ROUTES = Object.freeze({
   MAP_STATE: "/api/integrations/discord/map-state",
   BACKUPS_LIST: "/api/integrations/discord/backups/list"
 });
+
+export const DISCORD_LIVE_ADAPTER_ROUTES = Object.freeze([
+  DISCORD_ADAPTER_ROUTES.HEALTH,
+  DISCORD_ADAPTER_ROUTES.STATUS,
+  DISCORD_ADAPTER_ROUTES.READINESS,
+  DISCORD_ADAPTER_ROUTES.SERVICES
+]);
+
+export const DISCORD_PLANNED_ADAPTER_ROUTES = Object.freeze(
+  Object.values(DISCORD_ADAPTER_ROUTES).filter((route) => !DISCORD_LIVE_ADAPTER_ROUTES.includes(route))
+);
 
 export function discordAdapterEnabled(config) {
   return process.env.DUNE_DISCORD_ADAPTER_ENABLED === "true" || config?.discordAdapterEnabled === true;
@@ -40,25 +51,25 @@ export async function discordAdapterHealth(config) {
     experimental: true,
     readOnly: true,
     writesEnabled: false,
-    routes: Object.values(DISCORD_ADAPTER_ROUTES)
+    routes: DISCORD_LIVE_ADAPTER_ROUTES,
+    liveRoutes: DISCORD_LIVE_ADAPTER_ROUTES,
+    plannedRoutes: DISCORD_PLANNED_ADAPTER_ROUTES
   };
 }
 
 export async function discordAdapterStatus({ config, actorPayload, diagnostic = false, statusProvider }) {
   const actor = normalizeDiscordActor(actorPayload);
+  const capability = diagnostic ? DISCORD_CAPABILITIES.LOGS_READ : DISCORD_CAPABILITIES.STATUS_READ;
   const mapping = discordRoleMappingFromEnv();
-  requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.STATUS_READ);
+  requireDiscordCapability(actor, mapping, capability);
 
   try {
     const rawStatus = typeof statusProvider === "function" ? await statusProvider({ diagnostic }) : {};
-    if (diagnostic) {
-      requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.LOGS_READ);
-    }
-    const result = diagnostic ? rawStatus : sanitizeDiscordPublicStatus(rawStatus);
+    const result = diagnostic ? sanitizeDiscordValue(rawStatus) : sanitizeDiscordPublicStatus(rawStatus);
     audit(config, null, "discord.status", discordAuditEvent({
       actor,
       action: "discord.status",
-      capability: diagnostic ? DISCORD_CAPABILITIES.LOGS_READ : DISCORD_CAPABILITIES.STATUS_READ,
+      capability,
       risk: diagnostic ? "medium" : "low",
       targetType: "server",
       result: "success"
@@ -68,8 +79,58 @@ export async function discordAdapterStatus({ config, actorPayload, diagnostic = 
     audit(config, null, "discord.status", discordBlockedAuditEvent({
       actor,
       action: "discord.status",
-      capability: diagnostic ? DISCORD_CAPABILITIES.LOGS_READ : DISCORD_CAPABILITIES.STATUS_READ,
+      capability,
       reason: error.message || "status failed"
+    }));
+    throw error;
+  }
+}
+
+export async function discordAdapterReadiness({ config, actorPayload, readinessProvider }) {
+  return discordAdapterReadOnlyOperation({
+    config,
+    actorPayload,
+    provider: readinessProvider,
+    capability: DISCORD_CAPABILITIES.READINESS_READ,
+    action: "discord.readiness",
+    targetType: "server"
+  });
+}
+
+export async function discordAdapterServices({ config, actorPayload, servicesProvider }) {
+  return discordAdapterReadOnlyOperation({
+    config,
+    actorPayload,
+    provider: servicesProvider,
+    capability: DISCORD_CAPABILITIES.SERVICES_READ,
+    action: "discord.services",
+    targetType: "services"
+  });
+}
+
+async function discordAdapterReadOnlyOperation({ config, actorPayload, provider, capability, action, targetType }) {
+  const actor = normalizeDiscordActor(actorPayload);
+  const mapping = discordRoleMappingFromEnv();
+  requireDiscordCapability(actor, mapping, capability);
+
+  try {
+    const rawResult = typeof provider === "function" ? await provider() : {};
+    const result = sanitizeDiscordValue(rawResult);
+    audit(config, null, action, discordAuditEvent({
+      actor,
+      action,
+      capability,
+      risk: "low",
+      targetType,
+      result: "success"
+    }));
+    return { ok: true, result };
+  } catch (error) {
+    audit(config, null, action, discordBlockedAuditEvent({
+      actor,
+      action,
+      capability,
+      reason: error.message || `${action} failed`
     }));
     throw error;
   }
