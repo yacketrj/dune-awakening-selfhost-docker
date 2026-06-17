@@ -1,0 +1,58 @@
+name: SOC 2 evidence gap
+description: Track missing or stale SOC 2 readiness evidence.
+title: "soc2: "
+labels: ["type:soc2", "evidence", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to track readiness evidence gaps. This is not a SOC 2 certification claim.
+  - type: input
+    id: control_id
+    attributes:
+      label: Control ID
+      description: Example DC-SOC2-SEC-006 or E-016.
+      placeholder: DC-SOC2-SEC-006
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: Evidence gap
+      description: What evidence is missing, stale, incomplete, or failing?
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk / audit impact
+      description: Why does this matter for readiness?
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      description: Person or team responsible.
+    validations:
+      required: true
+  - type: input
+    id: due_date
+    attributes:
+      label: Target due date
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Remediation plan
+    validations:
+      required: true
+  - type: textarea
+    id: evidence_links
+    attributes:
+      label: Evidence links
+      description: Link workflows, commits, reports, docs, or PRs.
+    validations:
+      required: false
