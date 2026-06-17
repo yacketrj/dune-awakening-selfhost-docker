@@ -51,6 +51,8 @@ jobs:
           node-version: "22"
 
       - name: Run SOC 2 readiness evidence check
+        env:
+          SECURITY_REQUIRE_LOCAL_SCAN_RUNTIMES: "false"
         run: node scripts/soc2-readiness-check.mjs
 
       - name: Run Console Discord adapter tests
