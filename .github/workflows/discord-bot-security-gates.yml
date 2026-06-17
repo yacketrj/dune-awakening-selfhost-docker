@@ -1,0 +1,141 @@
+name: Discord Bot Security Gates
+
+on:
+  pull_request:
+    paths:
+      - "discord-bot/**"
+      - "docs/discord-control-bot/**"
+      - ".github/workflows/discord-bot-security-gates.yml"
+  push:
+    branches:
+      - feature/discord-control-bot
+    paths:
+      - "discord-bot/**"
+      - "docs/discord-control-bot/**"
+      - ".github/workflows/discord-bot-security-gates.yml"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  policy-gates:
+    name: Policy Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure bot workspace exists
+        run: |
+          test -d discord-bot
+          test -f discord-bot/package.json
+          test -f docs/discord-control-bot/security-gates.md
+          test -f docs/discord-control-bot/feature-priority.md
+
+      - name: Block Docker socket mounts in bot assets
+        run: |
+          if grep -R --line-number --fixed-strings "/var/run/docker.sock" discord-bot; then
+            echo "::error::Discord bot assets must not mount /var/run/docker.sock."
+            exit 1
+          fi
+
+      - name: Block privileged container mode in bot assets
+        run: |
+          if grep -R --line-number -E "privileged:[[:space:]]*true" discord-bot; then
+            echo "::error::Discord bot container must not use privileged mode."
+            exit 1
+          fi
+
+      - name: Block obvious secret material
+        run: |
+          node discord-bot/scripts/check-secrets.mjs
+
+      - name: Enforce lockfile presence
+        run: |
+          test -f discord-bot/package-lock.json
+
+      - name: Validate security documentation keywords
+        run: |
+          grep -q "SCA" docs/discord-control-bot/security-gates.md
+          grep -q "SAST" docs/discord-control-bot/security-gates.md
+          grep -q "DCA" docs/discord-control-bot/security-gates.md
+          grep -q "DAST" docs/discord-control-bot/security-gates.md
+          grep -q "Docker socket" docs/discord-control-bot/security-gates.md
+
+  npm-gates:
+    name: NPM / SCA Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: discord-bot
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: discord-bot/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run unit/security tests
+        run: npm test
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+  codeql:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  container-policy:
+    name: Container Policy Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Dockerfile hardening markers
+        run: |
+          test -f discord-bot/Dockerfile
+          grep -q "USER" discord-bot/Dockerfile
+          grep -q "HEALTHCHECK" discord-bot/Dockerfile
+          if grep -n "FROM .*:latest" discord-bot/Dockerfile; then
+            echo "::error::Release Dockerfile must not use latest tag."
+            exit 1
+          fi
+
+      - name: Build bot image
+        run: docker build -t dune-discord-control-bot:ci discord-bot
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: dune-discord-control-bot:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
