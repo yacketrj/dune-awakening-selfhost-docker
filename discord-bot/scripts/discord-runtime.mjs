@@ -68,7 +68,10 @@ async function startGateway() {
     if (packet.t === "INTERACTION_CREATE") {
       await handleInteraction(packet.d).catch(async (error) => {
         console.error(JSON.stringify({ service: "dune-discord-companion-bot", event: "interaction_error", error: safeErrorMessage(error) }));
-        await replyToInteraction(packet.d, { content: "Dune command failed. Check Console adapter logs for details.", ephemeral: true }).catch(() => undefined);
+        const failure = { content: "Dune command failed. Check Console adapter logs for details.", ephemeral: true };
+        await editDeferredInteraction(packet.d, failure).catch(async () => {
+          await replyToInteraction(packet.d, failure).catch(() => undefined);
+        });
       });
     }
   });
@@ -98,9 +101,10 @@ async function handleInteraction(interaction) {
   if (interaction.type !== 2 || interaction.data?.name !== "dune") return;
   const parsed = parseDuneInteraction(interaction);
   const actor = actorFromInteraction(interaction, parsed.commandLabel);
+  await deferInteraction(interaction, { ephemeral: commandStartsEphemeral(parsed.command) });
 
   if (parsed.command === "help") {
-    await replyToInteraction(interaction, {
+    await editDeferredInteraction(interaction, {
       ephemeral: true,
       content: "**Dune bot help**\n`/dune health` - adapter health\n`/dune status public` - public redacted status\n`/dune status detail` - admin-only diagnostics\n`/dune readiness` - readiness summary\n`/dune services` - service summary\n`/dune version` - bot/runtime version"
     });
@@ -108,7 +112,7 @@ async function handleInteraction(interaction) {
   }
 
   if (parsed.command === "version") {
-    await replyToInteraction(interaction, {
+    await editDeferredInteraction(interaction, {
       ephemeral: true,
       content: "**Dune bot version**\n`0.1.0`\nRead-only Discord companion runtime."
     });
@@ -116,7 +120,11 @@ async function handleInteraction(interaction) {
   }
 
   const result = await callDuneCommand(parsed.command, actor);
-  await replyToInteraction(interaction, result);
+  await editDeferredInteraction(interaction, result);
+}
+
+function commandStartsEphemeral(command) {
+  return command !== "status";
 }
 
 function parseDuneInteraction(interaction) {
@@ -190,6 +198,36 @@ async function callConsole(method, path, body) {
     return { ok: false, status: response.status, payload };
   }
   return payload;
+}
+
+async function deferInteraction(interaction, result) {
+  const response = await fetch(`${DISCORD_API}/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      type: 5,
+      data: {
+        flags: result.ephemeral ? EPHEMERAL : undefined
+      }
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Discord interaction defer failed: ${response.status} ${await response.text()}`);
+  }
+}
+
+async function editDeferredInteraction(interaction, result) {
+  const applicationId = interaction.application_id || config.discordClientId;
+  const response = await fetch(`${DISCORD_API}/webhooks/${applicationId}/${interaction.token}/messages/@original`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      content: truncateDiscordMessage(result.content || "No output.")
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Discord deferred interaction edit failed: ${response.status} ${await response.text()}`);
+  }
 }
 
 async function replyToInteraction(interaction, result) {
