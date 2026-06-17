@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { formatCommandResponse } from "../scripts/discord-formatters.mjs";
 
-test("health formatter emits a Discord embed with table content", () => {
+test("health formatter emits a Discord card", () => {
   const response = formatCommandResponse("health", {
     ok: true,
     service: "dune-console-discord-adapter",
@@ -21,14 +21,13 @@ test("health formatter emits a Discord embed with table content", () => {
     }
   });
 
-  assert.match(response.content, /```text/);
-  assert.match(response.content, /Read-only/);
+  assert.equal(response.content, "");
   assert.equal(response.embeds.length, 1);
   assert.equal(response.embeds[0].title, "Arrakis Control Plane — Adapter Health");
   assert.match(response.embeds[0].fields.find((field) => field.name === "Safety").value, /Read-only/);
 });
 
-test("public status formatter summarizes maps and issues", () => {
+test("public status formatter summarizes maps and issues as card fields", () => {
   const response = formatCommandResponse("status", {
     ok: true,
     result: {
@@ -37,7 +36,7 @@ test("public status formatter summarizes maps and issues", () => {
       region: "North America",
       population: "0/60",
       maps: [
-        { name: "Survival 1", state: "READY", uptime: "Up 39 minutes" },
+        { name: "Survival_1", state: "READY", uptime: "Up 39 minutes" },
         { name: "Overmap", state: "READY", uptime: "Up 39 minutes" }
       ],
       issues: ["Overmap status is ISSUE"]
@@ -47,11 +46,32 @@ test("public status formatter summarizes maps and issues", () => {
   const embed = response.embeds[0];
   assert.equal(embed.title, "My Dune Server");
   assert.equal(embed.fields.find((field) => field.name === "Population").value, "0/60");
-  assert.match(embed.fields.find((field) => field.name === "Maps").value, /Survival 1/);
+  assert.match(embed.fields.find((field) => field.name === "Services").value, /Survival/);
   assert.match(embed.fields.find((field) => field.name === "Issues").value, /Overmap status/);
 });
 
-test("formatter redacts secret-shaped values inside embeds and diagnostic table", () => {
+test("formatter derives missing client and S2S issues from structured status", () => {
+  const response = formatCommandResponse("services", {
+    ok: true,
+    result: {
+      overall: "ISSUE",
+      services: [
+        { name: "Overmap", status: "ISSUE", clients: "MISSING", s2s: "MISSING" },
+        { name: "Survival_1", status: "READY", clients: "MISSING", s2s: "MISSING" }
+      ]
+    }
+  });
+
+  const issues = response.embeds[0].fields.find((field) => field.name === "Issues").value;
+  const services = response.embeds[0].fields.find((field) => field.name === "Services").value;
+  assert.match(issues, /Overall status is ISSUE/);
+  assert.match(issues, /Overmap Clients is MISSING/);
+  assert.match(issues, /Survival 1 S2s is MISSING/);
+  assert.match(services, /Overmap/);
+  assert.match(services, /Survival/);
+});
+
+test("formatter redacts secret-shaped values inside card output", () => {
   const response = formatCommandResponse("statusDetail", {
     ok: true,
     result: {
@@ -62,8 +82,8 @@ test("formatter redacts secret-shaped values inside embeds and diagnostic table"
   });
 
   const combined = `${response.content}\n${JSON.stringify(response.embeds)}`;
-  assert.match(response.content, /```text/);
-  assert.doesNotMatch(response.content, /```json/);
+  assert.equal(response.content, "");
+  assert.doesNotMatch(combined, /```json/);
   assert.match(combined, /\[REDACTED\]/);
   assert.doesNotMatch(combined, /abc\.def\.ghi/);
 });
