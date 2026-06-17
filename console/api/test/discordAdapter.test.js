@@ -42,7 +42,7 @@ test("reports adapter health as experimental read-only", async () => {
   assert.equal(result.experimental, true);
   assert.equal(result.readOnly, true);
   assert.equal(result.writesEnabled, false);
-  assert.deepEqual(result.liveRoutes.sort(), [
+  assert.deepEqual([...result.liveRoutes].sort(), [
     "/api/integrations/discord/health",
     "/api/integrations/discord/readiness",
     "/api/integrations/discord/services",
