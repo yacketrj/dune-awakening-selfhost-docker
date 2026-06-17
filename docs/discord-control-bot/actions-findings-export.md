@@ -22,7 +22,7 @@ pr:3
 
 When using `pr:3`, `#3`, or a numeric run ID, pass `--repo OWNER/REPO` unless `GITHUB_REPOSITORY` is already set.
 
-## Authentication
+## Authentication and Rate Limits
 
 For private repositories, workflow logs, or higher API limits, set one of:
 
@@ -32,7 +32,31 @@ export GITHUB_TOKEN="..."
 export GH_TOKEN="..."
 ```
 
-The token needs read access to Actions metadata. Log export may require Actions read access.
+If neither variable is set, the exporter now attempts to reuse the GitHub CLI token from:
+
+```bash
+gh auth token
+```
+
+Recommended setup:
+
+```bash
+gh auth login
+export GH_TOKEN="$(gh auth token)"
+```
+
+If GitHub returns a rate-limit response, the output JSON includes `requestTelemetry.rateLimit` and `sourceErrors` with reset details when available.
+
+Optional rate-limit controls:
+
+```bash
+--wait-rate-limit         Wait and retry once if the reset time is within the allowed wait window.
+--max-wait-seconds 300    Maximum wait window for --wait-rate-limit.
+--skip-artifacts          Skip artifact listing to reduce API calls.
+--no-gh-token             Do not attempt to read a token from gh auth token.
+```
+
+The exporter also caches repeated API requests during one run and reuses workflow-run metadata returned by list endpoints to reduce API calls.
 
 ## Examples
 
@@ -41,6 +65,28 @@ Export all recent Actions findings for PR 3:
 ```bash
 node scripts/export-github-actions-findings.mjs \
   https://github.com/yacketrj/dune-awakening-selfhost-docker-WSL/pull/3 \
+  --out artifacts/security/pr-3-actions-findings.json
+```
+
+Export PR 3 using an authenticated GitHub CLI token:
+
+```bash
+export GH_TOKEN="$(gh auth token)"
+
+node scripts/export-github-actions-findings.mjs \
+  pr:3 \
+  --repo yacketrj/dune-awakening-selfhost-docker-WSL \
+  --out artifacts/security/pr-3-actions-findings.json
+```
+
+Export a lower-request summary without artifact metadata:
+
+```bash
+node scripts/export-github-actions-findings.mjs \
+  pr:3 \
+  --repo yacketrj/dune-awakening-selfhost-docker-WSL \
+  --limit 6 \
+  --skip-artifacts \
   --out artifacts/security/pr-3-actions-findings.json
 ```
 
@@ -72,6 +118,7 @@ generatedAt
 repository
 sources
 summary
+requestTelemetry
 findings
 runs
 sourceErrors
