@@ -2,6 +2,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
+const CHILD_PROCESS_TIMEOUT_MS = Number(process.env.SECURITY_AUTOMATION_TIMEOUT_MS || 120000);
+
 const requiredFiles = [
   "docs/discord-control-bot/soc2-control-matrix.md",
   "docs/discord-control-bot/project-status.md",
@@ -166,21 +168,23 @@ if (existsSync("scripts/sync-stride-issues.mjs")) {
 }
 
 if (!failed && existsSync("scripts/validate-security-automation.mjs")) {
-  const validation = spawnSync("node", ["scripts/validate-security-automation.mjs"], { encoding: "utf8" });
+  const validation = runChild("node", ["scripts/validate-security-automation.mjs"], "Security automation validation");
   if (validation.status !== 0) {
     console.error("[soc2-readiness] Security automation validation failed.");
     if (validation.stdout) console.error(validation.stdout);
     if (validation.stderr) console.error(validation.stderr);
+    if (validation.timedOut) console.error(`[soc2-readiness] Security automation validation timed out after ${CHILD_PROCESS_TIMEOUT_MS}ms.`);
     failed = true;
   }
 }
 
 if (!failed && existsSync("scripts/generate-stride-report.mjs")) {
-  const stride = spawnSync("node", ["scripts/generate-stride-report.mjs"], { encoding: "utf8" });
+  const stride = runChild("node", ["scripts/generate-stride-report.mjs"], "STRIDE report generation");
   if (stride.status !== 0) {
     console.error("[soc2-readiness] STRIDE report generation failed.");
     if (stride.stdout) console.error(stride.stdout);
     if (stride.stderr) console.error(stride.stderr);
+    if (stride.timedOut) console.error(`[soc2-readiness] STRIDE report generation timed out after ${CHILD_PROCESS_TIMEOUT_MS}ms.`);
     failed = true;
   }
 }
@@ -193,8 +197,26 @@ if (failed) {
 console.log("SOC 2 readiness check passed. Evidence files, runtimes, issue tracking, vulnerability tracking, STRIDE output, STRIDE issue tracking, evidence bundle, automation validation, and read-only safety markers are present.");
 
 function commandExists(command) {
-  const result = spawnSync("bash", ["-lc", `command -v ${shellQuote(command)} >/dev/null 2>&1`], { stdio: "ignore" });
+  const result = spawnSync("bash", ["-lc", `command -v ${shellQuote(command)} >/dev/null 2>&1`], { stdio: "ignore", timeout: 10000 });
   return result.status === 0;
+}
+
+function runChild(command, args, label) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    timeout: CHILD_PROCESS_TIMEOUT_MS,
+    env: {
+      ...process.env,
+      SECURITY_EVIDENCE_BUNDLE_SKIP_READINESS: "true"
+    }
+  });
+  return {
+    status: result.status === null ? 1 : result.status,
+    stdout: result.stdout || "",
+    stderr: result.stderr || result.error?.message || "",
+    timedOut: result.error?.code === "ETIMEDOUT",
+    label
+  };
 }
 
 function shellQuote(value) {
