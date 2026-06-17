@@ -65,11 +65,16 @@ DUNE_DISCORD_WRITES_ENABLED=false
 
 ## Clean Local Setup Path
 
+The Console adapter and the bot smoke runner must use the same Discord role IDs. For local smoke tests, use placeholder role IDs consistently in both processes.
+
 From `console/api`, start the Console with the adapter wrapper:
 
 ```bash
 DUNE_DOCKER_DIR="$HOME/dune-awakening-selfhost-docker-WSL" \
 DUNE_BOT_API_TOKEN_FILE="$HOME/.config/dune-console/dune-bot-api-token.txt" \
+DISCORD_OBSERVER_ROLE_IDS=role-observer \
+DISCORD_ADMIN_ROLE_IDS=role-admin \
+DISCORD_OWNER_ROLE_IDS=role-owner \
 npm run start:discord-adapter
 ```
 
@@ -93,6 +98,8 @@ npm run smoke:readiness
 npm run smoke:services
 npm run smoke:status-detail
 ```
+
+Smoke command output includes `actorRoleIdsSent` and `consoleRolePolicy` so role-mapping mismatches are visible.
 
 Expected behavior:
 
