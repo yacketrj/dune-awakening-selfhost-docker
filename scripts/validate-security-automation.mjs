@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 const scriptsToCheck = [
   "scripts/generate-vulnerability-report.mjs",
   "scripts/generate-stride-report.mjs",
+  "scripts/generate-security-evidence-bundle.mjs",
   "scripts/sync-vulnerability-issues.mjs",
   "scripts/sync-stride-issues.mjs",
   "scripts/soc2-readiness-check.mjs"
@@ -64,6 +65,14 @@ try {
     console.error("[security-automation] expected Semgrep WARNING to map to MEDIUM");
     process.exit(1);
   }
+
+  const evidenceBundle = run("node", ["scripts/generate-security-evidence-bundle.mjs"], {
+    label: "generate security evidence bundle"
+  });
+  assertIncludes(evidenceBundle.stdout, "Security evidence bundle:");
+  assertFileIncludes("artifacts/security/security-evidence-bundle.md", "# Security Evidence Bundle");
+  assertFileIncludes("artifacts/security/security-evidence-bundle.md", "Control Evidence Mapping");
+  assertFileIncludes("artifacts/security/security-evidence-bundle.json", "SOC 2 readiness evidence bundle");
 
   const reportPath = join(temp, "vulnerability-report.json");
   writeFileSync(reportPath, JSON.stringify(sampleReport(), null, 2), "utf8");
