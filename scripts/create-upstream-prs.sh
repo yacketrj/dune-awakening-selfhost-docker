@@ -6,19 +6,17 @@ set -Eeuo pipefail
 # Creates small upstream PR branches from upstream/main and optionally opens draft PRs
 # against Red-Blink/dune-awakening-selfhost-docker.
 #
+# Local-only evidence automation is intentionally excluded. Do not upstream runtime
+# state, generated artifacts, local secrets, SOC 2 readiness evidence, or fork-only
+# security evidence bundles.
+#
 # Default mode is dry-run. Pass --execute to create branches and push them.
 # Pass --create-prs to also open GitHub PRs using gh.
-#
-# Assumptions:
-# - origin points to your fork: yacketrj/dune-awakening-selfhost-docker-WSL
-# - upstream points to: Red-Blink/dune-awakening-selfhost-docker
-# - source branch contains the integrated work: feature/discord-control-bot
 
 UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
 ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"
 UPSTREAM_REPO="${UPSTREAM_REPO:-Red-Blink/dune-awakening-selfhost-docker}"
 FORK_OWNER="${FORK_OWNER:-yacketrj}"
-FORK_REPO="${FORK_REPO:-dune-awakening-selfhost-docker-WSL}"
 SOURCE_BRANCH="${SOURCE_BRANCH:-feature/discord-control-bot}"
 BASE_BRANCH="${BASE_BRANCH:-main}"
 
@@ -41,7 +39,6 @@ Options:
   --only NAME       Only process one group:
                     container-hardening
                     security-hygiene
-                    security-evidence
                     discord-readonly-bot
   -h, --help        Show help.
 
@@ -50,7 +47,6 @@ Environment overrides:
   ORIGIN_REMOTE     Default: origin
   UPSTREAM_REPO     Default: Red-Blink/dune-awakening-selfhost-docker
   FORK_OWNER        Default: yacketrj
-  FORK_REPO         Default: dune-awakening-selfhost-docker-WSL
   SOURCE_BRANCH     Default: feature/discord-control-bot
   BASE_BRANCH       Default: main
 
@@ -58,17 +54,14 @@ Examples:
   # Preview planned branches and PRs:
   bash scripts/create-upstream-prs.sh
 
-  # Create and push only the first small upstream branch:
-  bash scripts/create-upstream-prs.sh --execute --only container-hardening
+  # Create/push one upstream branch:
+  bash scripts/create-upstream-prs.sh --execute --only discord-readonly-bot
 
-  # Create/push all upstream branches, but do not open PRs:
-  bash scripts/create-upstream-prs.sh --execute
-
-  # Create/push all branches and open draft PRs:
-  bash scripts/create-upstream-prs.sh --execute --create-prs
+  # Create/push one branch and open a draft PR:
+  bash scripts/create-upstream-prs.sh --execute --create-prs --only discord-readonly-bot
 
   # Create/push one branch and open a ready-for-review PR:
-  bash scripts/create-upstream-prs.sh --execute --create-prs --ready --only security-hygiene
+  bash scripts/create-upstream-prs.sh --execute --create-prs --ready --only discord-readonly-bot
 USAGE
 }
 
@@ -131,7 +124,7 @@ ensure_remotes() {
 fetch_all() {
   run git fetch "$UPSTREAM_REMOTE" "$BASE_BRANCH"
   run git fetch "$ORIGIN_REMOTE"
-  run git fetch "$ORIGIN_REMOTE" "$SOURCE_BRANCH:$SOURCE_BRANCH" || true
+  run git fetch "$ORIGIN_REMOTE" "$SOURCE_BRANCH"
 }
 
 warn_if_fork_main_ahead() {
@@ -148,9 +141,13 @@ EOF
   fi
 }
 
+source_ref() {
+  printf '%s/%s' "$ORIGIN_REMOTE" "$SOURCE_BRANCH"
+}
+
 path_exists_in_source() {
   local path="$1"
-  git ls-tree -r --name-only "$SOURCE_BRANCH" -- "$path" | grep -q .
+  git ls-tree -r --name-only "$(source_ref)" -- "$path" | grep -q .
 }
 
 checkout_paths_from_source() {
@@ -158,15 +155,26 @@ checkout_paths_from_source() {
   local path
   for path in "$@"; do
     if path_exists_in_source "$path"; then
-      run git checkout "$SOURCE_BRANCH" -- "$path"
+      run git checkout "$(source_ref)" -- "$path"
     else
       missing+=("$path")
     fi
   done
 
   if [[ "${#missing[@]}" -gt 0 ]]; then
-    echo "Skipped missing path(s) in ${SOURCE_BRANCH}:" >&2
+    echo "Skipped missing path(s) in $(source_ref):" >&2
     printf '  - %s\n' "${missing[@]}" >&2
+  fi
+}
+
+reject_forbidden_paths() {
+  local branch="$1"
+  local forbidden
+  forbidden="$(git diff --name-only "${UPSTREAM_REMOTE}/${BASE_BRANCH}..HEAD" | grep -E '^(artifacts/security/|console/api/runtime/|runtime/secrets/|runtime/generated/|runtime/backups/|.*password.*|.*secret.*)' || true)"
+  if [[ -n "$forbidden" ]]; then
+    echo "Refusing to push ${branch}; forbidden generated/secret paths are present:" >&2
+    echo "$forbidden" >&2
+    exit 1
   fi
 }
 
@@ -184,6 +192,7 @@ commit_if_changed() {
 
 push_branch() {
   local branch="$1"
+  reject_forbidden_paths "$branch"
   if [[ "$FORCE" -eq 1 ]]; then
     run git push --force-with-lease "$ORIGIN_REMOTE" "$branch"
   else
@@ -213,8 +222,7 @@ ${validation}
 
 ## Notes
 
-- Maintainers may modify this branch.
-- This PR avoids unrelated Discord/SOC 2 integration changes unless this branch explicitly targets that scope.
+- This PR avoids generated artifacts, runtime state, local secrets, and fork-only evidence automation.
 - Source integration branch in fork: \`${SOURCE_BRANCH}\`.
 
 ## Branch
@@ -311,32 +319,12 @@ main() {
     "console/web/src/features/server/ServerPanels.tsx"
 
   create_branch_from_paths \
-    "security-evidence" \
-    "upstream/security-evidence-automation" \
-    "Add security evidence automation" \
-    "Add security evidence automation" \
-    "Adds optional security evidence automation for SBOM, Semgrep, Trivy, STRIDE, vulnerability reporting, issue sync, and GitHub Actions findings export." \
-    "Run SBOM, Semgrep, Trivy, STRIDE, and SOC 2 readiness evidence workflows. Review generated artifacts before marking ready." \
-    ".github/workflows" \
-    ".github/ISSUE_TEMPLATE" \
-    "scripts/generate-sbom.mjs" \
-    "scripts/generate-vulnerability-report.mjs" \
-    "scripts/generate-stride-report.mjs" \
-    "scripts/generate-security-evidence-bundle.mjs" \
-    "scripts/sync-vulnerability-issues.mjs" \
-    "scripts/sync-stride-issues.mjs" \
-    "scripts/validate-security-automation.mjs" \
-    "scripts/soc2-readiness-check.mjs" \
-    "scripts/export-github-actions-findings.mjs" \
-    "scripts/ensure-security-runtimes.sh"
-
-  create_branch_from_paths \
     "discord-readonly-bot" \
     "upstream/discord-readonly-bot" \
     "Add read-only Discord companion bot" \
     "Add read-only Discord companion bot" \
     "Adds an experimental read-only Discord companion bot and protected Console API adapter for status, readiness, service health, and related operational visibility. The adapter remains read-only and enforces backend authorization." \
-    "Run Console adapter tests, Discord bot tests, secret scan, build, and Discord bot security gates. Confirm no write-capable Discord commands are included." \
+    "Run Console adapter tests, Discord bot tests, secret scan, and build. Confirm no write-capable Discord commands are included." \
     "discord-bot" \
     "console/api/src/integrations/discord" \
     "console/api/test/discordPolicy.test.js" \
@@ -345,9 +333,7 @@ main() {
     "console/api/test/discordAdapter.test.js" \
     "console/api/test/discordRoutes.test.js" \
     "docs/discord-control-bot" \
-    ".github/workflows/discord-bot-security-gates.yml" \
-    ".github/workflows/soc2-readiness-check.yml" \
-    ".github/PULL_REQUEST_TEMPLATE.md"
+    ".github/workflows/discord-bot-security-gates.yml"
 
   say "Done"
   if [[ "$EXECUTE" -ne 1 ]]; then
@@ -359,7 +345,6 @@ Add --create-prs to open draft upstream PRs with gh.
 Recommended sequence:
   bash scripts/create-upstream-prs.sh --execute --create-prs --only container-hardening
   bash scripts/create-upstream-prs.sh --execute --create-prs --only security-hygiene
-  bash scripts/create-upstream-prs.sh --execute --create-prs --only security-evidence
   bash scripts/create-upstream-prs.sh --execute --create-prs --only discord-readonly-bot
 
 EOF
