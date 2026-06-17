@@ -4,8 +4,11 @@ import { existsSync, readFileSync } from "node:fs";
 const requiredFiles = [
   "src/index.ts",
   "src/config.ts",
+  "src/consoleApi.ts",
+  "src/commands.ts",
   "src/security/redaction.ts",
   "src/security/authorization.ts",
+  "scripts/command-smoke.mjs",
   "test/redaction.test.mjs",
   "Dockerfile",
   "package-lock.json"
@@ -25,6 +28,14 @@ if (dockerfile.includes("/var/run/docker.sock")) {
 if (/privileged:\s*true/i.test(dockerfile)) {
   console.error("Privileged container mode is forbidden for the Discord bot.");
   process.exit(1);
+}
+
+const auth = readFileSync("src/security/authorization.ts", "utf8");
+for (const forbiddenCapability of ["write", "destructive", "broadcast", "admin"]) {
+  if (new RegExp(`\\|\\s*\"[^\"]*${forbiddenCapability}[^\"]*\"`).test(auth)) {
+    console.error(`Forbidden capability detected in bot authorization map: ${forbiddenCapability}`);
+    process.exit(1);
+  }
 }
 
 console.log("Discord bot scaffold validation passed.");
