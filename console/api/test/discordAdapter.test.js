@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DISCORD_ADAPTER_ROUTES, discordAdapterErrorResponse, discordAdapterHealth, discordAdapterStatus, discordWritesEnabled } from "../src/integrations/discord/adapter.js";
+import { DISCORD_ADAPTER_ROUTES, discordAdapterErrorResponse, discordAdapterHealth, discordAdapterReadiness, discordAdapterServices, discordAdapterStatus, discordWritesEnabled } from "../src/integrations/discord/adapter.js";
 
 const OLD_ENV = { ...process.env };
 
 function resetEnv() {
-  process.env.DISCORD_OBSERVER_ROLE_IDS = "";
+  process.env.DISCORD_OBSERVER_ROLE_IDS = "role-observer";
   process.env.DISCORD_MODERATOR_ROLE_IDS = "role-moderator";
   process.env.DISCORD_ADMIN_ROLE_IDS = "role-admin";
   process.env.DISCORD_OWNER_ROLE_IDS = "role-owner";
@@ -42,6 +42,13 @@ test("reports adapter health as experimental read-only", async () => {
   assert.equal(result.experimental, true);
   assert.equal(result.readOnly, true);
   assert.equal(result.writesEnabled, false);
+  assert.deepEqual(result.liveRoutes.sort(), [
+    "/api/integrations/discord/health",
+    "/api/integrations/discord/readiness",
+    "/api/integrations/discord/services",
+    "/api/integrations/discord/status"
+  ].sort());
+  assert.ok(result.plannedRoutes.includes("/api/integrations/discord/logs"));
 });
 
 test("forces writes disabled even if environment attempts to enable them", () => {
@@ -86,13 +93,18 @@ test("returns sanitized public status", async () => {
   assert.equal(Object.hasOwn(response.result, "ssh_host"), false);
 });
 
-test("requires admin capability for diagnostic status", async () => {
+test("requires admin capability before diagnostic status provider runs", async () => {
+  let called = false;
   await assert.rejects(() => discordAdapterStatus({
     config,
     actorPayload: actor(["role-moderator"]),
     diagnostic: true,
-    statusProvider: async () => ({ ssh_host: "172.19.240.122:22" })
+    statusProvider: async () => {
+      called = true;
+      return { ssh_host: "172.19.240.122:22" };
+    }
   }), /not authorized/);
+  assert.equal(called, false);
 
   const response = await discordAdapterStatus({
     config,
@@ -100,16 +112,48 @@ test("requires admin capability for diagnostic status", async () => {
     diagnostic: true,
     statusProvider: async () => ({ ssh_host: "172.19.240.122:22" })
   });
-  assert.equal(response.result.ssh_host, "172.19.240.122:22");
+  assert.equal(response.result.ssh_host, undefined);
+});
+
+test("allows observer readiness and services", async () => {
+  const readiness = await discordAdapterReadiness({
+    config,
+    actorPayload: actor(["role-observer"]),
+    readinessProvider: async () => ({ ready: true, overall: "READY", issues: [] })
+  });
+  assert.equal(readiness.ok, true);
+  assert.equal(readiness.result.ready, true);
+
+  const services = await discordAdapterServices({
+    config,
+    actorPayload: actor(["role-observer"]),
+    servicesProvider: async () => ({ overall: "OK", services: [{ name: "Database", status: "up" }], issues: [] })
+  });
+  assert.equal(services.ok, true);
+  assert.equal(services.result.services[0].name, "Database");
+});
+
+test("blocks public readiness and services", async () => {
+  await assert.rejects(() => discordAdapterReadiness({
+    config,
+    actorPayload: actor([]),
+    readinessProvider: async () => ({ ready: true })
+  }), /not authorized/);
+
+  await assert.rejects(() => discordAdapterServices({
+    config,
+    actorPayload: actor([]),
+    servicesProvider: async () => ({ services: [] })
+  }), /not authorized/);
 });
 
 test("formats safe adapter errors", () => {
-  const error = new Error("Failed with password: hunter2 at 127.0.0.1:15432");
+  const error = new Error("Failed with marker sample-value at 127.0.0.1:15432");
   error.code = "bad_request";
   error.statusCode = 400;
   const response = discordAdapterErrorResponse(error);
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.ok, false);
   assert.equal(response.body.code, "bad_request");
-  assert.doesNotMatch(response.body.error, /hunter2/);
+  assert.doesNotMatch(response.body.error, /127\.0\.0\.1/);
 });
