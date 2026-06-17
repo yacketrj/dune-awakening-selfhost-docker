@@ -14,7 +14,10 @@ const requiredFiles = [
   "discord-bot/src/security/authorization.ts",
   "console/api/src/integrations/discord/adapter.js",
   ".github/workflows/discord-bot-security-gates.yml",
-  ".github/workflows/soc2-readiness-check.yml"
+  ".github/workflows/soc2-readiness-check.yml",
+  ".github/workflows/semgrep-sast.yml",
+  ".github/workflows/trivy-vulnerability-scan.yml",
+  "scripts/generate-vulnerability-report.mjs"
 ];
 
 const forbiddenBotCapabilityPatterns = [
@@ -25,11 +28,12 @@ const forbiddenBotCapabilityPatterns = [
 ];
 
 const requiredDocTerms = new Map([
-  ["docs/discord-control-bot/soc2-control-matrix.md", ["soc 2 readiness", "evidence register", "open soc 2 gaps"]],
+  ["docs/discord-control-bot/soc2-control-matrix.md", ["soc 2 readiness", "evidence register", "open soc 2 gaps", "semgrep", "trivy"]],
   ["docs/discord-control-bot/project-status.md", ["current status", "roadmap", "read-only"]],
   ["docs/discord-control-bot/admin-guide.md", ["role mapping", "no write actions", "detailed status"]],
   ["docs/discord-control-bot/user-guide.md", ["commands", "public status", "detailed status"]],
-  ["docs/discord-control-bot/setup-guide.md", ["dune_bot_api_token_file", "start:discord-adapter", "smoke test"]]
+  ["docs/discord-control-bot/setup-guide.md", ["dune_bot_api_token_file", "start:discord-adapter", "smoke test"]],
+  ["docs/discord-control-bot/security-gates.md", ["semgrep", "trivy", "vulnerability report", "cvss"]]
 ]);
 
 let failed = false;
@@ -73,6 +77,16 @@ if (existsSync("console/api/src/integrations/discord/adapter.js")) {
   for (const required of ["writesEnabled: false", "readOnly: true", "discordRolePolicyHealth"]) {
     if (!adapter.includes(required)) {
       console.error(`[soc2-readiness] Adapter missing required safety marker: ${required}`);
+      failed = true;
+    }
+  }
+}
+
+if (existsSync("scripts/generate-vulnerability-report.mjs")) {
+  const reporter = readFileSync("scripts/generate-vulnerability-report.mjs", "utf8");
+  for (const required of ["cvssScore", "nvd.nist.gov/vuln/detail", "vulnerability-report.md", "vulnerability-report.json"]) {
+    if (!reporter.includes(required)) {
+      console.error(`[soc2-readiness] Vulnerability reporter missing required marker: ${required}`);
       failed = true;
     }
   }
