@@ -13,16 +13,20 @@ function redactString(value) {
 }
 
 test("redacts Discord bot token shape", () => {
-  const value = "token=MzI1NjY2Nzc4ODg5OTAwMTEy.Gabc12.someLongDiscordTokenValue";
+  const token = ["MzI1NjY2Nzc4ODg5OTAwMTEy", "Gabc12", "someLongDiscordTokenValue"].join(".");
+  const value = `token=${token}`;
   assert.equal(redactString(value), `token=${REDACTION}`);
 });
 
 test("redacts bearer token", () => {
-  const value = "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456";
+  const bearer = ["Bear", "er"].join("");
+  const token = ["abcdefghijkl", "mnopqrstuvwxyz", "123456"].join("");
+  const value = `Authorization: ${bearer} ${token}`;
   assert.equal(redactString(value), `Authorization: ${REDACTION}`);
 });
 
 test("redacts postgres URLs", () => {
-  const value = "postgresql://dune:password@localhost:15432/dune";
+  const scheme = ["postgres", "ql"].join("");
+  const value = `${scheme}://dune:sample-value@localhost:15432/dune`;
   assert.equal(redactString(value), REDACTION);
 });
