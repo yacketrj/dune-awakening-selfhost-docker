@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 
 const scriptsToCheck = [
   "scripts/generate-vulnerability-report.mjs",
+  "scripts/generate-stride-report.mjs",
   "scripts/sync-vulnerability-issues.mjs",
   "scripts/soc2-readiness-check.mjs"
 ];
@@ -16,6 +17,16 @@ for (const script of scriptsToCheck) {
 
 const temp = mkdtempSync(join(tmpdir(), "dune-security-automation-"));
 try {
+  const strideRun = run("node", ["scripts/generate-stride-report.mjs"], {
+    label: "generate STRIDE report"
+  });
+  assertIncludes(strideRun.stdout, "STRIDE findings:");
+  assertFileIncludes("artifacts/security/stride-report.md", "# STRIDE Threat Model Report");
+  assertFileIncludes("artifacts/security/stride-report.md", "Spoofing");
+  assertFileIncludes("artifacts/security/stride-report.md", "Tampering");
+  assertFileIncludes("artifacts/security/stride-report.md", "Elevation of Privilege");
+  assertFileIncludes("artifacts/security/stride-report.json", "trustBoundaries");
+
   const semgrepPath = join(temp, "semgrep.json");
   writeFileSync(semgrepPath, JSON.stringify(sampleSemgrepReport(), null, 2), "utf8");
 
@@ -104,6 +115,14 @@ function assertNotIncludes(value, unexpected) {
     console.error(value);
     process.exit(1);
   }
+}
+
+function assertFileIncludes(path, expected) {
+  if (!existsSync(path)) {
+    console.error(`[security-automation] expected file to exist: ${path}`);
+    process.exit(1);
+  }
+  assertIncludes(readFileSync(path, "utf8"), expected);
 }
 
 function sampleReport() {
