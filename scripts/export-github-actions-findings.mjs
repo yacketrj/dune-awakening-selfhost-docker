@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const options = parseArgs(args);
+const requestCache = new Map();
+let authToken;
+let lastRateLimit = null;
+let requestCount = 0;
 
 if (!options.sources.length) {
   usage();
@@ -24,11 +29,11 @@ if (options.out) {
 
 function usage() {
   console.error(`Usage:
-  node scripts/export-github-actions-findings.mjs <url|run-id|pr-number> [more sources...] [--repo owner/repo] [--out file] [--limit 10] [--include-logs]
+  node scripts/export-github-actions-findings.mjs <url|run-id|pr-number> [more sources...] [--repo owner/repo] [--out file] [--limit 10] [--include-logs] [--wait-rate-limit]
 
 Supported sources:
   - Pull request URL: https://github.com/OWNER/REPO/pull/3
-  - Pull request number with --repo: pr:3 or #3
+  - Pull request number with --repo: pr:3 or '#3'
   - Workflow URL: https://github.com/OWNER/REPO/actions/workflows/soc2-readiness-check.yml
   - Run URL: https://github.com/OWNER/REPO/actions/runs/123
   - Job URL: https://github.com/OWNER/REPO/actions/runs/123/job/456
@@ -40,7 +45,8 @@ Examples:
   node scripts/export-github-actions-findings.mjs https://github.com/OWNER/REPO/actions/workflows/soc2-readiness-check.yml --limit 5
 
 Authentication:
-  For private repositories or log access, set GITHUB_TOKEN or GH_TOKEN.
+  For private repositories, log access, or higher rate limits, set GITHUB_TOKEN or GH_TOKEN.
+  If neither variable is set, the exporter will try to read a token from 'gh auth token'.
 `);
 }
 
@@ -50,7 +56,11 @@ function parseArgs(values) {
     repo: process.env.GITHUB_REPOSITORY || "",
     out: "",
     limit: 10,
-    includeLogs: false
+    includeLogs: false,
+    skipArtifacts: false,
+    waitRateLimit: false,
+    maxWaitSeconds: 300,
+    noGhToken: false
   };
 
   for (let i = 0; i < values.length; i += 1) {
@@ -59,10 +69,15 @@ function parseArgs(values) {
     else if (value === "--out") parsed.out = values[++i] || "";
     else if (value === "--limit") parsed.limit = Number(values[++i] || 10);
     else if (value === "--include-logs") parsed.includeLogs = true;
+    else if (value === "--skip-artifacts") parsed.skipArtifacts = true;
+    else if (value === "--wait-rate-limit") parsed.waitRateLimit = true;
+    else if (value === "--max-wait-seconds") parsed.maxWaitSeconds = Number(values[++i] || 300);
+    else if (value === "--no-gh-token") parsed.noGhToken = true;
     else parsed.sources.push(value);
   }
 
   parsed.limit = Number.isFinite(parsed.limit) && parsed.limit > 0 ? Math.floor(parsed.limit) : 10;
+  parsed.maxWaitSeconds = Number.isFinite(parsed.maxWaitSeconds) && parsed.maxWaitSeconds >= 0 ? Math.floor(parsed.maxWaitSeconds) : 300;
   return parsed;
 }
 
@@ -70,22 +85,25 @@ async function exportFindings(opts) {
   const runsById = new Map();
   const findings = [];
   const sourceErrors = [];
+  const repositories = new Set();
 
   for (const source of opts.sources) {
+    let parsed = null;
     try {
-      const parsed = parseSource(source, opts.repo);
+      parsed = parseSource(source, opts.repo);
       if (!parsed.repo) throw new Error(`Repository could not be resolved for source: ${source}`);
+      repositories.add(parsed.repo);
 
       if (parsed.type === "pr") {
         const pr = await getPullRequest(parsed.repo, parsed.prNumber);
         const prRuns = await listRunsForHeadSha(parsed.repo, pr.head?.sha, opts.limit);
         for (const run of prRuns.workflow_runs || []) {
-          await addRun(parsed.repo, run.id, null, opts, runsById, findings);
+          await addRun(parsed.repo, run.id, null, opts, runsById, findings, run);
         }
       } else if (parsed.type === "workflow") {
         const workflowRuns = await listWorkflowRuns(parsed.repo, parsed.workflow, opts.limit);
         for (const run of workflowRuns.workflow_runs || []) {
-          await addRun(parsed.repo, run.id, null, opts, runsById, findings);
+          await addRun(parsed.repo, run.id, null, opts, runsById, findings, run);
         }
       } else if (parsed.type === "job") {
         await addRun(parsed.repo, parsed.runId, parsed.jobId, opts, runsById, findings);
@@ -93,28 +111,39 @@ async function exportFindings(opts) {
         await addRun(parsed.repo, parsed.runId, null, opts, runsById, findings);
       }
     } catch (error) {
-      sourceErrors.push({ source, error: error.message || String(error) });
+      sourceErrors.push({
+        source,
+        repository: parsed?.repo || "",
+        error: normalizeExportError(error)
+      });
     }
   }
 
   const runs = [...runsById.values()].sort((a, b) => Number(b.id) - Number(a.id));
+  const repository = opts.repo || inferRepository(runs) || [...repositories][0] || "";
 
   return {
     schemaVersion: "github-actions-findings/v1",
     generatedAt: new Date().toISOString(),
-    repository: opts.repo || inferRepository(runs) || "",
+    repository,
     sources: opts.sources,
     summary: summarize(runs, findings, sourceErrors),
+    requestTelemetry: {
+      requestCount,
+      cacheEntries: requestCache.size,
+      authenticated: Boolean(getAuthToken()),
+      rateLimit: lastRateLimit
+    },
     findings,
     runs,
     sourceErrors
   };
 }
 
-async function addRun(repo, runId, onlyJobId, opts, runsById, findings) {
-  const run = await getRun(repo, runId);
+async function addRun(repo, runId, onlyJobId, opts, runsById, findings, runPayload = null) {
+  const run = runPayload || await getRun(repo, runId);
   const jobsPayload = await listRunJobs(repo, runId);
-  const artifactsPayload = await listRunArtifacts(repo, runId);
+  const artifactsPayload = opts.skipArtifacts ? { artifacts: [] } : await listRunArtifacts(repo, runId);
   const artifacts = (artifactsPayload.artifacts || []).map(normalizeArtifact);
 
   const jobs = [];
@@ -122,7 +151,7 @@ async function addRun(repo, runId, onlyJobId, opts, runsById, findings) {
     if (onlyJobId && Number(job.id) !== Number(onlyJobId)) continue;
     const normalized = normalizeJob(job);
     if (opts.includeLogs && normalized.conclusion === "failure") {
-      normalized.logExcerpt = await fetchLogExcerpt(repo, normalized.id).catch((error) => `Unable to fetch log excerpt: ${error.message || error}`);
+      normalized.logExcerpt = await fetchLogExcerpt(repo, normalized.id).catch((error) => `Unable to fetch log excerpt: ${normalizeExportError(error)}`);
     }
     jobs.push(normalized);
 
@@ -316,19 +345,84 @@ function inferRepository(runs) {
 }
 
 async function apiGet(path) {
-  const response = await fetch(`https://api.github.com${path}`, { headers: apiHeaders() });
-  if (!response.ok) throw new Error(`GitHub API ${response.status} ${response.statusText}: ${await response.text()}`);
-  return response.json();
+  const key = `json:${path}`;
+  if (requestCache.has(key)) return requestCache.get(key);
+  const payload = await apiFetch(path, "json");
+  requestCache.set(key, payload);
+  return payload;
 }
 
 async function apiText(path) {
-  const response = await fetch(`https://api.github.com${path}`, { headers: apiHeaders() });
-  if (!response.ok) throw new Error(`GitHub API ${response.status} ${response.statusText}: ${await response.text()}`);
-  return response.text();
+  const key = `text:${path}`;
+  if (requestCache.has(key)) return requestCache.get(key);
+  const payload = await apiFetch(path, "text");
+  requestCache.set(key, payload);
+  return payload;
+}
+
+async function apiFetch(path, responseType) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    requestCount += 1;
+    const response = await fetch(`https://api.github.com${path}`, { headers: apiHeaders() });
+    updateRateLimit(response);
+
+    if (response.ok) return responseType === "text" ? response.text() : response.json();
+
+    const body = await response.text();
+    const rateLimited = isRateLimited(response, body);
+    if (rateLimited && options.waitRateLimit && attempt === 0) {
+      const waitMs = rateLimitWaitMs(response);
+      if (waitMs <= options.maxWaitSeconds * 1000) {
+        console.error(`[actions-findings] GitHub API rate limit reached; waiting ${Math.ceil(waitMs / 1000)}s before retry.`);
+        await sleep(waitMs);
+        continue;
+      }
+    }
+
+    throw apiError(response, body, rateLimited);
+  }
+  throw new Error(`GitHub API request failed after retry: ${path}`);
+}
+
+function updateRateLimit(response) {
+  const limit = response.headers.get("x-ratelimit-limit");
+  const remaining = response.headers.get("x-ratelimit-remaining");
+  const reset = response.headers.get("x-ratelimit-reset");
+  const resource = response.headers.get("x-ratelimit-resource");
+  if (!limit && !remaining && !reset) return;
+  lastRateLimit = {
+    limit: limit === null ? null : Number(limit),
+    remaining: remaining === null ? null : Number(remaining),
+    resetEpochSeconds: reset === null ? null : Number(reset),
+    resetAt: reset ? new Date(Number(reset) * 1000).toISOString() : null,
+    resource: resource || null
+  };
+}
+
+function isRateLimited(response, body) {
+  return response.status === 403 && (
+    response.headers.get("x-ratelimit-remaining") === "0" ||
+    /rate limit exceeded/i.test(body)
+  );
+}
+
+function rateLimitWaitMs(response) {
+  const reset = Number(response.headers.get("x-ratelimit-reset") || 0);
+  if (!reset) return 60000;
+  return Math.max(0, (reset * 1000) - Date.now() + 1500);
+}
+
+function apiError(response, body, rateLimited) {
+  const authHint = getAuthToken()
+    ? "Authenticated GitHub API request was rate-limited or denied."
+    : "Unauthenticated GitHub API request was rate-limited. Set GITHUB_TOKEN or GH_TOKEN, or run 'gh auth login'.";
+  const resetHint = lastRateLimit?.resetAt ? ` Rate limit resets at ${lastRateLimit.resetAt}.` : "";
+  const waitHint = rateLimited ? ` ${authHint}${resetHint} You may also pass --wait-rate-limit.` : "";
+  return new Error(`GitHub API ${response.status} ${response.statusText}: ${body}${waitHint}`);
 }
 
 function apiHeaders() {
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+  const token = getAuthToken();
   const headers = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
@@ -336,4 +430,28 @@ function apiHeaders() {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+function getAuthToken() {
+  if (authToken !== undefined) return authToken;
+  authToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+  if (!authToken && !options.noGhToken) authToken = readGhAuthToken();
+  return authToken;
+}
+
+function readGhAuthToken() {
+  const result = spawnSync("gh", ["auth", "token"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 5000
+  });
+  return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function normalizeExportError(error) {
+  return String(error?.message || error);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
