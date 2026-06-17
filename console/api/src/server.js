@@ -14,11 +14,11 @@ import * as duneDb from "./duneDb.js";
 import { audit, recordAdminHistory } from "./audit.js";
 import { redact } from "./redact.js";
 import { listCatalogItems, resolveCatalogItem } from "./adminCatalog.js";
-import { buildBroadcastCommand, buildShutdownBroadcastCommand, publishServerCommand } from "./rmq.js";
-import { clearCarePackageHistory, enableCarePackage, grantEligibleCarePackages, grantCarePackage, retryCarePackageGrant, runCarePackageAutoScan, saveCarePackageConfig, carePackageCapabilities, carePackageConfig, carePackageEligiblePlayers, carePackageHistory } from "./carePackage.js";
+import { buildBroadcastCommand, buildShutdownBroadcastCommand, publishMapChat, publishServerCommand } from "./rmq.js";
+import { clearCarePackageHistory, enableCarePackage, ensureCarePackageServerPersona, grantEligibleCarePackages, grantCarePackage, retryCarePackageGrant, runCarePackageAutoScan, saveCarePackageConfig, carePackageCapabilities, carePackageConfig, carePackageEligiblePlayers, carePackageHistory } from "./carePackage.js";
 import { readJsonBody, readMultipartForm } from "./httpSafety.js";
 import { parseBackupAutoStatus, parseBackupListRows } from "./statusParsers.js";
-import { assertInstalledAddonPermission, fetchCommunityAddons, installCommunityAddon, installedAddonContentPath, listInstalledAddons, removeInstalledAddon, setInstalledAddonEnabled } from "./addons.js";
+import { assertInstalledAddonPermission, fetchCommunityAddons, installCommunityAddon, installedAddonContentPath, listInstalledAddons, removeInstalledAddon, setInstalledAddonEnabled, syncInstalledAddonLifecycle } from "./addons.js";
 import { performanceSnapshot as collectPerformanceSnapshot } from "./services/performance.js";
 import { serveStatic, contentTypeForPath } from "./http/staticFiles.js";
 import { discoverServices } from "./services/serviceDiscovery.js";
@@ -300,9 +300,10 @@ async function handleApi(req, res) {
   if (path === "/api/admin/history") return commandJson(res, "adminHistory");
   if (path === "/api/admin/history/clear" && req.method === "POST") return clearAdminHistoryRoute(req, res);
   if (path === "/api/admin/broadcast" && req.method === "POST") return broadcastRoute(req, res);
+  if (path === "/api/admin/map-chat" && req.method === "POST") return mapChatRoute(req, res);
   if (path === "/api/admin/broadcast-shutdown" && req.method === "POST") return shutdownBroadcastRoute(req, res);
   if (path === "/api/addons/community") return json(res, 200, await fetchCommunityAddons());
-  if (path === "/api/addons/installed") return json(res, 200, listInstalledAddons(config));
+  if (path === "/api/addons/installed") return json(res, 200, await installedAddonsRoute());
   if (path === "/api/addons/community/install" && req.method === "POST") {
     const body = await readJson(req);
     const result = await installCommunityAddon(config, body.id, { approvedPermissions: body.approvedPermissions || [] });
@@ -311,6 +312,7 @@ async function handleApi(req, res) {
   }
   if (path.match(/^\/api\/addons\/installed\/[^/]+\/enable$/) && req.method === "POST") {
     const id = decodeURIComponent(path.split("/").at(-2));
+    await syncInstalledAddonLifecycleFromCommunity();
     const result = setInstalledAddonEnabled(config, id, true);
     audit(config, req, "addons.enable", { id: result.addon.id, version: result.addon.version, ok: true });
     return json(res, 200, result);
@@ -411,8 +413,8 @@ async function handleApi(req, res) {
   if (path === "/api/maps/autoscaler" && req.method === "POST") return confirmedTask(req, res, "maps", "autoscalerAction", {}, "AUTOSCALER CHANGE");
   if (path === "/api/maps/autoscaler") return commandJson(res, "autoscalerStatus");
   if (path === "/api/maps/memory" && req.method === "POST") return memoryRoute(req, res);
-  if (path === "/api/maps/memory/swap" && req.method === "POST") return swapMemoryRoute(req, res);
-  if (path === "/api/maps/memory/swap") return json(res, 200, memoryBalancer.publicState());
+  if (path === "/api/maps/memory/balancer" && req.method === "POST") return memoryBalancerRoute(req, res);
+  if (path === "/api/maps/memory/balancer") return json(res, 200, memoryBalancer.publicState());
   if (path === "/api/maps/memory/live") return liveMapMemoryRoute(res);
   if (path === "/api/maps/memory") return commandJson(res, "memoryStatus");
   if (path === "/api/maps/user-settings/schema") return userSettingsSchemaRoute(res);
@@ -463,6 +465,19 @@ async function addonBridgeRoute(req, res, path) {
   }
   audit(config, req, "addons.bridge", { id, action, ok: false, reason: "Unsupported addon action" });
   return json(res, 400, { error: `Unsupported addon action: ${action || "unknown"}` });
+}
+
+async function installedAddonsRoute() {
+  await syncInstalledAddonLifecycleFromCommunity();
+  return listInstalledAddons(config);
+}
+
+async function syncInstalledAddonLifecycleFromCommunity() {
+  try {
+    syncInstalledAddonLifecycle(config, await fetchCommunityAddons());
+  } catch {
+    // Keep the last known local lifecycle state when the community catalog is unreachable.
+  }
 }
 
 function addonContentRoute(req, res, path) {
@@ -934,13 +949,13 @@ async function memoryRoute(req, res) {
   return task(req, res, "maps", operation, body);
 }
 
-async function swapMemoryRoute(req, res) {
+async function memoryBalancerRoute(req, res) {
   const body = await readJson(req);
   const enabled = Boolean(body.enabled);
   if (enabled === memoryBalancer.publicState().enabled) return json(res, 200, memoryBalancer.publicState());
 
   const state = await memoryBalancer.setEnabled(enabled);
-  audit(config, req, "maps.memory.swap", { enabled });
+  audit(config, req, "maps.memory.balancer", { enabled });
   return json(res, 200, state);
 }
 
@@ -1394,6 +1409,70 @@ async function broadcastRoute(req, res) {
     recordAdminHistory(config, { command: "web-broadcast", target: "all", friendly: body.title || "Broadcast", path: "rmq:heartbeats/notifications", result: "blocked", message });
     return json(res, 400, { supported: false, error: redact(error.message || error), reason: redact(error.message || error) });
   }
+}
+
+async function mapChatRoute(req, res) {
+  const body = await readJson(req);
+  const message = body.body ?? body.message;
+  const mapName = body.mapName || body.region || "HaggaBasin";
+  const dimension = body.dimension ?? 0;
+  try {
+    const persona = await ensureCarePackageServerPersona(db);
+    const recipients = config.mockMode ? [{ queue: "mock-player_queue" }] : await mapChatRecipients(mapName, dimension);
+    if (!recipients.length) throw new Error("No online players are currently subscribed to that map.");
+    const results = [];
+    for (const recipient of recipients) {
+      results.push(config.mockMode
+        ? { code: 0, stdout: "mock map chat\n", stderr: "", args: [] }
+        : await publishMapChat(config, {
+            mapName,
+            dimension,
+            message,
+            senderFuncomId: persona.funcomId,
+            senderHexFlsId: persona.hexFlsId,
+            recipientQueue: recipient.queue
+          }));
+    }
+    const target = `${mapName}.${dimension}`;
+    audit(config, req, "admin.map-chat", { supported: true, target, recipients: recipients.length });
+    recordAdminHistory(config, { command: "web-map-chat", target, friendly: "Map Chat", path: "rmq:chat.map/direct", result: "published", message });
+    return json(res, 200, { supported: true, ok: true, stdout: results.map((result) => result.stdout).join("\n"), stderr: results.map((result) => result.stderr).filter(Boolean).join("\n"), note: `Map chat message was sent to ${recipients.length} online player${recipients.length === 1 ? "" : "s"}.`, recipients: recipients.length });
+  } catch (error) {
+    const reason = redact(String(error.message || error).replaceAll("Care Package message whisper", "Map chat"));
+    audit(config, req, "admin.map-chat", { supported: false, error: reason });
+    recordAdminHistory(config, { command: "web-map-chat", target: `${mapName}.${dimension}`, friendly: "Map Chat", path: "rmq:chat.map", result: "blocked", message });
+    return json(res, 400, { supported: false, error: reason, reason });
+  }
+}
+
+async function mapChatRecipients(mapName, dimension) {
+  const maps = mapChatServerMaps(mapName);
+  const dim = Number(dimension || 0);
+  const values = [...maps, dim];
+  const mapPlaceholders = maps.map((_, index) => `$${index + 1}`).join(",");
+  const result = await db.query(`
+    select distinct concat(ac."user", '_queue') as queue
+    from dune.player_state ps
+    join dune.accounts ac on ac.id = ps.account_id
+    join dune.world_partition wp on wp.server_id = ps.server_id
+    where ps.online_status <> 'Offline'
+      and coalesce(ac."user", '') <> ''
+      and wp.map in (${mapPlaceholders})
+      and coalesce(wp.dimension_index, 0) = $${maps.length + 1}
+    order by queue`, values);
+  return (result.rows || []).map((row) => ({ queue: String(row.queue || "").trim() })).filter((row) => row.queue);
+}
+
+function mapChatServerMaps(mapName) {
+  const value = String(mapName || "").trim();
+  const aliases = {
+    HaggaBasin: ["Survival_1"],
+    Overland: ["Overmap"],
+    DeepDesert: ["DeepDesert_1"],
+    Arrakeen: ["SH_Arrakeen"],
+    HarkoVillage: ["SH_HarkoVillage"]
+  };
+  return aliases[value] || [value];
 }
 
 async function shutdownBroadcastRoute(req, res) {

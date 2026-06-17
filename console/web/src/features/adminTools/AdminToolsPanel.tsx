@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { adminApi } from "../../api/admin";
+import { liveMapApi } from "../../api/liveMap";
 import { playersApi } from "../../api/players";
 import { serverApi } from "../../api/server";
 import { setupApi, type Task } from "../../api/setup";
@@ -13,6 +14,7 @@ import { formatUiSentence, stripAnsi, titleCase } from "../../lib/display";
 type HomeTaskResult = { status: "running" | "succeeded" | "failed" | "stopped"; title: string; message?: string; details?: string };
 type ConfirmAction = (message: string, options?: { title?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }) => Promise<boolean>;
 type InlineResult = { key: string; tone: "success" | "danger" | "neutral"; text: string; pending?: boolean };
+type MapChatOption = { key: string; label: string; chatRegion: string; dimension: number; status: string; players: number };
 
 type AdminToolsPanelProps = {
   onError: (text: string) => void;
@@ -33,6 +35,9 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastBody, setBroadcastBody] = useState("");
   const [broadcastDuration, setBroadcastDuration] = useState("30");
+  const [mapChatOptions, setMapChatOptions] = useState<MapChatOption[]>(defaultMapChatOptions());
+  const [mapChatTarget, setMapChatTarget] = useState(defaultMapChatOptions()[0]?.key || "HaggaBasin|0");
+  const [mapChatBody, setMapChatBody] = useState("");
   const [history, setHistory] = useState("");
   const [actionResult, setActionResult] = useState<InlineResult | null>(null);
   const resultTimer = useRef<number | null>(null);
@@ -148,6 +153,7 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
 
   useEffect(() => {
     playersApi.list().then((result) => setPlayers(result.rows || [])).catch(() => undefined);
+    loadMapChatOptions().catch(() => undefined);
     loadHistory().catch(() => undefined);
     loadRestartSchedule().catch((error) => onError(error instanceof Error ? error.message : String(error)));
     return () => {
@@ -195,6 +201,22 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
     }, "Broadcast message was sent successfully.");
   }
 
+  async function sendMapChat() {
+    const target = mapChatOptions.find((option) => option.key === mapChatTarget) || mapChatOptions[0] || defaultMapChatOptions()[0];
+    await runAdminAction("map-chat", "Sending map chat message", async () => {
+      await adminApi.mapChat(target.chatRegion, target.dimension, mapChatBody);
+      await loadHistory(true);
+    }, "Map chat message was sent successfully.");
+  }
+
+  async function loadMapChatOptions() {
+    const result = await liveMapApi.services();
+    const options = buildMapChatOptions(result.rows || []);
+    if (!options.length) return;
+    setMapChatOptions(options);
+    setMapChatTarget((current) => options.some((option) => option.key === current) ? current : options[0].key);
+  }
+
   const historyRows = parseHistoryRows(history, players, "admin-tools");
 
   return <section className="panel admin-tools-panel">
@@ -233,6 +255,16 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
             <label className="inline-field">Duration Seconds<input type="number" min="1" max="3600" value={broadcastDuration} onChange={(event) => setBroadcastDuration(event.target.value)} /></label>
             <button onClick={() => run(sendBroadcast)}>Send Broadcast</button>
             <InlineActionResult result={actionResult} resultKey="broadcast" />
+          </div>
+        </div>
+        <div className="action-line broadcast-line map-chat-line">
+          <label className="broadcast-title">Map Chat Destination<select value={mapChatTarget} onChange={(event) => setMapChatTarget(event.target.value)}>
+            {mapChatOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+          </select></label>
+          <label className="broadcast-message">Map Chat Message<textarea rows={3} value={mapChatBody} onChange={(event) => setMapChatBody(event.target.value)} placeholder="Message shown in this map chat" /></label>
+          <div className="broadcast-controls-row">
+            <button onClick={() => run(sendMapChat)}>Send Map Chat</button>
+            <InlineActionResult result={actionResult} resultKey="map-chat" />
           </div>
         </div>
       </div></div>}
@@ -307,6 +339,69 @@ function isTerminalTask(status: string) {
   return ["succeeded", "failed", "cancelled"].includes(status);
 }
 
+function buildMapChatOptions(rows: Record<string, unknown>[]) {
+  const candidates = rows.map((row) => {
+    const map = String(row.map || "").trim();
+    if (!map) return null;
+    const dimension = Number(row.dimension_index || 0);
+    const alive = Boolean(row.alive);
+    const ready = Boolean(row.ready);
+    const players = Number(row.connected_players || 0);
+    const chatRegion = chatRegionForMap(map);
+    const status = ready ? "Ready" : alive ? "Warming" : "Offline";
+    const destinationName = mapChatDestinationName(row, map);
+    return {
+      key: `${chatRegion}|${dimension}`,
+      label: `${destinationName} (${status}, ${players} online)`,
+      chatRegion,
+      dimension,
+      status,
+      players,
+      alive,
+      ready
+    };
+  }).filter((option): option is MapChatOption & { alive: boolean; ready: boolean } => Boolean(option));
+
+  const running = candidates.filter((option) => option.alive || option.ready);
+  const source = running.length ? running : candidates;
+  const seen = new Set<string>();
+  return source.sort((a, b) => Number(b.ready) - Number(a.ready) || Number(b.alive) - Number(a.alive) || a.chatRegion.localeCompare(b.chatRegion) || a.dimension - b.dimension).filter((option) => {
+    if (seen.has(option.key)) return false;
+    seen.add(option.key);
+    return true;
+  }).map(({ alive, ready, ...option }) => option);
+}
+
+function defaultMapChatOptions(): MapChatOption[] {
+  return [
+    { key: "HaggaBasin|0", label: "Survival Sietch (Default, 0 online)", chatRegion: "HaggaBasin", dimension: 0, status: "Default", players: 0 },
+    { key: "Overland|0", label: "Overland (Default, 0 online)", chatRegion: "Overland", dimension: 0, status: "Default", players: 0 },
+    { key: "DeepDesert|0", label: "Deep Desert (Default, 0 online)", chatRegion: "DeepDesert", dimension: 0, status: "Default", players: 0 }
+  ];
+}
+
+function mapChatDestinationName(row: Record<string, unknown>, map: string) {
+  const name = String(row.name || "").trim();
+  return name || friendlyMapChatName(map);
+}
+
+function chatRegionForMap(map: string) {
+  const value = String(map || "").trim();
+  const aliases: Record<string, string> = {
+    Survival_1: "HaggaBasin",
+    Overmap: "Overland",
+    DeepDesert_1: "DeepDesert",
+    SH_Arrakeen: "Arrakeen",
+    SH_HarkoVillage: "HarkoVillage"
+  };
+  if (aliases[value]) return aliases[value];
+  return value.replace(/^SH_/, "").replace(/^CB_Story_/, "").replace(/^CB_Dungeon_/, "").replace(/^DLC_Story_/, "");
+}
+
+function friendlyMapChatName(map: string) {
+  return chatRegionForMap(map).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+}
+
 function parseHistoryRows(text: string, players: Record<string, unknown>[] = [], scope: "all" | "admin-tools" = "all") {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => !/^time\s+/i.test(line) && !/^no admin command history found\.?$/i.test(line)).map((line) => {
     const parts = line.split(/\t/);
@@ -324,7 +419,7 @@ function adminHistoryLineMatchesScope(command: string, target: string, scope: "a
   if (scope === "all") return true;
   const rawCommand = String(command || "").trim();
   const rawTarget = String(target || "").trim();
-  if (/^web-(broadcast|shutdown-broadcast|hydrate-all)$/i.test(rawCommand)) return true;
+  if (/^web-(broadcast|shutdown-broadcast|map-chat|hydrate-all)$/i.test(rawCommand)) return true;
   if (/^KickPlayer$/i.test(rawCommand) && /^(all|\*)$/i.test(rawTarget)) return true;
   return false;
 }
@@ -344,6 +439,7 @@ function friendlyAdminHistoryValue(value: string) {
 function friendlyAdminHistoryAction(value: string) {
   const raw = String(value || "").trim();
   const labels: Record<string, string> = { "web-hydrate-all": "Hydrate All", AddItemToInventory: "Grant Item", AwardXP: "Award XP", UpdateAllWaterFillables: "Refill Container", KickPlayer: "Kick Player", GrantTemplate: "Grant Template", SkillsSetUnspentSkillPoints: "Set Skill Points", SkillsSetModuleLevel: "Set Skill Module", CleanPlayerInventory: "Clean Inventory", ResetProgression: "Reset Progression", TeleportTo: "Teleport Player", SpawnVehicleAt: "Spawn Vehicle", SpecializationXP: "Specialization XP" };
+  labels["web-map-chat"] = "Map Chat";
   if (labels[raw]) return labels[raw];
   const cleaned = raw.replace(/^web[-_]/i, "").replace(/[-_]+/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/\bXP\b/i, "XP").replace(/\s+/g, " ").trim();
   return cleaned ? titleCaseWords(cleaned).replace(/\bXp\b/g, "XP") : "-";
@@ -375,6 +471,7 @@ function friendlyAdminHistorySummary(friendly: string, path: string, payload: st
   const parsed = parseJsonMaybe(payload) as { messagePreview?: unknown } | null;
   const message = parsed?.messagePreview;
   const messageText = typeof message === "string" && message.trim() ? `: "${message.trim().slice(0, 80)}${message.trim().length > 80 ? "..." : ""}"` : "";
+  if (/^web-map-chat$/i.test(String(command || ""))) return `Map chat${messageText}`;
   if (/broadcast/i.test(label) || /^web-(broadcast|shutdown-broadcast)$/i.test(String(command || ""))) return `Broadcast${messageText}`;
   if (/hydrate/i.test(label) || /^web-hydrate-all$/i.test(String(command || ""))) return "Hydrated online players";
   if (/kick/i.test(label)) return "Kick command";

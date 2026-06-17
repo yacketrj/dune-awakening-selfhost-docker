@@ -8,6 +8,12 @@ Dune Docker Console is a Docker-based self-hosting package for Dune: Awakening w
 
 This project is unofficial. It is not affiliated with, endorsed by, sponsored by, or supported by Funcom.
 
+## Community & Support
+
+Need help, want to follow updates, or want to discuss features, addons, and self-hosting?
+
+Join our fast growing Discord: [Dune: Awakening Docker](https://discord.gg/9pQqytu6BU)
+
 ## Features
 
 - Browser setup wizard for fresh self-hosted servers

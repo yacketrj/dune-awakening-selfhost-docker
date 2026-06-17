@@ -353,6 +353,58 @@ test("care package grant partial failures records partial_failed status and summ
   }
 });
 
+test("care package auto scan does not repeat after package content was delivered in a partial grant", async () => {
+  const config = tempConfig();
+  try {
+    writeCatalog(config);
+    saveCarePackageConfig(config, {
+      enabled: true,
+      autoGrantEnabled: true,
+      activeKitId: "welcome-kit",
+      autoGrantKitId: "welcome-kit",
+      kits: [{
+        id: "welcome-kit",
+        name: "Welcome Kit",
+        xp: 0,
+        sendMessage: "Welcome to our server!",
+        items: [
+          { itemName: "Plant Fiber", quantity: 1, durability: 1 },
+          { itemName: "Missing Item", quantity: 1, durability: 1 }
+        ]
+      }],
+      autoGrantRules: [{ id: "first-online-rule", enabled: true, kitId: "welcome-kit", grantWhen: "first_online" }]
+    });
+    const first = await grantCarePackage(config, "Player#1", {
+      confirmation: "GRANT CARE PACKAGE",
+      source: "auto",
+      kitId: "welcome-kit",
+      actorId: 1,
+      accountId: "account-1",
+      funcomId: "Player#1",
+      flsId: "Player#1",
+      characterName: "Player",
+      onlineStatus: "Online"
+    }, { db: fakePersonaDb() });
+    assert.equal(first.status, "partial_failed");
+    assert.equal(first.results.some((result) => result.ok && result.operation !== "carePackageWelcomeWhisper"), true);
+
+    const repeat = await runCarePackageAutoScan(config, [{
+      actor_id: 2,
+      account_id: "account-1",
+      funcom_id: "Player#1",
+      fls_id: "Player#1",
+      character_name: "Player Again",
+      action_player_id: "Player#1",
+      online_status: "Online"
+    }], "auto", { db: fakePersonaDb() });
+    assert.equal(repeat.granted, 0);
+    assert.equal(repeat.skipped, 1);
+    assert.match(repeat.results[0].reason, /Already granted Welcome Kit/);
+  } finally {
+    rmSync(config.repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("care package grant all failures records failed status and no blank summary", async () => {
   const config = tempConfig();
   try {

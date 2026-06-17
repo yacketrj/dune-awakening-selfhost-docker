@@ -27,5 +27,6 @@ export const adminApi = {
   history: () => api<{ stdout: string }>("/api/admin/history"),
   clearHistory: (scope: "all" | "admin-tools" = "all") => post<{ ok: boolean }>("/api/admin/history/clear", { scope }),
   kickAllOnline: (confirmation: string) => post<{ task: Task }>("/api/players/kick-all-online", { confirmation }),
-  broadcast: (title: string, body: string, durationSec: number) => post<{ supported: boolean; reason?: string; ok?: boolean; stdout?: string; stderr?: string; note?: string }>("/api/admin/broadcast", { title, body, durationSec })
+  broadcast: (title: string, body: string, durationSec: number) => post<{ supported: boolean; reason?: string; ok?: boolean; stdout?: string; stderr?: string; note?: string }>("/api/admin/broadcast", { title, body, durationSec }),
+  mapChat: (mapName: string, dimension: number, body: string) => post<{ supported: boolean; reason?: string; ok?: boolean; stdout?: string; stderr?: string; note?: string }>("/api/admin/map-chat", { mapName, dimension, body })
 };

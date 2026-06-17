@@ -476,7 +476,12 @@ function hasSuccessfulGrant(config, playerId, kitId, actorId = "", identity = {}
 }
 
 function isSuccessfulGrant(row) {
-  return row?.status === "granted" || (row?.ok === true && !row?.status);
+  return row?.status === "granted" || (row?.ok === true && !row?.status) || hasDeliveredCarePackageContent(row);
+}
+
+function hasDeliveredCarePackageContent(row = {}) {
+  if (!Array.isArray(row.results)) return false;
+  return row.results.some((result) => result?.ok === true && result.operation !== "carePackageWelcomeWhisper");
 }
 
 function skippedGrant(config, kit, player, reason, source) {
@@ -652,7 +657,7 @@ function resolveWelcomeWhisperRecipient(playerId, body = {}) {
   return { funcomId, characterName, flsId, queue: flsId ? `${flsId}_queue` : "" };
 }
 
-async function ensureCarePackageServerPersona(db) {
+export async function ensureCarePackageServerPersona(db) {
   if (!db?.query) throw new Error("Care Package message whisper cannot be sent: database is unavailable for Server persona setup");
   const encryptedColumns = await tableColumns(db, "encrypted_accounts");
   if (encryptedColumns.has("id")) {

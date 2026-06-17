@@ -77,6 +77,12 @@ echo "=== Starting Overmap ==="
 runtime/scripts/start-server-overmap.sh
 
 echo
+echo "=== Repairing Chat Exchanges ==="
+runtime/scripts/repair-chat-exchanges.sh || {
+  echo "Guild chat exchange repair could not complete. Guild chat may be unavailable until the next repair pass."
+}
+
+echo
 echo "=== Rechecking Network Advertisement Addresses ==="
 runtime/scripts/network-addresses.sh reconcile || {
   echo "Network address reconciliation could not complete. Run: runtime/scripts/network-addresses.sh status"
