@@ -45,6 +45,7 @@ jobs:
           test -f docs/discord-control-bot/templates/threat-model-template.md
           test -f docs/discord-control-bot/templates/release-checklist.md
           test -f docs/discord-control-bot/api-adapter-contract.md
+          test -f docs/discord-control-bot/adr/0001-experimental-read-only-companion-bot.md
           test -f .github/PULL_REQUEST_TEMPLATE.md
 
       - name: Ensure adapter scaffold exists
@@ -53,10 +54,12 @@ jobs:
           test -f console/api/src/integrations/discord/sanitize.js
           test -f console/api/src/integrations/discord/audit.js
           test -f console/api/src/integrations/discord/adapter.js
+          test -f console/api/src/integrations/discord/routes.js
           test -f console/api/test/discordPolicy.test.js
           test -f console/api/test/discordSanitize.test.js
           test -f console/api/test/discordAudit.test.js
           test -f console/api/test/discordAdapter.test.js
+          test -f console/api/test/discordRoutes.test.js
 
       - name: Block Docker socket mounts in bot assets
         run: |
@@ -93,6 +96,7 @@ jobs:
           grep -q "Milestone P0.1" docs/discord-control-bot/roadmap.md
           grep -q "Authorization" docs/discord-control-bot/api-adapter-contract.md
           grep -q "DAST Requirements" docs/discord-control-bot/api-adapter-contract.md
+          grep -q "experimental read-only" docs/discord-control-bot/adr/0001-experimental-read-only-companion-bot.md
 
   npm-gates:
     name: NPM / SCA Gates
