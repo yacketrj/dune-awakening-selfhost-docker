@@ -66,18 +66,19 @@ test("formatter derives missing client and S2S issues from structured status", (
   const services = response.embeds[0].fields.find((field) => field.name === "Services").value;
   assert.match(issues, /Overall status is ISSUE/);
   assert.match(issues, /Overmap Clients is MISSING/);
-  assert.match(issues, /Survival 1 S2s is MISSING/);
+  assert.match(issues, /Survival 1 S2S is MISSING/);
   assert.match(services, /Overmap/);
   assert.match(services, /Survival/);
 });
 
 test("formatter redacts secret-shaped values inside card output", () => {
+  const secret = ["x".repeat(24), "y".repeat(6), "z".repeat(20)].join(".");
   const response = formatCommandResponse("statusDetail", {
     ok: true,
     result: {
       overall: "READY",
-      token: "abc.def.ghi",
-      issues: ["safe issue"]
+      token: secret,
+      issues: [`safe issue ${secret}`]
     }
   });
 
@@ -85,5 +86,5 @@ test("formatter redacts secret-shaped values inside card output", () => {
   assert.equal(response.content, "");
   assert.doesNotMatch(combined, /```json/);
   assert.match(combined, /\[REDACTED\]/);
-  assert.doesNotMatch(combined, /abc\.def\.ghi/);
+  assert.doesNotMatch(combined, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
