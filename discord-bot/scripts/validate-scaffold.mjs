@@ -12,6 +12,9 @@ const requiredFiles = [
   "scripts/command-smoke.mjs",
   "scripts/discord-runtime.mjs",
   "scripts/discord-formatters.mjs",
+  "scripts/discord-install-url.mjs",
+  "scripts/discord-discover.mjs",
+  "scripts/discord-channel-access.mjs",
   "scripts/run-discord-runtime.sh",
   "scripts/run-local-discord-stack.sh",
   "test/redaction.test.mjs",
@@ -51,7 +54,13 @@ for (const capability of capabilityLiterals) {
   }
 }
 
-for (const file of ["scripts/discord-runtime.mjs", "scripts/discord-formatters.mjs"]) {
+for (const file of [
+  "scripts/discord-runtime.mjs",
+  "scripts/discord-formatters.mjs",
+  "scripts/discord-install-url.mjs",
+  "scripts/discord-discover.mjs",
+  "scripts/discord-channel-access.mjs"
+]) {
   const check = spawnSync("node", ["--check", file], { encoding: "utf8", timeout: 30000 });
   if (check.status !== 0) {
     console.error(`Discord syntax validation failed: ${file}`);
@@ -70,7 +79,7 @@ for (const forbidden of ["/var/run/docker.sock", "docker compose", "docker run",
   }
 }
 
-for (const required of ["formatCommandResponse", "embeds", "allowed_mentions", "parse: []"]) {
+for (const required of ["formatCommandResponse", "embeds", "allowed_mentions", "parse: []", "presence", "Arrakis status"]) {
   if (!runtime.includes(required)) {
     console.error(`Discord runtime missing embed-response marker: ${required}`);
     process.exit(1);
@@ -81,6 +90,22 @@ const formatter = readFileSync("scripts/discord-formatters.mjs", "utf8");
 for (const required of ["formatHealthResponse", "formatStatusCard", "formatReadinessResponse", "formatServicesResponse", "deriveIssues", "redact"]) {
   if (!formatter.includes(required)) {
     console.error(`Discord formatter missing required marker: ${required}`);
+    process.exit(1);
+  }
+}
+
+const installHelper = readFileSync("scripts/discord-install-url.mjs", "utf8");
+for (const required of ["bot applications.commands", "oauth2/authorize", "View Channel", "Use Application Commands"]) {
+  if (!installHelper.includes(required)) {
+    console.error(`Discord install helper missing required marker: ${required}`);
+    process.exit(1);
+  }
+}
+
+const channelHelper = readFileSync("scripts/discord-channel-access.mjs", "utf8");
+for (const required of ["--guild", "--channel", "--execute", "permission overwrite", "Use Application Commands"]) {
+  if (!channelHelper.includes(required)) {
+    console.error(`Discord channel helper missing required marker: ${required}`);
     process.exit(1);
   }
 }
