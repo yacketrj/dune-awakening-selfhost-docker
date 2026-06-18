@@ -253,8 +253,8 @@ show_host_timer_status_via_docker() {
 baseline_ip() {
   first_known_value \
     "${DUNE_IP_CHANGE_RESTART_LAST_IP:-}" \
-    "$(config_value runtime/generated/battlegroup.env SERVER_IP 2>/dev/null || true)" \
     "$(config_value .env SERVER_IP 2>/dev/null || true)" \
+    "$(config_value runtime/generated/battlegroup.env SERVER_IP 2>/dev/null || true)" \
     || true
 }
 

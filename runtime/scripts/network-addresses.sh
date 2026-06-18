@@ -3,8 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-[ -f .env ] && . ./.env
 [ -f runtime/generated/battlegroup.env ] && . runtime/generated/battlegroup.env
+[ -f .env ] && . ./.env
 source runtime/scripts/runtime-env.sh
 
 psql_exec() {
