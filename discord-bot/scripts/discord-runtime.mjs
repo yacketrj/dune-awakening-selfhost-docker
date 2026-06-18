@@ -53,6 +53,12 @@ async function startGateway() {
             os: process.platform,
             browser: "dune-discord-companion-bot",
             device: "dune-discord-companion-bot"
+          },
+          presence: {
+            status: "online",
+            since: null,
+            afk: false,
+            activities: [{ name: "Arrakis status", type: 3 }]
           }
         }
       }));
