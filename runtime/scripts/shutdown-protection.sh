@@ -49,6 +49,19 @@ can_manage_systemd_units() {
   [ -d /etc/systemd/system ] && [ -w /etc/systemd/system ]
 }
 
+can_write_log() {
+  [ -w "$LOG_FILE" ] || { [ ! -e "$LOG_FILE" ] && [ -w "$(dirname "$LOG_FILE")" ]; }
+}
+
+log_event() {
+  local message="$1"
+  if can_write_log; then
+    echo "[$(date -Is)] $message" >> "$LOG_FILE" 2>/dev/null || true
+  else
+    echo "[$(date -Is)] $message"
+  fi
+}
+
 docker_helper_image() {
   printf '%s' "${DUNE_SYSTEMD_HELPER_IMAGE:-redblink-dune-docker-console:dev}"
 }
@@ -221,6 +234,7 @@ enable_protection() {
 
 disable_protection() {
   read_state
+  write_state 0 "${DUNE_SHUTDOWN_PROTECTION_INSTALLED:-1}"
   if command -v systemctl >/dev/null 2>&1 && can_manage_systemd_units; then
     systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
     systemctl daemon-reload
@@ -239,6 +253,7 @@ disable_protection() {
 }
 
 remove_protection() {
+  write_state 0 0
   if command -v systemctl >/dev/null 2>&1 && can_manage_systemd_units; then
     systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
     rm -f "$SERVICE_FILE"
@@ -309,11 +324,22 @@ show_status() {
 
 run_stop() {
   mkdir -p runtime/generated
-  {
+  read_state
+  if [ "${DUNE_SHUTDOWN_PROTECTION_ENABLED:-0}" != "1" ]; then
+    log_event "Host shutdown protection clean stop skipped because protection is disabled."
+    return 0
+  fi
+  if can_write_log; then
+    {
+      echo "[$(date -Is)] Host shutdown protection clean stop started."
+      runtime/scripts/stop-all.sh
+      echo "[$(date -Is)] Host shutdown protection clean stop finished."
+    } >> "$LOG_FILE" 2>&1
+  else
     echo "[$(date -Is)] Host shutdown protection clean stop started."
     runtime/scripts/stop-all.sh
     echo "[$(date -Is)] Host shutdown protection clean stop finished."
-  } >> "$LOG_FILE" 2>&1
+  fi
 }
 
 cmd="${1:-status}"
