@@ -28,5 +28,8 @@ export const serverApi = {
   saveRestartSchedule: (body: { enabled: boolean; time: string; notifyMinutes?: number }) => post<{ task: Task }>("/api/server/restart-schedule", body),
   ipChangeRestart: () => api<{ stdout: string; stderr?: string; exitCode?: number }>("/api/server/ip-change-restart"),
   saveIpChangeRestart: (body: { enabled: boolean; intervalMinutes?: number; notifyMinutes?: number }) => post<{ task: Task }>("/api/server/ip-change-restart", body),
-  checkIpChangeRestartNow: () => post<{ task: Task }>("/api/server/ip-change-restart/check")
+  checkIpChangeRestartNow: () => post<{ task: Task }>("/api/server/ip-change-restart/check"),
+  shutdownProtection: () => api<{ stdout: string; stderr?: string; exitCode?: number }>("/api/server/shutdown-protection"),
+  saveShutdownProtection: (body: { enabled: boolean }) => post<{ task: Task }>("/api/server/shutdown-protection", body),
+  removeShutdownProtection: () => post<{ task: Task }>("/api/server/shutdown-protection/remove")
 };

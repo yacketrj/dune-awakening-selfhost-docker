@@ -284,6 +284,11 @@ EOF
     runtime/scripts/ip-change-restart.sh "$@"
     ;;
 
+  shutdown-protection)
+    shift || true
+    runtime/scripts/shutdown-protection.sh "$@"
+    ;;
+
   version)
     runtime/scripts/version.sh
     ;;
@@ -357,6 +362,7 @@ Usage:
   dune self-update [check|list|install [latest|<tag>]]
   dune restart-schedule [enable <HH:MM> [notify-minutes]|disable|status]
   dune ip-change-restart [enable [interval-minutes] [notify-minutes]|disable|status|check-now]
+  dune shutdown-protection [enable|disable|remove|status]
   dune db backup [output-dir]
   dune db list
   dune db status

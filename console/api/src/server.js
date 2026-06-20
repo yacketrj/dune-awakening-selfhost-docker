@@ -240,6 +240,9 @@ async function handleApi(req, res) {
   if (path === "/api/server/ip-change-restart" && req.method === "POST") return ipChangeRestartRoute(req, res);
   if (path === "/api/server/ip-change-restart/check" && req.method === "POST") return task(req, res, "server", "ipChangeRestartCheckNow", {});
   if (path === "/api/server/ip-change-restart") return safeCommandJson(res, "ipChangeRestartStatus");
+  if (path === "/api/server/shutdown-protection" && req.method === "POST") return shutdownProtectionRoute(req, res);
+  if (path === "/api/server/shutdown-protection/remove" && req.method === "POST") return task(req, res, "server", "shutdownProtectionRemove", {});
+  if (path === "/api/server/shutdown-protection") return safeCommandJson(res, "shutdownProtectionStatus");
 
   if (path === "/api/logs/services") return json(res, 200, { services: await discoverServices(config) });
   if (path.startsWith("/api/logs/")) return logsRoute(req, res, path);
@@ -1084,6 +1087,12 @@ async function restartScheduleRoute(req, res) {
 async function ipChangeRestartRoute(req, res) {
   const body = await readJson(req);
   const operation = body.enabled ? "ipChangeRestartEnable" : "ipChangeRestartDisable";
+  return task(req, res, "server", operation, body);
+}
+
+async function shutdownProtectionRoute(req, res) {
+  const body = await readJson(req);
+  const operation = body.enabled ? "shutdownProtectionEnable" : "shutdownProtectionDisable";
   return task(req, res, "server", operation, body);
 }
 

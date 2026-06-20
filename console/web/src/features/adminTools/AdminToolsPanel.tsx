@@ -36,6 +36,10 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
   const [ipChangeIntervalMinutes, setIpChangeIntervalMinutes] = useState("5");
   const [ipChangeNotifyMinutes, setIpChangeNotifyMinutes] = useState("1");
   const [ipChangeResult, setIpChangeResult] = useState<HomeTaskResult | null>(null);
+  const [shutdownProtection, setShutdownProtection] = useState<{ stdout?: string; stderr?: string; exitCode?: number } | null>(null);
+  const [shutdownProtectionLoading, setShutdownProtectionLoading] = useState(true);
+  const [shutdownProtectionEnabled, setShutdownProtectionEnabled] = useState(false);
+  const [shutdownProtectionResult, setShutdownProtectionResult] = useState<HomeTaskResult | null>(null);
   const [liveToolsOpen, setLiveToolsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [broadcastTitle, setBroadcastTitle] = useState("");
@@ -66,6 +70,17 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
   const ipChangeDisplayActive = ipChangeSaving ? ipChangeEnabled : ipChangeEnabled && ipChangeTimerActive;
   const ipChangeStatusLabel = !ipChangeLoaded && !ipChangeSaving ? "Checking" : ipChangeDisplayActive ? "Enabled" : "Disabled";
   const ipChangeDisplayTimerLabel = !ipChangeLoaded && !ipChangeSaving ? "Checking" : ipChangeSaving ? ipChangeEnabled ? "Activating" : "Deactivating" : ipChangeEnabled ? ipChangeTimerLabel : "Inactive";
+  const shutdownProtectionValues = parseKeyValueText(shutdownProtection?.stdout || "");
+  const shutdownProtectionServiceValue = shutdownProtectionValues.systemd_service || "";
+  const shutdownProtectionEnabledValue = shutdownProtectionValues.systemd_enabled || "";
+  const shutdownProtectionSaving = shutdownProtectionResult?.status === "running";
+  const shutdownProtectionLoaded = Boolean(shutdownProtection);
+  const shutdownProtectionServiceActive = /^active$/i.test(shutdownProtectionServiceValue);
+  const shutdownProtectionSystemdEnabled = /^enabled$/i.test(shutdownProtectionEnabledValue);
+  const shutdownProtectionDisplayActive = shutdownProtectionSaving ? shutdownProtectionEnabled : shutdownProtectionEnabled && shutdownProtectionServiceActive && shutdownProtectionSystemdEnabled;
+  const shutdownProtectionStatusLabel = !shutdownProtectionLoaded && !shutdownProtectionSaving ? "Checking" : shutdownProtectionDisplayActive ? "Enabled" : "Disabled";
+  const shutdownProtectionServiceLabel = !shutdownProtectionLoaded && !shutdownProtectionSaving ? "Checking" : shutdownProtectionSaving ? shutdownProtectionEnabled ? "Activating" : "Deactivating" : shutdownProtectionServiceValue ? formatTimerStatus(shutdownProtectionServiceValue) : "Not Installed";
+  const shutdownProtectionInstalled = Boolean(shutdownProtectionServiceValue && !/^not installed$/i.test(shutdownProtectionServiceValue));
 
   async function run(action: () => Promise<unknown>) {
     onError("");
@@ -242,12 +257,70 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
     }
   }
 
+  async function loadShutdownProtection() {
+    setShutdownProtectionLoading(true);
+    try {
+      const result = await serverApi.shutdownProtection();
+      setShutdownProtection(result);
+      const values = parseKeyValueText(result.stdout || "");
+      const active = /^active$/i.test(values.systemd_service || "");
+      const enabled = /^enabled$/i.test(values.systemd_enabled || "");
+      setShutdownProtectionEnabled(/^true$/i.test(values.shutdown_protection_enabled || "") && active && enabled);
+    } finally {
+      setShutdownProtectionLoading(false);
+    }
+  }
+
+  async function saveShutdownProtection(nextEnabled = shutdownProtectionEnabled) {
+    setShutdownProtectionResult({ status: "running", title: "Saving Shutdown Protection" });
+    const requestedEnabled = nextEnabled;
+    setShutdownProtectionEnabled(requestedEnabled);
+    onError("");
+    try {
+      const final = await waitForTaskSilently((await serverApi.saveShutdownProtection({ enabled: requestedEnabled })).task);
+      const details = taskTechnicalDetails(final);
+      const nextStatus = await serverApi.shutdownProtection();
+      setShutdownProtection(nextStatus);
+      const nextValues = parseKeyValueText(nextStatus.stdout || "");
+      const active = /^active$/i.test(nextValues.systemd_service || "");
+      const enabled = /^enabled$/i.test(nextValues.systemd_enabled || "");
+      const inactive = /^inactive$|^not installed$/i.test(nextValues.systemd_service || "");
+      if (requestedEnabled && (!active || !enabled)) setShutdownProtectionEnabled(false);
+      if (!requestedEnabled && inactive) setShutdownProtectionEnabled(false);
+      setShutdownProtectionResult(final.status === "succeeded" && (!requestedEnabled ? inactive || !enabled : active && enabled)
+        ? { status: "succeeded", title: "Shutdown Protection Saved", details }
+        : { status: "failed", title: requestedEnabled ? "Shutdown Protection Install Failed" : "Shutdown Protection Save Failed", details: details || nextStatus.stdout || nextStatus.stderr || "" });
+    } catch (error) {
+      setShutdownProtectionEnabled(!requestedEnabled);
+      setShutdownProtectionResult({ status: "failed", title: "Shutdown Protection Save Failed", details: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function removeShutdownProtection() {
+    if (!(await confirmAction("Remove the Linux shutdown protection systemd service from this host?", { title: "Remove Shutdown Protection", confirmLabel: "Remove", danger: true }))) return;
+    setShutdownProtectionResult({ status: "running", title: "Removing Shutdown Protection" });
+    onError("");
+    try {
+      const final = await waitForTaskSilently((await serverApi.removeShutdownProtection()).task);
+      const details = taskTechnicalDetails(final);
+      const nextStatus = await serverApi.shutdownProtection();
+      setShutdownProtection(nextStatus);
+      setShutdownProtectionEnabled(false);
+      setShutdownProtectionResult(final.status === "succeeded"
+        ? { status: "succeeded", title: "Shutdown Protection Removed", details }
+        : { status: "failed", title: "Shutdown Protection Remove Failed", details: details || nextStatus.stdout || nextStatus.stderr || "" });
+    } catch (error) {
+      setShutdownProtectionResult({ status: "failed", title: "Shutdown Protection Remove Failed", details: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   useEffect(() => {
     playersApi.list().then((result) => setPlayers(result.rows || [])).catch(() => undefined);
     loadMapChatOptions().catch(() => undefined);
     loadHistory().catch(() => undefined);
     loadRestartSchedule().catch((error) => onError(error instanceof Error ? error.message : String(error)));
     loadIpChangeRestart().catch((error) => onError(error instanceof Error ? error.message : String(error)));
+    loadShutdownProtection().catch((error) => onError(error instanceof Error ? error.message : String(error)));
     return () => {
       if (resultTimer.current) window.clearTimeout(resultTimer.current);
     };
@@ -272,6 +345,12 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
     const id = window.setTimeout(() => setIpChangeResult(null), 10400);
     return () => window.clearTimeout(id);
   }, [ipChangeResult?.status, ipChangeResult?.title]);
+
+  useEffect(() => {
+    if (!shutdownProtectionResult || shutdownProtectionResult.status === "running") return;
+    const id = window.setTimeout(() => setShutdownProtectionResult(null), 10400);
+    return () => window.clearTimeout(id);
+  }, [shutdownProtectionResult?.status, shutdownProtectionResult?.title]);
 
   async function hydrateOnlinePlayers() {
     const response = await playersApi.online();
@@ -327,6 +406,35 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
 
   return <section className="panel admin-tools-panel">
     <h2>Admin Tools</h2>
+    <div className={`playerAdmin_toggle ${liveToolsOpen ? "open" : ""}`}>
+      <button className="playerAdmin_toggleHeader" aria-label={liveToolsOpen ? "Collapse Global Live Tools" : "Expand Global Live Tools"} onClick={() => setLiveToolsOpen(!liveToolsOpen)}>{liveToolsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Global Live Tools</span></button>
+      {liveToolsOpen && <div className="playerAdmin_toggleBody"><div className="global-live-tools">
+        <div className="action-line admin-global-actions">
+          <button className="danger" onClick={() => run(kickAllPlayers)}>Kick All</button>
+          <button className="success" onClick={() => run(hydrateOnlinePlayers)}>Hydrate All</button>
+          <InlineActionResult result={actionResult} resultKey="global" />
+        </div>
+        <div className="action-line broadcast-line">
+          <label className="broadcast-title">Broadcast Title<input value={broadcastTitle} onChange={(event) => setBroadcastTitle(event.target.value)} placeholder="Title shown in-game" /></label>
+          <label className="broadcast-message">Broadcast Body<textarea rows={3} value={broadcastBody} onChange={(event) => setBroadcastBody(event.target.value)} placeholder="Message shown to online players" /></label>
+          <div className="broadcast-controls-row">
+            <label className="inline-field">Duration Seconds<input type="number" min="1" max="3600" value={broadcastDuration} onChange={(event) => setBroadcastDuration(event.target.value)} /></label>
+            <button onClick={() => run(sendBroadcast)}>Send Broadcast</button>
+            <InlineActionResult result={actionResult} resultKey="broadcast" />
+          </div>
+        </div>
+        <div className="action-line broadcast-line map-chat-line">
+          <label className="broadcast-title">Map Chat Destination<select value={mapChatTarget} onChange={(event) => setMapChatTarget(event.target.value)}>
+            {mapChatOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+          </select></label>
+          <label className="broadcast-message">Map Chat Message<textarea rows={3} value={mapChatBody} onChange={(event) => setMapChatBody(event.target.value)} placeholder="Message shown in this map chat" /></label>
+          <div className="broadcast-controls-row">
+            <button onClick={() => run(sendMapChat)}>Send Map Chat</button>
+            <InlineActionResult result={actionResult} resultKey="map-chat" />
+          </div>
+        </div>
+      </div></div>}
+    </div>
     <div className={`playerAdmin_toggle ${scheduleOpen ? "open" : ""}`}>
       <button className="playerAdmin_toggleHeader" aria-label={scheduleOpen ? "Collapse Schedule Server Restart" : "Expand Schedule Server Restart"} onClick={() => setScheduleOpen(!scheduleOpen)}>{scheduleOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Schedule Server Restart</span></button>
       {scheduleOpen && <div className="playerAdmin_toggleBody">
@@ -361,36 +469,22 @@ export function AdminToolsPanel({ onError, confirmAction }: AdminToolsPanelProps
             <strong className={ipChangeResult.status === "running" ? "loading-dots" : ""}>{formatResultTitle(ipChangeResult.title, ipChangeResult.status === "running")}</strong>
           </span>}
         </div>
+        <div className="section-divider" />
+        <div className="panel-title schedule-panel-title">
+          <h4>Host Shutdown Protection</h4>
+          <label className={`switch-checkbox ${shutdownProtectionEnabled ? "enabled" : "disabled"}`}><input type="checkbox" disabled={shutdownProtectionLoading || shutdownProtectionSaving} checked={shutdownProtectionEnabled} onChange={(event) => run(() => saveShutdownProtection(event.target.checked))} /><span className="switch-label">Clean Stop</span><strong className="switch-state">{shutdownProtectionEnabled ? "ON" : "OFF"}</strong></label>
+        </div>
+        <KeyValueGrid items={[["Current Status", shutdownProtectionStatusLabel], ["Systemd Service", shutdownProtectionServiceLabel], ["Systemd Enabled", shutdownProtectionEnabledValue ? formatTimerStatus(shutdownProtectionEnabledValue) : "Not Installed"], ["Timeout", shutdownProtectionValues.timeout || "240 seconds"]]} />
+        {commandStatusSummary(shutdownProtection).reason && <p className="danger-note">{commandStatusSummary(shutdownProtection).reason}</p>}
+        <p className="muted">Optional Linux host integration. When the host shuts down or reboots, systemd runs the console clean-stop flow before Docker terminates containers. This is not required for Unraid, WSL, or custom environments that manage shutdown another way.</p>
+        <div className="action-line schedule-action-line">
+          {shutdownProtectionInstalled && <button className="danger" disabled={shutdownProtectionSaving || shutdownProtectionLoading} onClick={() => removeShutdownProtection()}>Remove Service</button>}
+          {shutdownProtectionResult && <span className={`inline-task-result result-${shutdownProtectionResult.status === "succeeded" ? "ok" : shutdownProtectionResult.status === "failed" ? "fail" : "running"}`}>
+            <strong className={shutdownProtectionResult.status === "running" ? "loading-dots" : ""}>{formatResultTitle(shutdownProtectionResult.title, shutdownProtectionResult.status === "running")}</strong>
+          </span>}
+        </div>
+        {shutdownProtectionResult?.status === "failed" && shutdownProtectionValues.manual_install_command && <p className="danger-note">If automatic install is not available in this environment, run this on the Linux host: <code>{shutdownProtectionValues.manual_install_command}</code></p>}
       </div>}
-    </div>
-    <div className={`playerAdmin_toggle ${liveToolsOpen ? "open" : ""}`}>
-      <button className="playerAdmin_toggleHeader" aria-label={liveToolsOpen ? "Collapse Global Live Tools" : "Expand Global Live Tools"} onClick={() => setLiveToolsOpen(!liveToolsOpen)}>{liveToolsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Global Live Tools</span></button>
-      {liveToolsOpen && <div className="playerAdmin_toggleBody"><div className="global-live-tools">
-        <div className="action-line admin-global-actions">
-          <button className="danger" onClick={() => run(kickAllPlayers)}>Kick All</button>
-          <button className="success" onClick={() => run(hydrateOnlinePlayers)}>Hydrate All</button>
-          <InlineActionResult result={actionResult} resultKey="global" />
-        </div>
-        <div className="action-line broadcast-line">
-          <label className="broadcast-title">Broadcast Title<input value={broadcastTitle} onChange={(event) => setBroadcastTitle(event.target.value)} placeholder="Title shown in-game" /></label>
-          <label className="broadcast-message">Broadcast Body<textarea rows={3} value={broadcastBody} onChange={(event) => setBroadcastBody(event.target.value)} placeholder="Message shown to online players" /></label>
-          <div className="broadcast-controls-row">
-            <label className="inline-field">Duration Seconds<input type="number" min="1" max="3600" value={broadcastDuration} onChange={(event) => setBroadcastDuration(event.target.value)} /></label>
-            <button onClick={() => run(sendBroadcast)}>Send Broadcast</button>
-            <InlineActionResult result={actionResult} resultKey="broadcast" />
-          </div>
-        </div>
-        <div className="action-line broadcast-line map-chat-line">
-          <label className="broadcast-title">Map Chat Destination<select value={mapChatTarget} onChange={(event) => setMapChatTarget(event.target.value)}>
-            {mapChatOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-          </select></label>
-          <label className="broadcast-message">Map Chat Message<textarea rows={3} value={mapChatBody} onChange={(event) => setMapChatBody(event.target.value)} placeholder="Message shown in this map chat" /></label>
-          <div className="broadcast-controls-row">
-            <button onClick={() => run(sendMapChat)}>Send Map Chat</button>
-            <InlineActionResult result={actionResult} resultKey="map-chat" />
-          </div>
-        </div>
-      </div></div>}
     </div>
     <div className={`playerAdmin_toggle admin-history-toggle-panel ${historyOpen ? "open" : ""}`}>
       <button className="playerAdmin_toggleHeader" aria-label={historyOpen ? "Collapse Command History" : "Expand Command History"} onClick={() => setHistoryOpen(!historyOpen)}>{historyOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Command History</span></button>
