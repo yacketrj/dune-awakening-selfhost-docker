@@ -85,7 +85,7 @@ You do not need to be a Linux expert. Start with a fresh server and the installe
 | Funcom token | You will paste this into the browser setup wizard. |
 | CPU support | The game server needs AVX/AVX2. Most modern dedicated servers and VPS plans expose this. |
 | Disk space | 100 GB or more is recommended. |
-| Web access | Open the Web UI on port `8088` from your browser. You can use the public address or the same-network/local address shown by the installer. |
+| Web access | Open the Web UI on port `8088` from a private network, VPN, SSH tunnel, or a protected HTTPS reverse proxy. |
 
 Memory Guide:
 
@@ -98,15 +98,14 @@ RAM decides how many Dune map servers you can keep running comfortably. Start wi
 | Main world, extra maps, and Deep Desert | 40 GB |
 | Many always-on maps or heavier player activity | 60 GB+ |
 
-Forward these ports for public/internet hosting:
+Forward only the game ports for public/internet hosting:
 
 | Port | Protocol | Purpose |
 |---|---|---|
-| `8088` | TCP | Web admin setup panel |
 | `31982` | TCP | Game messaging |
 | `7777-7810` | UDP | Game traffic |
 
-Keep database and internal admin ports private.
+Keep database, internal admin ports, and the Web UI private unless the Web UI is protected by HTTPS plus an access proxy. See [Public WebUI Security](docs/security-public-hosting.md) before hosting the console outside a trusted network.
 
 ## Getting Started
 
@@ -116,7 +115,7 @@ Copy and paste this on a fresh Linux server:
 bash -c 'set -euo pipefail; if ! command -v curl >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y ca-certificates curl tar; fi; mkdir -p "$HOME/dune-awakening-selfhost-docker"; cd "$HOME/dune-awakening-selfhost-docker"; latest_url="$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/Red-Blink/dune-awakening-selfhost-docker/releases/latest)"; version="${latest_url##*/}"; curl -fsSL "https://github.com/Red-Blink/dune-awakening-selfhost-docker/archive/refs/tags/${version}.tar.gz" | tar -xz --strip-components=1; chmod +x install.sh; ./install.sh'
 ```
 
-The installer downloads the latest release, prepares the server, starts the Web UI, and tells you what address to open in your browser. If you are on the same network as the server, use the same-network address. If you are connecting over the internet, use the public address and allow TCP `8088` in your firewall.
+The installer downloads the latest release, prepares the server, starts the Web UI, and tells you what address to open in your browser. If you are on the same network as the server, use the same-network address. If you need remote administration, use a VPN or SSH tunnel for private HTTP access, or publish the Web UI only behind HTTPS and an access proxy.
 
 ## Community Addons
 

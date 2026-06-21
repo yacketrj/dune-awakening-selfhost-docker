@@ -1,11 +1,12 @@
 import { createServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, writeFileSync, chmodSync, mkdirSync, createReadStream, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { loadConfig, publicConfig } from "./config.js";
-import { createAuth, setSessionCookie, clearSessionCookie, json, withSecurityHeaders } from "./auth.js";
-import { createLoginRateLimiter } from "./rateLimit.js";
+import { API_NO_STORE_HEADERS, createAuth, hasTrustedRequestOrigin, setSessionCookie, clearSessionCookie, isTrustedHost, json, parseCookies, withSecurityHeaders } from "./auth.js";
+import { createFixedWindowRateLimiter, createLoginRateLimiter } from "./rateLimit.js";
 import { TaskManager, publicTask } from "./tasks.js";
 import { preflight } from "./preflight.js";
 import { buildDuneArgs, isDynamicServerService, isReadOnlySql, parseVehicleList, runDockerLogs, runDune, validateServiceName } from "./runner.js";
@@ -30,6 +31,18 @@ import { funcomAuthMismatchDetected, matchingFuncomAuthLines, saveFuncomTokenVal
 const config = loadConfig();
 const auth = createAuth(config);
 const loginRateLimiter = createLoginRateLimiter();
+const apiRateLimiter = createFixedWindowRateLimiter({
+  maxRequests: config.apiRateLimitMax,
+  windowMs: config.apiRateLimitWindowMs
+});
+const apiMutationRateLimiter = createFixedWindowRateLimiter({
+  maxRequests: config.apiMutationRateLimitMax,
+  windowMs: config.apiRateLimitWindowMs
+});
+const apiExpensiveRateLimiter = createFixedWindowRateLimiter({
+  maxRequests: config.apiExpensiveRateLimitMax,
+  windowMs: config.apiRateLimitWindowMs
+});
 const tasks = new TaskManager(config);
 let db = createDb(config);
 let carePackageAutoRunning = false;
@@ -37,17 +50,26 @@ let carePackageAutoLastRun = 0;
 const journeyTagsData = loadJourneyTagsData();
 const memoryBalancer = createMemoryBalancer(config);
 
-createServer(async (req, res) => {
+const server = createServer({ maxHeaderSize: config.maxHeaderBytes }, async (req, res) => {
   try {
+    if (!isTrustedHost(req, config)) {
+      return json(res, 421, { error: "Request host is not allowed for this console." }, {}, config);
+    }
     if (req.url?.startsWith("/api/")) {
       await handleApi(req, res);
       return;
     }
     serveStatic(config, req, res);
   } catch (error) {
-    json(res, error.statusCode || 500, { error: redact(error.message || error) });
+    json(res, error.statusCode || 500, { error: redact(error.message || error) }, {}, config);
   }
-}).listen(config.port, config.host, () => {
+});
+
+server.requestTimeout = config.requestTimeoutMs;
+server.headersTimeout = config.headersTimeoutMs;
+server.keepAliveTimeout = config.keepAliveTimeoutMs;
+
+server.listen(config.port, config.host, () => {
   console.log(`${config.appName} API listening on http://${config.host}:${config.port}`);
   if (!config.authDisabled) {
     console.log("Initial admin password is stored in runtime/secrets/admin-web-password.txt");
@@ -174,13 +196,28 @@ function dockerPsNames() {
 async function handleApi(req, res) {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
+  const rate = enforceApiRateLimits(req, path);
+  if (!rate.allowed) {
+    return json(res, 429, { error: "Too many API requests. Please slow down and try again." }, rateLimitHeaders(rate), config);
+  }
 
-  if (path === "/api/health") return json(res, 200, { ok: true, app: config.appName });
+  if (path === "/api/health") {
+    if (!config.publicHealthEnabled && !auth.readSession(req)) {
+      return json(res, 401, { error: "Authentication is required." }, {}, config);
+    }
+    return json(res, 200, { ok: true });
+  }
   if (path === "/api/auth/state") {
     const session = auth.readSession(req);
-    return json(res, 200, { authenticated: Boolean(session), csrfToken: session?.csrf || null, config: publicConfig(config) });
+    const body = session
+      ? { authenticated: true, csrfToken: session.csrf, config: publicConfig(config) }
+      : { authenticated: false, csrfToken: null };
+    return json(res, 200, body);
   }
   if (path === "/api/auth/login" && req.method === "POST") {
+    if (!hasTrustedRequestOrigin(req, config)) {
+      return json(res, 403, { error: "Request origin is not trusted" }, {}, config);
+    }
     const rateKey = loginRateLimitKey(req);
     const rate = loginRateLimiter.check(rateKey);
     if (!rate.allowed) {
@@ -490,8 +527,10 @@ function addonContentRoute(req, res, path) {
   if (!existsSync(target)) return json(res, 404, { error: "Addon content file not found." });
   res.writeHead(200, withSecurityHeaders({
     "content-type": contentTypeForPath(target),
-    "x-frame-options": "SAMEORIGIN"
-  }));
+    "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:",
+    "x-frame-options": "SAMEORIGIN",
+    ...API_NO_STORE_HEADERS
+  }, config));
   createReadStream(target).pipe(res);
 }
 
@@ -631,11 +670,12 @@ async function backupDownloadRoute(req, res, backupName) {
     { name: backupName, content: readFileSync(backupPath) },
     { name: `${backupName}.yaml`, content: readFileSync(metadataPath) }
   ]);
-  res.writeHead(200, {
+  res.writeHead(200, withSecurityHeaders({
     "content-type": "application/gzip",
     "content-length": archive.length,
-    "content-disposition": `attachment; filename="${archiveName.replace(/"/g, "")}"`
-  });
+    "content-disposition": `attachment; filename="${archiveName.replace(/"/g, "")}"`,
+    ...API_NO_STORE_HEADERS
+  }, config));
   res.end(archive);
 }
 
@@ -695,10 +735,11 @@ async function databaseExport(req, res) {
   }
   audit(config, req, "database.export", {});
   const content = await duneDb.exportRows(db, query);
-  res.writeHead(200, {
+  res.writeHead(200, withSecurityHeaders({
     "content-type": "application/json; charset=utf-8",
-    "content-disposition": "attachment; filename=\"query-export.json\""
-  });
+    "content-disposition": "attachment; filename=\"query-export.json\"",
+    ...API_NO_STORE_HEADERS
+  }, config));
   res.end(content);
 }
 
@@ -895,10 +936,11 @@ async function dbJson(res, fn) {
 async function exportJson(res, filename, fn) {
   try {
     const data = await fn();
-    res.writeHead(200, {
+    res.writeHead(200, withSecurityHeaders({
       "content-type": "application/json; charset=utf-8",
-      "content-disposition": `attachment; filename="${filename.replace(/[^A-Za-z0-9._-]/g, "_")}"`
-    });
+      "content-disposition": `attachment; filename="${filename.replace(/[^A-Za-z0-9._-]/g, "_")}"`,
+      ...API_NO_STORE_HEADERS
+    }, config));
     res.end(JSON.stringify(data, null, 2));
   } catch (error) {
     const status = error.unsupported ? 501 : 500;
@@ -1502,7 +1544,7 @@ function taskRoute(req, res, path) {
   const taskObj = tasks.get(id);
   if (!taskObj) return json(res, 404, { error: "Task not found" });
   if (parts[5] === "stream") {
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    res.writeHead(200, withSecurityHeaders({ "content-type": "text/event-stream", "cache-control": "no-store", pragma: "no-cache", connection: "keep-alive" }, config));
     res.write(`data: ${JSON.stringify(publicTask(taskObj))}\n\n`);
     const unsubscribe = tasks.subscribe(id, (data) => res.write(data));
     req.on("close", unsubscribe);
@@ -1518,10 +1560,11 @@ async function logsRoute(req, res, path) {
     try {
       const result = await readLogs(service, { timeoutMs: 30000 });
       const filename = `dune-${service}-logs.txt`.replace(/[^A-Za-z0-9._-]/g, "_");
-      res.writeHead(200, {
+      res.writeHead(200, withSecurityHeaders({
         "content-type": "text/plain; charset=utf-8",
-        "content-disposition": `attachment; filename="${filename}"`
-      });
+        "content-disposition": `attachment; filename="${filename}"`,
+        ...API_NO_STORE_HEADERS
+      }, config));
       res.end(result.stdout || result.stderr || "");
     } catch (error) {
       json(res, 500, { error: redact(error.stdout || error.message || error) });
@@ -1529,7 +1572,7 @@ async function logsRoute(req, res, path) {
     return;
   }
   if (parts[4] === "stream") {
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    res.writeHead(200, withSecurityHeaders({ "content-type": "text/event-stream", "cache-control": "no-store", pragma: "no-cache", connection: "keep-alive" }, config));
     try {
       await readLogs(service, {
         follow: true,
@@ -1660,5 +1703,77 @@ function mockCommand(operation) {
 }
 
 function loginRateLimitKey(req) {
-  return req.socket?.remoteAddress || "unknown";
+  return clientAddress(req, config);
+}
+
+function enforceApiRateLimits(req, path) {
+  const keys = apiRateLimitKeys(req);
+  const general = checkLimitForKeys(apiRateLimiter, "api", keys);
+  if (!general.allowed) return general;
+  if (isExpensiveApiPath(path)) {
+    const expensive = checkLimitForKeys(apiExpensiveRateLimiter, "expensive-api", keys);
+    if (!expensive.allowed) return expensive;
+  }
+  if (!isSafeApiMethod(req.method)) {
+    const mutation = checkLimitForKeys(apiMutationRateLimiter, "mutation-api", keys);
+    if (!mutation.allowed) return mutation;
+  }
+  return { allowed: true };
+}
+
+function checkLimitForKeys(limiter, scope, keys) {
+  for (const key of keys) {
+    const rate = limiter.check(`${scope}:${key}`);
+    if (!rate.allowed) return { ...rate, scope };
+  }
+  return { allowed: true };
+}
+
+function apiRateLimitKeys(req) {
+  const ipKey = `ip:${clientAddress(req, config)}`;
+  const sessionCookie = parseCookies(req.headers.cookie || "").get("asc_session");
+  if (!sessionCookie) return [ipKey];
+  return [ipKey, `session:${hashRateLimitKey(sessionCookie)}`];
+}
+
+function rateLimitHeaders(rate) {
+  return {
+    "retry-after": String(rate.retryAfterSeconds || 1),
+    "ratelimit-limit": String(rate.limit || 0),
+    "ratelimit-remaining": String(rate.remaining || 0),
+    "ratelimit-reset": String(rate.resetSeconds || rate.retryAfterSeconds || 1),
+    "x-rate-limit-scope": rate.scope || "api"
+  };
+}
+
+function isSafeApiMethod(method) {
+  return ["GET", "HEAD", "OPTIONS"].includes(method || "");
+}
+
+function isExpensiveApiPath(path) {
+  return /^\/api\/(?:admin|backups|care-package|database|deepdesert|logs|map|maps|players|server|sietches|storage)(?:\/|$)/.test(path);
+}
+
+function clientAddress(req, config = {}) {
+  if (config.trustProxy) {
+    const forwarded = firstHeaderValue(req.headers?.["x-forwarded-for"]);
+    if (forwarded) return normalizeClientAddress(forwarded);
+  }
+  return normalizeClientAddress(req.socket?.remoteAddress || "unknown");
+}
+
+function firstHeaderValue(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return String(raw || "").split(",")[0].trim();
+}
+
+function normalizeClientAddress(value) {
+  const address = String(value || "unknown").trim();
+  if (!address) return "unknown";
+  if (address.startsWith("::ffff:")) return address.slice(7);
+  return address;
+}
+
+function hashRateLimitKey(value) {
+  return createHash("sha256").update(String(value || "")).digest("base64url").slice(0, 32);
 }

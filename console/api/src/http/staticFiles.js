@@ -20,9 +20,18 @@ export function serveStatic(config, req, res) {
   const path = new URL(req.url || "/", "http://localhost").pathname;
   const target = safeStaticTarget(config.staticDir, path);
   if (!existsSync(target)) {
-    json(res, 200, { app: config.appName, message: "Frontend is not built yet. Run npm install && npm run build in console/web/." });
+    json(res, 200, { app: config.appName, message: "Frontend is not built yet. Run npm install && npm run build in console/web/." }, {}, config);
     return;
   }
-  res.writeHead(200, withSecurityHeaders({ "content-type": contentTypeForPath(target) }));
+  res.writeHead(200, withSecurityHeaders({
+    "content-type": contentTypeForPath(target),
+    "cache-control": cacheControlForPath(target)
+  }, config));
   createReadStream(target).pipe(res);
+}
+
+function cacheControlForPath(target) {
+  if (extname(target) === ".html") return "no-store";
+  if (/[.-][A-Za-z0-9_-]{8,}\./.test(target)) return "public, max-age=31536000, immutable";
+  return "no-cache";
 }

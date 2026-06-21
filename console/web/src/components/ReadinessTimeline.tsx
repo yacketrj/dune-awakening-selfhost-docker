@@ -106,6 +106,9 @@ function parseStatusListeners(text: string): CheckRow[] {
 }
 
 function parseStatusGameServers(text: string, readyRows: ReturnType<typeof parseReadyRows>): CheckRow[] {
+  const ownershipRows = readyRows
+    .filter((row) => row.group === "Game Server Checks" && /world partition ownership/i.test(row.name))
+    .map(({ group: _group, ...row }) => row);
   const rows = sectionLines(text, "Game servers").filter((line) => !/^MAP\s+STATE\s+UPTIME/i.test(line) && !/^Note:/i.test(line)).map((line) => {
     const match = line.match(/^(\S+)\s+(.+?)\s{2,}(.+)$/);
     if (!match) return null;
@@ -113,7 +116,7 @@ function parseStatusGameServers(text: string, readyRows: ReturnType<typeof parse
     const status: CheckRow["status"] = /ready/i.test(state) ? "Ready" : /not running|missing/i.test(state) ? "Failed" : /warming/i.test(state) ? "Info" : "Warn";
     return { name: friendlyName(map), detail: `${friendlyCheckDetail(state)} - ${formatGameUptime(uptime)}`, status, kind: kindForStatus(status) };
   }).filter(Boolean) as CheckRow[];
-  return rows.length ? rows : readyRows.filter((row) => row.group === "Game Server Checks").map(({ group: _group, ...row }) => row);
+  return rows.length ? [...rows, ...ownershipRows] : readyRows.filter((row) => row.group === "Game Server Checks").map(({ group: _group, ...row }) => row);
 }
 
 function parseStatusRabbit(text: string, readyRows: ReturnType<typeof parseReadyRows>): CheckRow[] {

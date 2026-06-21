@@ -1360,6 +1360,8 @@ function isHomeStartComplete(status: string, readiness: string) {
 
   const partitionValue = findLineValue(sectionLines(status, "Database").join("\n"), ["World partitions"]);
   const databaseReady = Number(partitionValue) > 0;
+  const partitions = summarizeReadinessWorldPartitions(readiness);
+  const partitionOwnershipReady = /^OK$/i.test(partitions.label) && /^Ready$/i.test(partitions.status);
 
   const flsLines = sectionLines(status, "Funcom/FLS summary");
   const flsReady = flsLines.length > 0 && !flsLines.some((line) => /:\s*(WAIT|FAIL|ERROR|MISSING)/i.test(line));
@@ -1367,7 +1369,7 @@ function isHomeStartComplete(status: string, readiness: string) {
   const rabbit = summarizeRabbit(status);
   const rabbitReady = /^OK$/i.test(rabbit.label) && /^Ready$/i.test(rabbit.status);
 
-  return containersReady && listenersReady && databaseReady && flsReady && rabbitReady;
+  return containersReady && listenersReady && databaseReady && partitionOwnershipReady && flsReady && rabbitReady;
 }
 
 function attentionHomeHealthCards() {

@@ -18,7 +18,7 @@ for (const line of imports) {
   if (!source.includes(line)) source = source.replace(importAnchor, `${importAnchor}${line}`);
 }
 
-const hookAnchor = '  if (path === "/api/health") return json(res, 200, { ok: true, app: config.appName });\n';
+const hookAnchor = '  if (path === "/api/health") {\n';
 const hook = `\n  if (isDiscordAdapterRoute(path)) {\n    return handleDiscordAdapterRoute({\n      req,\n      res,\n      path,\n      config,\n      readJson,\n      json,\n      statusProvider: ({ diagnostic } = {}) => discordStatusProvider(config, { diagnostic }),\n      readinessProvider: () => discordReadinessProvider(config),\n      servicesProvider: () => discordServicesProvider(config)\n    });\n  }\n`;
 
 if (!source.includes("readinessProvider: () => discordReadinessProvider(config)")) {
