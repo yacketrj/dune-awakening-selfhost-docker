@@ -972,7 +972,7 @@ async function mapSettingsRoute(req, res) {
   const modeChanged = Boolean(body.modeChanged);
   if (!map) return json(res, 400, { error: "Map is required." });
   if (!memoryChanged && !modeChanged) return json(res, 400, { error: "No map setting changes were submitted." });
-  const restart = modeChanged && Boolean(body.running);
+  const restart = false;
   const payload = {
     map,
     partitionId,

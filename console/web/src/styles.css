@@ -971,6 +971,7 @@ body.debug .technical-details { display: block; }
 .readiness-group { display: grid; gap: 8px; }
 .readiness-group h5 { margin: 0; color: #d9c8aa; font-size: 14px; }
 .inline-task-result { align-self: flex-end; flex: 1 1 260px; max-width: 640px; border-left: 3px solid #80613c; color: #d9c8aa; padding: 0 10px; min-height: 42px; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inline-task-result.map-action-result { order: 20; flex: 0 1 420px; max-width: 520px; }
 .inline-task-result .inline-task-message { flex: 0 0 100%; }
 .inline-task-result.result-ok { border-color: #6f8f5f; color: #d8f0c8; animation: fade-result 10.4s ease forwards; }
 .inline-task-result.result-fail { border-color: #a84848; color: var(--danger-text); animation: fade-result 10.4s ease forwards; }
@@ -1371,8 +1372,13 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
 .advanced-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
 .raw-editor-card { border: 1px solid rgba(214, 185, 140, .16); background: rgba(0,0,0,.14); border-radius: 8px; padding: 12px; display: grid; gap: 10px; }
 .raw-editor-card textarea { min-height: 260px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .86rem; }
-.deep-desert-dual-line { align-items: flex-end; }
-.deep-desert-dual-line strong { min-height: 40px; display: inline-flex; align-items: center; color: #ffd08a; }
+.deep-desert-dual-section { width: 50%; min-width: min(100%, 520px); box-sizing: border-box; }
+.deep-desert-dual-line { align-items: center; gap: 5px; width: 100%; }
+.deep-desert-dual-label { min-height: 38px; display: inline-flex; align-items: center; color: #ffd08a; font-weight: 800; }
+.deep-desert-dual-line .deep-desert-dual-toggle { flex: 0 0 auto; min-width: 0; min-height: 0; justify-content: center; border-color: transparent; background: transparent; padding: 0; color: inherit; }
+.deep-desert-dual-toggle.enabled, .deep-desert-dual-toggle.disabled, .deep-desert-dual-toggle:hover { border-color: transparent; background: transparent; box-shadow: none; }
+.deep-desert-dual-toggle .switch-state { min-width: 58px; padding: 9px 13px; font-size: 13px; font-weight: 900; }
+.deep-desert-dual-line .inline-task-result { margin-left: 0; flex: 0 1 auto; min-width: 0; max-width: 320px; }
 .hidden-file-input { display: none; }
 @media (max-width: 720px) {
   .playerAdmin_actionNote { padding-left: 0; }
