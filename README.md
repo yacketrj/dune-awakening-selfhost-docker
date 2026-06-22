@@ -41,7 +41,7 @@ You do not need to be a Linux expert. Start with a fresh server and the installe
 | Funcom token | You will paste this into the browser setup wizard. |
 | CPU support | The game server needs AVX/AVX2. Most modern dedicated servers and VPS plans expose this. |
 | Disk space | 100 GB or more is recommended. |
-| Web access | Open the Web UI on port `8088` from your browser. You can use the public address or the same-network/local address shown by the installer. |
+| Web access | Open the Web UI on port `8088` from your browser. The console binds to `127.0.0.1` by default; opt into LAN/public binding only when protected by a firewall, VPN, or TLS reverse proxy. |
 
 Memory Guide:
 
@@ -58,7 +58,7 @@ Forward these ports for public/internet hosting:
 
 | Port | Protocol | Purpose |
 |---|---|---|
-| `8088` | TCP | Web admin setup panel |
+| `8088` | TCP | Web admin setup panel. Keep local-only unless access is protected for trusted admins. |
 | `31982` | TCP | Game messaging |
 | `7777-7810` | UDP | Game traffic |
 
@@ -72,7 +72,19 @@ Copy and paste this on a fresh Linux server:
 bash -c 'set -euo pipefail; if ! command -v curl >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y ca-certificates curl tar; fi; mkdir -p "$HOME/dune-awakening-selfhost-docker"; cd "$HOME/dune-awakening-selfhost-docker"; latest_url="$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/Red-Blink/dune-awakening-selfhost-docker/releases/latest)"; version="${latest_url##*/}"; curl -fsSL "https://github.com/Red-Blink/dune-awakening-selfhost-docker/archive/refs/tags/${version}.tar.gz" | tar -xz --strip-components=1; chmod +x install.sh; ./install.sh'
 ```
 
-The installer downloads the latest release, prepares the server, starts the Web UI, and tells you what address to open in your browser. If you are on the same network as the server, use the same-network address. If you are connecting over the internet, use the public address and allow TCP `8088` in your firewall.
+The installer downloads the latest release, prepares the server, starts the Web UI, and tells you what address to open in your browser. The Web UI controls the Docker daemon, so it defaults to local access on `127.0.0.1`. To expose it beyond the host, explicitly set `ADMIN_BIND_HOST=auto` or a trusted interface and protect access with a firewall, VPN, or TLS-terminating reverse proxy. Do not directly expose TCP `8088` to the public internet.
+
+## Docker Socket Access
+
+The Web UI uses the local Docker socket so it can start, stop, update, and inspect the server containers. This is powerful host-level access, so only expose the Web UI to trusted admins.
+
+If setup says the Docker socket is permission denied, run this from the repo root:
+
+```bash
+DOCKER_SOCKET_GID="$(stat -c '%g' /var/run/docker.sock)" dune console restart
+```
+
+On a normal Linux install this is usually detected automatically. The command above is mainly for custom Docker setups where the socket group differs from the default container groups.
 
 ## Community Addons
 
@@ -95,6 +107,7 @@ The template gives addon developers a ready-to-use structure, examples, validati
 - Funcom self-hosting behavior may change over time.
 - Keep secrets, generated runtime files, and backups out of git.
 - Do not expose the Web UI to untrusted users.
+- Security-sensitive changes should follow the PR gates in `docs/security-gates.md`, use the transparency template, and keep evidence in `docs/changes/`.
 
 ## Credits
 

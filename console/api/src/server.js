@@ -4,9 +4,9 @@ import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, chmodSync, mkdirSync, createReadStream, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { loadConfig, publicConfig } from "./config.js";
-import { createAuth, setSessionCookie, clearSessionCookie, json, withSecurityHeaders } from "./auth.js";
+import { EMBEDDABLE_CONTENT_SECURITY_POLICY, createAuth, setSessionCookie, clearSessionCookie, json, withSecurityHeaders } from "./auth.js";
 import { createLoginRateLimiter } from "./rateLimit.js";
-import { TaskManager, publicTask } from "./tasks.js";
+import { TaskManager, buildSelfUpdateHelperDockerArgs, publicTask } from "./tasks.js";
 import { preflight } from "./preflight.js";
 import { buildDuneArgs, isDynamicServerService, isReadOnlySql, parseVehicleList, runDockerLogs, runDune, validateServiceName } from "./runner.js";
 import { createDb } from "./db.js";
@@ -16,7 +16,7 @@ import { redact } from "./redact.js";
 import { itemRequiresDatabaseGrant, listCatalogItems, resolveCatalogItem } from "./adminCatalog.js";
 import { buildBroadcastCommand, buildShutdownBroadcastCommand, publishMapChat, publishServerCommand } from "./rmq.js";
 import { clearCarePackageHistory, enableCarePackage, ensureCarePackageServerPersona, grantEligibleCarePackages, grantCarePackage, retryCarePackageGrant, runCarePackageAutoScan, saveCarePackageConfig, carePackageCapabilities, carePackageConfig, carePackageEligiblePlayers, carePackageHistory } from "./carePackage.js";
-import { readJsonBody, readMultipartForm } from "./httpSafety.js";
+import { createConnectionLimiter, readJsonBody, readMultipartForm } from "./httpSafety.js";
 import { parseBackupAutoStatus, parseBackupListRows } from "./statusParsers.js";
 import { assertInstalledAddonPermission, fetchCommunityAddons, installCommunityAddon, installedAddonContentPath, listInstalledAddons, removeInstalledAddon, setInstalledAddonEnabled, syncInstalledAddonLifecycle } from "./addons.js";
 import { performanceSnapshot as collectPerformanceSnapshot } from "./services/performance.js";
@@ -26,14 +26,24 @@ import { createBackupDownloadArchive, enrichBackupRows, nextImportedBackupName, 
 import { createMemoryBalancer } from "./services/memoryBalancer.js";
 import { updateEnvFileValue as updateEnvValue } from "./services/envFile.js";
 import { funcomAuthMismatchDetected, matchingFuncomAuthLines, saveFuncomTokenValue as writeFuncomToken, validDockerSince } from "./services/funcomAuth.js";
+import { DESTRUCTIVE_SQL_CONFIRMATION, sqlSafetyDecision } from "./sqlGuardrails.js";
+import { readCharacterTransferSettings, saveCharacterTransferSettings } from "./services/characterTransferSettings.js";
+import { handleDiscordAdapterRoute, isDiscordAdapterRoute } from "./services/discordAdapter.js";
+import { primeMessageOfTheDayOnlineState, readMessageOfTheDay, restoreMessageOfTheDay, runMessageOfTheDayScan, saveMessageOfTheDay } from "./services/messageOfTheDay.js";
+import { primePlayerAnnouncementOnlineState, readPlayerAnnouncements, restorePlayerAnnouncements, runPlayerAnnouncementScan, savePlayerAnnouncements } from "./services/playerAnnouncements.js";
 
 const config = loadConfig();
 const auth = createAuth(config);
 const loginRateLimiter = createLoginRateLimiter();
+const sseConnectionLimiter = createConnectionLimiter(config.maxSseConnections);
 const tasks = new TaskManager(config);
 let db = createDb(config);
 let carePackageAutoRunning = false;
 let carePackageAutoLastRun = 0;
+let messageOfTheDayAutoRunning = false;
+let messageOfTheDayAutoLastRun = 0;
+let playerAnnouncementsAutoRunning = false;
+let playerAnnouncementsAutoLastRun = 0;
 const journeyTagsData = loadJourneyTagsData();
 const memoryBalancer = createMemoryBalancer(config);
 
@@ -57,6 +67,8 @@ createServer(async (req, res) => {
 
 setInterval(() => {
   void carePackageAutoTick();
+  void messageOfTheDayAutoTick();
+  void playerAnnouncementsAutoTick();
 }, 10000).unref?.();
 
 setInterval(() => {
@@ -204,6 +216,9 @@ async function handleApi(req, res) {
     audit(config, req, "auth.logout");
     return json(res, 200, { ok: true });
   }
+  if (isDiscordAdapterRoute(path)) {
+    return handleDiscordAdapterRoute({ req, res, path, config, readJson, json });
+  }
 
   const session = auth.requireAuth(req, res);
   if (!session) return;
@@ -303,6 +318,9 @@ async function handleApi(req, res) {
   if (path === "/api/admin/skill-modules") return commandJson(res, url.searchParams.get("q") ? "adminSkillModulesSearch" : "adminSkillModules", { q: url.searchParams.get("q") || "" });
   if (path === "/api/admin/history") return commandJson(res, "adminHistory");
   if (path === "/api/admin/history/clear" && req.method === "POST") return clearAdminHistoryRoute(req, res);
+  if (path === "/api/admin/character-transfer-settings") return characterTransferSettingsRoute(req, res);
+  if (path === "/api/admin/message-of-the-day") return messageOfTheDayRoute(req, res);
+  if (path === "/api/admin/player-announcements") return playerAnnouncementsRoute(req, res);
   if (path === "/api/admin/broadcast" && req.method === "POST") return broadcastRoute(req, res);
   if (path === "/api/admin/map-chat" && req.method === "POST") return mapChatRoute(req, res);
   if (path === "/api/admin/broadcast-shutdown" && req.method === "POST") return shutdownBroadcastRoute(req, res);
@@ -492,6 +510,7 @@ function addonContentRoute(req, res, path) {
   if (!existsSync(target)) return json(res, 404, { error: "Addon content file not found." });
   res.writeHead(200, withSecurityHeaders({
     "content-type": contentTypeForPath(target),
+    "content-security-policy": EMBEDDABLE_CONTENT_SECURITY_POLICY,
     "x-frame-options": "SAMEORIGIN"
   }));
   createReadStream(target).pipe(res);
@@ -558,12 +577,16 @@ async function clearAdminHistoryRoute(req, res) {
   if (body.scope === "admin-tools") {
     const current = existsSync(historyFile) ? readFileSync(historyFile, "utf8") : "";
     const next = current.split(/\r?\n/).filter((line) => line && !isAdminToolsHistoryLine(line)).join("\n");
-    writeFileSync(historyFile, next ? `${next}\n` : "");
+    writeFileSync(historyFile, next ? `${next}\n` : "", { mode: 0o600 });
+    chmodSync(historyFile, 0o600);
     audit(config, req, "admin.history.clear", { ok: true, scope: "admin-tools" });
     return json(res, 200, { ok: true });
   }
-  writeFileSync(historyFile, "");
-  writeFileSync(join(historyDir, "admin-command-audit.jsonl"), "");
+  const auditFile = join(historyDir, "admin-command-audit.jsonl");
+  writeFileSync(historyFile, "", { mode: 0o600 });
+  writeFileSync(auditFile, "", { mode: 0o600 });
+  chmodSync(historyFile, 0o600);
+  chmodSync(auditFile, 0o600);
   audit(config, req, "admin.history.clear", { ok: true, scope: "all" });
   return json(res, 200, { ok: true });
 }
@@ -681,12 +704,16 @@ async function safeCommand(operation, payload = {}) {
 async function databaseQuery(req, res) {
   const body = await readJson(req);
   const query = String(body.query || "");
-  const readOnly = isReadOnlySql(query);
-  if (!config.mockMode && !readOnly) {
+  if (!query.trim()) return json(res, 400, { error: "SQL query is required." });
+  const safety = sqlSafetyDecision(query, body);
+  if (safety.needsConfirmation) {
+    return json(res, 400, { error: `Destructive SQL requires confirmation. Resubmit with allowDestructive=true and confirmation="${DESTRUCTIVE_SQL_CONFIRMATION}".` });
+  }
+  if (!config.mockMode && safety.destructive) {
     await runDune(config, buildDuneArgs("backupCreate"), { env: { DB_BACKUP_ORIGIN: "destructive-sql" } });
   }
-  audit(config, req, "database.query", { readOnly, destructive: !readOnly });
-  return dbJson(res, () => duneDb.runSql(db, query, true));
+  audit(config, req, "database.query", { readOnly: safety.readOnly, destructive: safety.destructive, confirmed: safety.allowDestructive });
+  return dbJson(res, () => duneDb.runSql(db, query, safety.allowDestructive));
 }
 
 async function databaseExport(req, res) {
@@ -810,28 +837,21 @@ function scheduleConsoleRestart(port) {
     const script = [
       "set -eu",
       "mkdir -p runtime/generated",
+      "export DOCKER_SOCKET_GID=\"${DOCKER_SOCKET_GID:-$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)}\"",
       `echo "[$(date -Is)] Restarting Dune Docker Console on port ${port}" >> runtime/generated/console-restart.log`,
       "docker compose -f docker-compose.web.yml build redblink-dune-docker-console >> runtime/generated/console-restart.log 2>&1",
       "docker rm -f redblink-dune-docker-console >> runtime/generated/console-restart.log 2>&1 || true",
       "docker compose -f docker-compose.web.yml up -d redblink-dune-docker-console >> runtime/generated/console-restart.log 2>&1",
       `echo "[$(date -Is)] Dune Docker Console restart command finished" >> runtime/generated/console-restart.log`
     ].join("\n");
-    const child = spawn("docker", [
-      "run",
-      "--rm",
-      "-d",
-      "--name", helperName,
-      "--network", "host",
-      "-v", `${hostRepoRoot}:/repo`,
-      "-v", "/var/run/docker.sock:/var/run/docker.sock",
-      "-e", `ADMIN_BIND_PORT=${port}`,
-      "-e", `DUNE_HOST_REPO_ROOT=${hostRepoRoot}`,
-      "-e", `COMPOSE_PROJECT_NAME=${composeProjectName}`,
-      "-e", `DUNE_COMPOSE_PROJECT_NAME=${composeProjectName}`,
-      "-w", "/repo",
-      "redblink-dune-docker-console:dev",
-      "sh", "-lc", script
-    ], {
+    const child = spawn("docker", buildSelfUpdateHelperDockerArgs({
+      helperName,
+      hostRepoRoot,
+      composeProjectName,
+      helperImage: "redblink-dune-docker-console:dev",
+      command: script,
+      extraEnv: { ADMIN_BIND_PORT: String(port) }
+    }), {
       cwd: config.repoRoot,
       detached: true,
       stdio: "ignore",
@@ -937,6 +957,72 @@ async function task(req, res, type, operation, payload) {
   return json(res, 202, { task: tasks.create(type, operation, payload) });
 }
 
+async function characterTransferSettingsRoute(req, res) {
+  if (req.method === "GET") return json(res, 200, readCharacterTransferSettings(config));
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const body = await readJson(req);
+  try {
+    const result = saveCharacterTransferSettings(config, body.settings || {}, { defaults: Boolean(body.restoreDefaults) });
+    const payload = { service: "director" };
+    audit(config, req, "admin.character-transfer-settings.save", { restoreDefaults: Boolean(body.restoreDefaults), settings: result.settings });
+    return json(res, 202, { ok: true, settings: result.settings, path: result.path, task: tasks.create("server", "restartService", payload) });
+  } catch (error) {
+    return json(res, error.statusCode || 500, { error: redact(error.message || error) });
+  }
+}
+
+async function messageOfTheDayRoute(req, res) {
+  if (req.method === "GET") return json(res, 200, readMessageOfTheDay(config));
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const body = await readJson(req);
+  try {
+    const result = body.restoreDefaults ? restoreMessageOfTheDay(config) : saveMessageOfTheDay(config, body.settings || body);
+    if (result.settings.enabled) {
+      const players = await duneDb.listPlayers(db, { online: true }).catch(() => ({ rows: [] }));
+      primeMessageOfTheDayOnlineState(config, players.rows || []);
+    }
+    audit(config, req, "admin.message-of-the-day.save", { restoreDefaults: Boolean(body.restoreDefaults), enabled: result.settings.enabled });
+    recordAdminHistory(config, {
+      command: "web-message-of-the-day",
+      target: "login",
+      friendly: "Message of the Day",
+      path: "runtime/generated/message-of-the-day.json",
+      result: "saved",
+      message: result.settings.enabled ? result.settings.message : "disabled"
+    });
+    return json(res, 200, { ok: true, ...result });
+  } catch (error) {
+    audit(config, req, "admin.message-of-the-day.save", { supported: false, error: redact(error.message || error) });
+    return json(res, error.statusCode || 400, { error: redact(error.message || error) });
+  }
+}
+
+async function playerAnnouncementsRoute(req, res) {
+  if (req.method === "GET") return json(res, 200, readPlayerAnnouncements(config));
+  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+  const body = await readJson(req);
+  try {
+    const result = body.restoreDefaults ? restorePlayerAnnouncements(config) : savePlayerAnnouncements(config, body.settings || body);
+    if (result.settings.joinEnabled || result.settings.leaveEnabled) {
+      const players = await duneDb.listPlayers(db, { online: true }).catch(() => ({ rows: [] }));
+      primePlayerAnnouncementOnlineState(config, players.rows || []);
+    }
+    audit(config, req, "admin.player-announcements.save", { restoreDefaults: Boolean(body.restoreDefaults), joinEnabled: result.settings.joinEnabled, leaveEnabled: result.settings.leaveEnabled });
+    recordAdminHistory(config, {
+      command: "web-player-announcements",
+      target: "online-status",
+      friendly: "Join Leave Announcements",
+      path: "runtime/generated/player-announcements.json",
+      result: "saved",
+      message: result.settings.joinEnabled || result.settings.leaveEnabled ? "enabled" : "disabled"
+    });
+    return json(res, 200, { ok: true, ...result });
+  } catch (error) {
+    audit(config, req, "admin.player-announcements.save", { supported: false, error: redact(error.message || error) });
+    return json(res, error.statusCode || 400, { error: redact(error.message || error) });
+  }
+}
+
 async function confirmedTask(req, res, type, operation, payload, phrase) {
   const body = await readJson(req);
   if (phrase && body.confirmation !== phrase) {
@@ -972,7 +1058,7 @@ async function mapSettingsRoute(req, res) {
   const modeChanged = Boolean(body.modeChanged);
   if (!map) return json(res, 400, { error: "Map is required." });
   if (!memoryChanged && !modeChanged) return json(res, 400, { error: "No map setting changes were submitted." });
-  const restart = modeChanged && Boolean(body.running);
+  const restart = false;
   const payload = {
     map,
     partitionId,
@@ -1514,7 +1600,7 @@ function taskRoute(req, res, path) {
   const taskObj = tasks.get(id);
   if (!taskObj) return json(res, 404, { error: "Task not found" });
   if (parts[5] === "stream") {
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    if (!openSseStream(req, res)) return;
     res.write(`data: ${JSON.stringify(publicTask(taskObj))}\n\n`);
     const unsubscribe = tasks.subscribe(id, (data) => res.write(data));
     req.on("close", unsubscribe);
@@ -1541,7 +1627,7 @@ async function logsRoute(req, res, path) {
     return;
   }
   if (parts[4] === "stream") {
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    if (!openSseStream(req, res)) return;
     try {
       await readLogs(service, {
         follow: true,
@@ -1563,6 +1649,17 @@ async function logsRoute(req, res, path) {
     if (!output) output = redact(error.stdout || error.message || "");
   }
   return json(res, 200, { operation: "logs", stdout: output, stderr: "", exitCode: 0 });
+}
+
+function openSseStream(req, res) {
+  const release = sseConnectionLimiter.enter();
+  if (!release) {
+    json(res, 429, { error: "Too many live streams are open. Close an existing log or task stream, then try again." }, { "retry-after": "30" });
+    return null;
+  }
+  req.on("close", release);
+  res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+  return release;
 }
 
 function readLogs(service, options) {
@@ -1620,6 +1717,50 @@ async function carePackageAutoTick() {
     console.error(`Care Package auto-grant scan failed: ${redact(error.message || error)}`);
   } finally {
     carePackageAutoRunning = false;
+  }
+}
+
+async function messageOfTheDayAutoTick() {
+  if (messageOfTheDayAutoRunning) return;
+  if (Date.now() - messageOfTheDayAutoLastRun < 10000) return;
+  messageOfTheDayAutoRunning = true;
+  messageOfTheDayAutoLastRun = Date.now();
+  try {
+    const players = await duneDb.listPlayers(db, { online: true });
+    if (players.capabilities?.players === false) return;
+    const result = await runMessageOfTheDayScan(config, players.rows || [], { db });
+    if (result.sent || result.failed) {
+      console.log(`Message of the Day scan: sent=${result.sent || 0} failed=${result.failed || 0}`);
+      audit(config, null, "message-of-the-day.auto-scan", { supported: true, sent: result.sent || 0, failed: result.failed || 0 });
+    }
+  } catch (error) {
+    const message = String(error.message || error);
+    if (/connect|database|relation|container|rabbitmq|docker|ECONNREFUSED/i.test(message)) return;
+    console.error(`Message of the Day scan failed: ${redact(message)}`);
+  } finally {
+    messageOfTheDayAutoRunning = false;
+  }
+}
+
+async function playerAnnouncementsAutoTick() {
+  if (playerAnnouncementsAutoRunning) return;
+  if (Date.now() - playerAnnouncementsAutoLastRun < 10000) return;
+  playerAnnouncementsAutoRunning = true;
+  playerAnnouncementsAutoLastRun = Date.now();
+  try {
+    const players = await duneDb.listPlayers(db, { online: true });
+    if (players.capabilities?.players === false) return;
+    const result = await runPlayerAnnouncementScan(config, players.rows || [], { db });
+    if (result.joined || result.left || result.sent || result.failed) {
+      console.log(`Player announcement scan: joined=${result.joined || 0} left=${result.left || 0} sent=${result.sent || 0} failed=${result.failed || 0} skipped_no_recipients=${result.skippedNoRecipients || 0}`);
+      audit(config, null, "player-announcements.auto-scan", { supported: true, joined: result.joined || 0, left: result.left || 0, sent: result.sent || 0, failed: result.failed || 0, skippedNoRecipients: result.skippedNoRecipients || 0 });
+    }
+  } catch (error) {
+    const message = String(error.message || error);
+    if (/connect|database|relation|container|rabbitmq|docker|ECONNREFUSED/i.test(message)) return;
+    console.error(`Player announcement scan failed: ${redact(message)}`);
+  } finally {
+    playerAnnouncementsAutoRunning = false;
   }
 }
 

@@ -1291,13 +1291,13 @@ export function isHomeStopComplete(status: string, readiness: string) {
   ];
   const containerLines = sectionLines(status, "Containers").filter((line) => !/^SERVICE\s+STATUS/i.test(line));
   const statusContainersStopped = containerLines.length >= requiredContainers.length && requiredContainers.every((name) =>
-    containerLines.some((line) => new RegExp(`^${name}\\s+\\b(missing|stopped|exited|dead|not running)\\b`, "i").test(line))
+    containerLines.some((line) => lineStartsWithServiceState(line, name, ["missing", "stopped", "exited", "dead", "not running"]))
   );
   if (statusContainersStopped) return true;
 
   const text = `${status}\n${readiness}`;
   const readinessContainersStopped = requiredContainers.every((name) =>
-    new RegExp(`FAIL\\s+container\\s+${name}\\b`, "i").test(text)
+    textHasFailedContainer(text, name)
   );
   const allListenersMissing = sectionLines(status, "Listeners").filter((line) => !/^CHECK\s+PORT\s+STATUS/i.test(line)).length >= 6 &&
     sectionLines(status, "Listeners").filter((line) => !/^CHECK\s+PORT\s+STATUS/i.test(line)).every((line) => /\bMISSING\b/i.test(line));
@@ -1321,7 +1321,7 @@ function isHomeStartComplete(status: string, readiness: string) {
     "dune-server-overmap"
   ];
   const containersReady = requiredContainers.every((name) =>
-    containerLines.some((line) => new RegExp(`^${name}\\s+Up\\b`, "i").test(line))
+    containerLines.some((line) => lineStartsWithServiceState(line, name, ["up"]))
   );
 
   const listenerLines = sectionLines(status, "Listeners").filter((line) => !/^CHECK\s+PORT\s+STATUS/i.test(line));
@@ -1337,6 +1337,23 @@ function isHomeStartComplete(status: string, readiness: string) {
   const rabbitReady = /^OK$/i.test(rabbit.label) && /^Ready$/i.test(rabbit.status);
 
   return containersReady && listenersReady && databaseReady && flsReady && rabbitReady;
+}
+
+function lineStartsWithServiceState(line: string, serviceName: string, states: string[]) {
+  const normalized = normalizeStatusLine(line);
+  const prefix = `${serviceName.toLowerCase()} `;
+  if (!normalized.startsWith(prefix)) return false;
+  const serviceState = normalized.slice(prefix.length).trimStart();
+  return states.some((state) => serviceState.startsWith(state));
+}
+
+function textHasFailedContainer(text: string, serviceName: string) {
+  const prefix = `fail container ${serviceName.toLowerCase()}`;
+  return text.split("\n").some((line) => normalizeStatusLine(line).startsWith(prefix));
+}
+
+function normalizeStatusLine(line: string) {
+  return line.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function attentionHomeHealthCards() {
@@ -1602,13 +1619,12 @@ function formatHomePopulation(value: string) {
 }
 
 function findLineValue(text: string, keys: string[]) {
+  const normalizedKeys = new Set(keys.map((key) => String(key).trim().toLowerCase()));
   for (const rawLine of stripAnsi(text).split(/\r?\n/)) {
     const line = stripAnsi(rawLine).trim();
-    for (const key of keys) {
-      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const match = line.match(new RegExp(`^\\s*${escaped}\\s*[:=]\\s*(.+)$`, "i"));
-      if (match) return match[1].trim();
-    }
+    const match = line.match(/^\s*([^:=]+)\s*[:=]\s*(.+)$/);
+    if (!match) continue;
+    if (normalizedKeys.has(match[1].trim().toLowerCase())) return match[2].trim();
   }
   return "";
 }

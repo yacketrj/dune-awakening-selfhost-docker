@@ -42,7 +42,7 @@ export class UnsupportedCapabilityError extends Error {
 export async function dbStatus(db) {
   const result = await db.query("select current_user, current_database(), version()");
   const tables = await db.query("select count(*)::int as count from information_schema.tables where table_schema = 'dune'");
-  return { connected: true, config: db.config, server: result.rows[0], duneTableCount: tables.rows[0]?.count ?? 0, usesDefaultPassword: process.env.DUNE_DB_PASSWORD ? process.env.DUNE_DB_PASSWORD === "dune" : true };
+  return { connected: true, config: db.config, server: result.rows[0], duneTableCount: tables.rows[0]?.count ?? 0, usesDefaultPassword: Boolean(db.usesDefaultPassword) };
 }
 
 export async function changeDunePassword(db, password) {
@@ -829,8 +829,11 @@ export async function listPlayers(db, { online = false, q = "" } = {}) {
   const values = [];
   let where = "a.class ilike '%PlayerCharacter%'";
   where += " and coalesce(ac.\"user\", '') <> 'A5C0DE5E12A00001'";
+  where += " and coalesce(ac.\"user\", '') <> 'A5C0DE5E12A00002'";
   where += " and coalesce(ac.funcom_id, '') <> 'Server#0001'";
+  where += " and coalesce(ac.funcom_id, '') <> 'MessageOfTheDay#0001'";
   where += " and coalesce(ps.character_name, '') <> 'Server'";
+  where += " and coalesce(ps.character_name, '') <> 'Message of the Day'";
   if (online) where += " and coalesce(ps.online_status::text, '') = 'Online'";
   if (q) {
     values.push(`%${q}%`);

@@ -11,6 +11,25 @@ source runtime/scripts/host-paths.sh
 source runtime/scripts/image-tags.sh
 WORLD_IMAGE_TAG="$(resolve_world_image_tag)"
 IMAGE="registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:${WORLD_IMAGE_TAG}"
+RMQ_GAME_HTTP_BIND="${RMQ_GAME_HTTP_BIND:-127.0.0.1}"
+RMQ_GAME_TLS_VERIFY="${RMQ_GAME_TLS_VERIFY:-verify_peer}"
+RMQ_GAME_TLS_FAIL_IF_NO_PEER_CERT="${RMQ_GAME_TLS_FAIL_IF_NO_PEER_CERT:-false}"
+
+case "$RMQ_GAME_TLS_VERIFY" in
+  verify_peer|verify_none) ;;
+  *)
+    echo "Invalid RMQ_GAME_TLS_VERIFY: $RMQ_GAME_TLS_VERIFY (expected verify_peer or verify_none)" >&2
+    exit 1
+    ;;
+esac
+
+case "$RMQ_GAME_TLS_FAIL_IF_NO_PEER_CERT" in
+  true|false) ;;
+  *)
+    echo "Invalid RMQ_GAME_TLS_FAIL_IF_NO_PEER_CERT: $RMQ_GAME_TLS_FAIL_IF_NO_PEER_CERT (expected true or false)" >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p runtime/rabbitmq-admin/config
 mkdir -p runtime/rabbitmq-game/config
@@ -32,15 +51,15 @@ auth_http.resource_path = http://dune-text-router:5059/v0/auth/resource
 auth_http.topic_path    = http://dune-text-router:5059/v0/auth/topic
 EOF
 
-cat > runtime/rabbitmq-game/config/rabbitmq.conf <<'EOF'
+cat > runtime/rabbitmq-game/config/rabbitmq.conf <<EOF
 listeners.tcp = none
 listeners.ssl.default = 5672
 
 ssl_options.cacertfile = /etc/rabbitmq/cacert.pem
 ssl_options.certfile   = /etc/rabbitmq/cert.pem
 ssl_options.keyfile    = /etc/rabbitmq/key.pem
-ssl_options.verify     = verify_none
-ssl_options.fail_if_no_peer_cert = false
+ssl_options.verify     = $RMQ_GAME_TLS_VERIFY
+ssl_options.fail_if_no_peer_cert = $RMQ_GAME_TLS_FAIL_IF_NO_PEER_CERT
 
 management.tcp.port = 15672
 loopback_users.guest = false
@@ -67,7 +86,8 @@ if [ ! -f runtime/rabbitmq-game/certs/key.pem ]; then
 fi
 
 chmod 755 runtime/rabbitmq-game runtime/rabbitmq-game/certs runtime/rabbitmq-game/config
-chmod 644 runtime/rabbitmq-game/certs/*.pem
+chmod 600 runtime/rabbitmq-game/certs/key.pem
+chmod 644 runtime/rabbitmq-game/certs/cert.pem runtime/rabbitmq-game/certs/cacert.pem
 cat > runtime/rabbitmq-admin/config/enabled_plugins <<'EOF'
 [rabbitmq_management,rabbitmq_prometheus,rabbitmq_auth_backend_http,rabbitmq_auth_backend_cache].
 EOF
@@ -99,7 +119,7 @@ docker run -d \
   --restart unless-stopped \
   -p 31982:5672/tcp \
   -p 127.0.0.1:15672:15672/tcp \
-  -p 31983:15672/tcp \
+  -p "${RMQ_GAME_HTTP_BIND}:31983:15672/tcp" \
   -v "$(host_path "$PWD/runtime/rabbitmq-game/config/rabbitmq.conf"):/etc/rabbitmq/rabbitmq.conf:ro" \
   -v "$(host_path "$PWD/runtime/rabbitmq-game/config/enabled_plugins"):/etc/rabbitmq/enabled_plugins:ro" \
   -v "$(host_path "$PWD/runtime/rabbitmq-game/certs/cacert.pem"):/etc/rabbitmq/cacert.pem:ro" \
