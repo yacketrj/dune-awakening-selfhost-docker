@@ -39,6 +39,21 @@ jobs:
         run: npm test
         working-directory: console/api
 
+      - name: Run runtime shell regression tests
+        run: |
+          bash -n \
+            runtime/scripts/secrets-bootstrap.sh \
+            runtime/scripts/bootstrap-runtime-secrets.sh \
+            runtime/scripts/db-passwords.sh \
+            runtime/scripts/start-postgres.sh \
+            runtime/scripts/start-all.sh \
+            runtime/scripts/start-text-router.sh \
+            runtime/scripts/start-director.sh \
+            runtime/scripts/start-server-gateway.sh \
+            runtime/tests/test-file-hygiene.sh \
+            runtime/tests/test-secrets-bootstrap.sh
+          bash runtime/tests/test-file-hygiene.sh
+
       - name: Audit API dependencies
         run: npm audit --audit-level=moderate
         working-directory: console/api
