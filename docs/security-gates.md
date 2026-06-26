@@ -25,7 +25,7 @@ Run the relevant gates before opening or merging a PR:
 | Gate | Command |
 |---|---|
 | API unit tests | `npm test --prefix console/api` |
-| Runtime shell regression | `bash -n runtime/scripts/secrets-bootstrap.sh runtime/scripts/bootstrap-runtime-secrets.sh runtime/scripts/db-passwords.sh runtime/scripts/start-postgres.sh runtime/scripts/start-all.sh runtime/scripts/start-text-router.sh runtime/scripts/start-director.sh runtime/scripts/start-server-gateway.sh runtime/tests/test-file-hygiene.sh runtime/tests/test-secrets-bootstrap.sh && bash runtime/tests/test-file-hygiene.sh` |
+| Runtime shell regression | `bash runtime/tests/capture-regression-output.sh` |
 | Web build | `npm run build --prefix console/web` |
 | API dependency audit | `npm audit --prefix console/api --audit-level=moderate` |
 | Web dependency audit | `npm audit --prefix console/web --audit-level=moderate` |
@@ -39,6 +39,16 @@ Run the relevant gates before opening or merging a PR:
 
 When runtime shell scripts change, the runtime shell regression gate is required. It must cover syntax for touched scripts and targeted `runtime/tests/*` coverage for behavior that can be tested without starting Docker services.
 
+## Runtime Regression Output Capture
+
+Use `bash runtime/tests/capture-regression-output.sh` to produce reviewable local evidence for runtime shell regressions. The script writes timestamped evidence under `work/regression-output/<UTC timestamp>/`, including:
+
+- `summary.md` with gate names, exit codes, log paths, branch, and commit when git metadata is available.
+- `commands.tsv` with the exact commands, exit codes, and output log paths.
+- One log file per captured gate.
+
+The generated `work/` directory is ignored and should not be committed. Attach or paste the relevant summary/log snippets into PRs or change notes when runtime behavior is under review.
+
 ## CI Gates
 
 `.github/workflows/security-gates.yml` mirrors the required PR gates with separate jobs for:
@@ -48,6 +58,8 @@ When runtime shell scripts change, the runtime shell regression gate is required
 - Gitleaks secret scanning.
 - Trivy filesystem scanning.
 - Docker image build and Trivy image scanning.
+
+The runtime shell regression job uploads `work/regression-output/` as a GitHub Actions artifact named `runtime-shell-regression-output` so failed and passing regression evidence can be reviewed after the run.
 
 The workflow uses current maintained major versions for GitHub-hosted runners and avoids the deprecated Semgrep wrapper action.
 
