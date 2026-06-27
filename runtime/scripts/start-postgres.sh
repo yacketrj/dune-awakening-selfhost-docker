@@ -12,8 +12,27 @@ source runtime/scripts/image-tags.sh
 source runtime/scripts/db-passwords.sh
 POSTGRES_IMAGE_TAG="$(resolve_postgres_image_tag)"
 IMAGE="registry.funcom.com/funcom/self-hosting/igw-postgres:${POSTGRES_IMAGE_TAG}"
+INITDB_DIR="runtime/postgres/initdb"
+INIT_SQL="$INITDB_DIR/01-create-dune-user.sql"
 
-mkdir -p runtime/postgres/initdb
+require_writable_initdb() {
+  mkdir -p "$INITDB_DIR"
+
+  if [ ! -w "$INITDB_DIR" ] || { [ -e "$INIT_SQL" ] && [ ! -w "$INIT_SQL" ]; }; then
+    echo "Postgres initdb path is not writable by the current user." >&2
+    echo "Path: $INITDB_DIR" >&2
+    echo >&2
+    echo "Repair from the repository root:" >&2
+    echo "  sudo chown -R \"\$(id -u):\$(id -g)\" $INITDB_DIR" >&2
+    echo "  chmod -R u+rwX $INITDB_DIR" >&2
+    echo >&2
+    echo "Then rerun:" >&2
+    echo "  runtime/scripts/start-postgres.sh" >&2
+    exit 1
+  fi
+}
+
+require_writable_initdb
 
 if docker volume inspect dune-postgres-data >/dev/null 2>&1 &&
   [ -z "${DUNE_DB_PASSWORD:-}" ] &&
@@ -29,7 +48,7 @@ dune_db_password="$(resolve_dune_db_password)"
 postgres_password="$(resolve_postgres_password)"
 dune_db_password_sql="$(printf '%s' "$dune_db_password" | sed "s/'/''/g")"
 
-cat > runtime/postgres/initdb/01-create-dune-user.sql <<SQL
+cat > "$INIT_SQL" <<SQL
 DO
 \$\$
 BEGIN
@@ -60,7 +79,7 @@ docker run -d \
   -e POSTGRES_PASSWORD="$postgres_password" \
   -e POSTGRES_DB=dune \
   -v dune-postgres-data:/var/lib/postgresql/data \
-  -v "$(host_path "$PWD/runtime/postgres/initdb"):/docker-entrypoint-initdb.d:ro" \
+  -v "$(host_path "$PWD/$INITDB_DIR"):/docker-entrypoint-initdb.d:ro" \
   "$IMAGE"
 
 echo "Waiting for Postgres..."
