@@ -42,6 +42,7 @@ add('install.ps1 does not embed Funcom token values', 'funcom-token' not in lowe
 add('install.ps1 removes only temporary helper scripts', 'Remove-Item -LiteralPath $scriptPath -Force' in install)
 add('install.ps1 calls wsl.exe with explicit distro flag arrays', '@("-d", $WslDistro' in install)
 add('install.ps1 converts Windows temp paths to WSL /mnt paths', 'return "/mnt/$drive/$rest"' in install and "-replace '\\\\', '/'" in install)
+add('install.ps1 writes temp shell scripts without UTF-8 BOM', 'Set-Content -LiteralPath $scriptPath -Value $ScriptText -Encoding ASCII -NoNewline' in install)
 add('README preserves Linux install.sh path', './install.sh' in readme and 'Copy and paste this on a fresh Linux server' in readme)
 add('README adds Windows WSL option', 'Windows 11 Home / WSL2 / Ubuntu 26.04' in readme)
 add('README links Windows quickstart', 'WINDOWS-WSL-QUICKSTART.md' in readme)
@@ -76,6 +77,7 @@ Expected result: all checks pass.
 - Confirm the direct bootstrap downloads `install.ps1` and runs it as a file, not through a nested command string.
 - Confirm WSL subprocess calls include `-d <distro>` and do not rely on PowerShell argument passthrough.
 - Confirm Windows temporary script paths are converted to `/mnt/<drive>/...` paths before WSL execution.
+- Confirm temporary shell scripts are written without a UTF-8 BOM so Bash reads the first command correctly.
 - Confirm Windows documentation tells users how to launch Administrator PowerShell.
 - Confirm the helper delegates to `install.sh` after preparing WSL and Docker.
 - Confirm the helper does not store Windows, Ubuntu, Funcom, or Web UI passwords.
