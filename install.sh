@@ -399,10 +399,13 @@ show_finish() {
     echo "Docker is ready. Setup can continue."
   fi
   echo
-  echo "Your first admin password was generated automatically."
+  echo "Current Web UI admin password file:"
+  echo "  $password_file"
   if [ -n "$admin_password" ]; then
-    echo "Use this password to sign in:"
+    echo "Use this current password to sign in:"
     echo "  $admin_password"
+    echo "If you later change the Web UI password, this printed password becomes obsolete."
+    echo "The password file above will then contain the new current password."
   else
     echo "The password was not ready yet. Wait a few seconds and run ./install.sh again to show it."
   fi
