@@ -44,7 +44,8 @@ add('README preserves Linux install.sh path', './install.sh' in readme and 'Copy
 add('README adds Windows WSL option', 'Windows 11 Home / WSL2 / Ubuntu 26.04' in readme)
 add('README links Windows quickstart', 'WINDOWS-WSL-QUICKSTART.md' in readme)
 add('README links Administrator PowerShell instructions', 'ADMIN-POWERSHELL.md' in readme)
-add('Quickstart contains latest-release bootstrap', 'dune-awakening-selfhost-docker/archive/refs/tags/' in quickstart and '.\\install.ps1' in quickstart)
+add('Quickstart downloads install.ps1 directly', 'raw.githubusercontent.com/Red-Blink/dune-awakening-selfhost-docker/main/install.ps1' in quickstart)
+add('Quickstart passes explicit repo URL and ref', '-RepoUrl' in quickstart and '-RepoRef' in quickstart)
 add('Quickstart explains Administrator PowerShell launch steps', 'Run as administrator' in quickstart and 'Administrator:' in quickstart)
 add('Quickstart warns not to nest powershell command wrapper', 'Do not wrap this command' in quickstart)
 add('Admin doc explains Run as administrator', 'Run as administrator' in admin and 'Administrator:' in admin)
@@ -69,8 +70,8 @@ Expected result: all checks pass.
 
 - Confirm `install.ps1` is additive and does not replace or modify `install.sh`.
 - Confirm Linux users can still use the original README Linux installer.
-- Confirm Windows users can either use the latest-release bootstrap command or run the helper from a trusted local checkout.
-- Confirm the release bootstrap downloads a GitHub release archive and runs the checked-in script from that extracted archive.
+- Confirm Windows users can either use the direct `install.ps1` bootstrap command or run the helper from a trusted local checkout.
+- Confirm the direct bootstrap downloads `install.ps1` and runs it as a file, not through a nested command string.
 - Confirm Windows documentation tells users how to launch Administrator PowerShell.
 - Confirm the helper delegates to `install.sh` after preparing WSL and Docker.
 - Confirm the helper does not store Windows, Ubuntu, Funcom, or Web UI passwords.
