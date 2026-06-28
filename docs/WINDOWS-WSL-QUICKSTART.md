@@ -138,29 +138,46 @@ First verify the Web console is running inside Ubuntu:
 
 ```powershell
 wsl -d Ubuntu-26.04 -- bash -lc 'ss -ltnp | grep 8088 || true'
-wsl -d Ubuntu-26.04 -- bash -lc 'curl -I http://127.0.0.1:8088 || true'
+wsl -d Ubuntu-26.04 -- bash -lc 'curl -i http://127.0.0.1:8088/api/health || true'
 ```
 
-If Ubuntu returns `HTTP/1.1 200 OK` but Windows cannot connect to `localhost:8088`, check your WSL config:
+If Ubuntu returns `HTTP/1.1 200 OK` but Windows cannot connect to `localhost:8088`, the Web UI is healthy and Windows localhost forwarding is the broken layer. Confirm from Windows:
 
 ```powershell
-Get-Content "$env:USERPROFILE\.wslconfig" -ErrorAction SilentlyContinue
+Test-NetConnection localhost -Port 8088
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8088/api/health
 ```
 
-For the default same-PC setup, use this config:
-
-```ini
-[wsl2]
-localhostForwarding=true
-memory=32GB
-processors=8
-```
-
-Then restart WSL and start the console again:
+If those Windows tests fail while the WSL health check passes, refresh Windows' explicit forwarding rule to the current WSL IP. Run this from **PowerShell as Administrator**:
 
 ```powershell
-wsl --shutdown
-wsl -d Ubuntu-26.04 -- bash -lc 'cd ~/dune-awakening-selfhost-docker && docker compose -f docker-compose.web.yml up -d redblink-dune-docker-console'
+$wslIp = (wsl -d Ubuntu-26.04 -- bash -lc "hostname -I").Trim().Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)[0]
+
+netsh interface portproxy delete v4tov4 listenaddress=127.0.0.1 listenport=8088 2>$null
+netsh interface portproxy add v4tov4 listenaddress=127.0.0.1 listenport=8088 connectaddress=$wslIp connectport=8088
+
+netsh interface portproxy show all
+Test-NetConnection 127.0.0.1 -Port 8088
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8088
+```
+
+WSL IP addresses can change after `wsl --shutdown` or a Windows restart. If the Web UI works inside Ubuntu but stops loading from Windows again, re-run the portproxy block above.
+
+If the WSL health check fails too, restart only the Web UI container before recreating anything:
+
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc 'docker restart redblink-dune-docker-console && sleep 5 && curl -i http://127.0.0.1:8088/api/health'
+```
+
+Only recreate the Web UI container if the restart still fails:
+
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc 'cd ~/dune-awakening-selfhost-docker && ADMIN_BIND_PORT=8088 docker compose -f docker-compose.web.yml up -d --force-recreate --build redblink-dune-docker-console && sleep 5 && curl -i http://127.0.0.1:8088/api/health'
 ```
 
 For the full guide and advanced LAN notes, see [WINDOWS-WSL-INSTALL.md](WINDOWS-WSL-INSTALL.md).
