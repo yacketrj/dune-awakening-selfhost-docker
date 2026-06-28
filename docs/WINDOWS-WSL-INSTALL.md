@@ -8,13 +8,14 @@ The Windows path is:
 
 1. Confirm virtualization is enabled.
 2. Install WSL2 on Windows.
-3. Install Ubuntu 26.04 as the WSL distribution.
-4. Launch Ubuntu once and create the Linux username/password.
-5. Enable `systemd` in Ubuntu.
-6. Install Docker Engine and Docker Compose inside Ubuntu.
-7. Clone this repository inside Ubuntu.
-8. Run the existing Linux `install.sh` from inside Ubuntu.
-9. Open the Web UI from Windows at `http://localhost:8088`.
+3. Apply recommended WSL resource and localhost-forwarding settings.
+4. Install Ubuntu 26.04 as the WSL distribution.
+5. Launch Ubuntu once and create the Linux username/password.
+6. Enable `systemd` in Ubuntu.
+7. Install Docker Engine and Docker Compose inside Ubuntu.
+8. Clone this repository inside Ubuntu.
+9. Run the existing Linux `install.sh` from inside Ubuntu.
+10. Open the Web UI from Windows at `http://localhost:8088`.
 
 The repository's Linux installer remains the source of truth for starting Dune Docker Console. The PowerShell script prepares Windows/WSL and then delegates to `install.sh`.
 
@@ -56,6 +57,37 @@ Recommended WSL memory allocation:
 | 48 GB | 36 GB |
 | 64 GB | 48 GB |
 | 96 GB+ | 64 GB |
+
+Do not allocate all system memory to WSL. Leave enough RAM for Windows, browser sessions, antivirus, Discord, and remote administration tools.
+
+---
+
+## Recommended `.wslconfig`
+
+For the first end-to-end install test, use the default WSL localhost-forwarding path. This is the simplest path for opening the Web UI from Windows at `http://localhost:8088`.
+
+Open the WSL config file from PowerShell:
+
+```powershell
+notepad "$env:USERPROFILE\.wslconfig"
+```
+
+Paste this example, then adjust `memory` and `processors` for your machine:
+
+```ini
+[wsl2]
+localhostForwarding=true
+memory=32GB
+processors=8
+```
+
+Save the file, close Notepad, then fully restart WSL:
+
+```powershell
+wsl --shutdown
+```
+
+If you later need LAN-focused networking, see [Advanced WSL networking](#advanced-wsl-networking). Do not use mirrored networking for the first validation pass unless you are specifically testing LAN routing.
 
 ---
 
@@ -101,7 +133,30 @@ wsl --set-default-version 2
 wsl --status
 ```
 
-### 4. Install Ubuntu 26.04
+### 4. Apply recommended WSL settings
+
+Open:
+
+```powershell
+notepad "$env:USERPROFILE\.wslconfig"
+```
+
+Paste this default same-PC config:
+
+```ini
+[wsl2]
+localhostForwarding=true
+memory=32GB
+processors=8
+```
+
+Adjust `memory` and `processors`, save the file, then run:
+
+```powershell
+wsl --shutdown
+```
+
+### 5. Install Ubuntu 26.04
 
 List available WSL distributions:
 
@@ -117,7 +172,7 @@ wsl --install --distribution Ubuntu-26.04
 
 If `Ubuntu-26.04` is not listed, install the closest available official Ubuntu 26.04 entry shown by `wsl --list --online`, then pass that exact distribution name to `install.ps1` with `-WslDistro`.
 
-### 5. Launch Ubuntu once and create the Linux user
+### 6. Launch Ubuntu once and create the Linux user
 
 Start Ubuntu:
 
@@ -136,7 +191,7 @@ exit
 
 If `whoami` prints your Linux username, continue.
 
-### 6. Run the Windows installer
+### 7. Run the Windows installer
 
 If you cloned the repository on Windows, go to that folder:
 
@@ -161,7 +216,7 @@ The script will:
 - run `install.sh` inside Ubuntu;
 - print the Web UI address.
 
-### 7. Open the Web UI
+### 8. Open the Web UI
 
 From Windows, open:
 
@@ -169,7 +224,7 @@ From Windows, open:
 http://localhost:8088
 ```
 
-If that does not work, use the address printed by `install.sh`.
+If that does not work, see [FAQ / troubleshooting](#faq--troubleshooting).
 
 ---
 
@@ -195,7 +250,30 @@ wsl --set-default-version 2
 wsl --status
 ```
 
-### 2. Install Ubuntu 26.04
+### 2. Apply recommended WSL settings
+
+Open:
+
+```powershell
+notepad "$env:USERPROFILE\.wslconfig"
+```
+
+Paste:
+
+```ini
+[wsl2]
+localhostForwarding=true
+memory=32GB
+processors=8
+```
+
+Adjust `memory` and `processors`, save the file, then run:
+
+```powershell
+wsl --shutdown
+```
+
+### 3. Install Ubuntu 26.04
 
 Check the exact distro name available on your machine:
 
@@ -211,7 +289,7 @@ wsl --install --distribution Ubuntu-26.04
 
 If it is not listed, install the closest available official Ubuntu 26.04 entry shown by `wsl --list --online`, then use that exact distribution name when running the installer.
 
-### 3. Open Ubuntu and create your Linux user
+### 4. Open Ubuntu and create your Linux user
 
 Start Ubuntu from the Start Menu or run:
 
@@ -223,7 +301,7 @@ Create the Ubuntu username and password when asked.
 
 When typing the password, the screen may not show dots or characters. That is normal.
 
-### 4. Keep the server inside the Linux filesystem
+### 5. Keep the server inside the Linux filesystem
 
 Inside Ubuntu:
 
@@ -240,7 +318,7 @@ The path should look like:
 
 Do not install the server under `/mnt/c/Users/...`. Keep it under `/home/...` for Linux filesystem performance and to avoid Windows file-locking behavior.
 
-### 5. Enable systemd
+### 6. Enable systemd
 
 Inside Ubuntu:
 
@@ -270,7 +348,7 @@ wsl --shutdown
 wsl -d Ubuntu-26.04
 ```
 
-### 6. Install Docker Engine inside Ubuntu
+### 7. Install Docker Engine inside Ubuntu
 
 Inside Ubuntu:
 
@@ -334,7 +412,7 @@ Test Docker:
 docker run hello-world
 ```
 
-### 7. Clone the repository inside Ubuntu
+### 8. Clone the repository inside Ubuntu
 
 Inside Ubuntu:
 
@@ -351,7 +429,7 @@ git clone https://github.com/yacketrj/dune-awakening-selfhost-docker-WSL.git
 cd dune-awakening-selfhost-docker-WSL
 ```
 
-### 8. Run the Linux installer
+### 9. Run the Linux installer
 
 ```bash
 chmod +x install.sh
@@ -408,23 +486,20 @@ New-NetFirewallRule -DisplayName "Dune Game UDP 7777-7810" `
 
 ---
 
-## WSL networking notes
+## Advanced WSL networking
 
-For same-machine setup, try:
+For the first same-PC install test, use the recommended localhost-forwarding config:
 
-```text
-http://localhost:8088
+```ini
+[wsl2]
+localhostForwarding=true
+memory=32GB
+processors=8
 ```
 
-If that fails, use the same-network address printed by `install.sh`.
+For LAN or internet hosting, WSL mirrored networking may be useful on Windows 11. Mirrored networking changes how WSL services are exposed and can require Windows Firewall rules. Use it only when you are specifically testing LAN reachability.
 
-For LAN or internet hosting, consider WSL mirrored networking on Windows 11. Create or edit this file in PowerShell:
-
-```powershell
-notepad "$env:USERPROFILE\.wslconfig"
-```
-
-Example:
+Advanced mirrored example:
 
 ```ini
 [wsl2]
@@ -436,13 +511,13 @@ memory=32GB
 processors=8
 ```
 
-Then restart WSL:
+Do not combine `networkingMode=mirrored` with an expectation that `localhostForwarding` controls access. In mirrored mode, WSL may warn that `localhostForwarding` has no effect.
+
+After changing `.wslconfig`, always restart WSL:
 
 ```powershell
 wsl --shutdown
 ```
-
-Adjust `memory` and `processors` for your hardware.
 
 ---
 
@@ -473,7 +548,7 @@ dune logs redblink-dune-docker-console
 
 ---
 
-## Troubleshooting
+## FAQ / troubleshooting
 
 ### `Ubuntu-26.04` is not listed
 
@@ -535,13 +610,12 @@ If `systemctl` fails, verify `systemd`:
 ps -p 1 -o comm=
 ```
 
-### Web UI does not open
+### Web UI does not open from Windows
 
-Inside Ubuntu:
+First verify that the console container exists:
 
-```bash
-cd ~/dune-awakening-selfhost-docker
-docker ps
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc 'docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 ```
 
 Look for:
@@ -550,17 +624,63 @@ Look for:
 redblink-dune-docker-console
 ```
 
-If it is missing:
+If the container is missing, start it from Ubuntu:
 
-```bash
-./install.sh
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc 'cd ~/dune-awakening-selfhost-docker && docker compose -f docker-compose.web.yml up -d redblink-dune-docker-console'
 ```
 
-or:
+Then verify the Web UI is listening inside Ubuntu:
 
-```bash
-dune web
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc 'ss -ltnp | grep 8088 || true'
+wsl -d Ubuntu-26.04 -- bash -lc 'curl -I http://127.0.0.1:8088 || true'
 ```
+
+If Ubuntu returns `HTTP/1.1 200 OK` but Windows still cannot connect to `localhost:8088`, check the Windows-side WSL config:
+
+```powershell
+Get-Content "$env:USERPROFILE\.wslconfig" -ErrorAction SilentlyContinue
+```
+
+For the default same-PC setup, use:
+
+```ini
+[wsl2]
+localhostForwarding=true
+memory=32GB
+processors=8
+```
+
+Then fully restart WSL and start the console again:
+
+```powershell
+wsl --shutdown
+wsl -d Ubuntu-26.04 -- bash -lc 'cd ~/dune-awakening-selfhost-docker && docker compose -f docker-compose.web.yml up -d redblink-dune-docker-console'
+```
+
+Test from Windows:
+
+```powershell
+Test-NetConnection localhost -Port 8088
+```
+
+If you intentionally use mirrored networking, test the LAN address instead of assuming localhost forwarding:
+
+```powershell
+$wslIps = (wsl -d Ubuntu-26.04 -- bash -lc "hostname -I").Trim().Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
+$wslIp = $wslIps | Where-Object { $_ -notlike "172.*" } | Select-Object -First 1
+$wslIp
+Test-NetConnection $wslIp -Port 8088
+```
+
+If the container keeps restarting, inspect the logs:
+
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc 'docker logs --tail=200 redblink-dune-docker-console'
+```
+
+Redact passwords, tokens, and secrets before sharing logs.
 
 ### Players cannot connect from outside the house
 
