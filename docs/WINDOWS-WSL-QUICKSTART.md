@@ -42,7 +42,46 @@ wsl --set-default-version 2
 wsl --status
 ```
 
-## 4. Install Ubuntu 26.04
+## 4. Apply recommended WSL settings
+
+These settings are recommended for hosting from Windows / WSL because they reserve enough memory for the game server and enable WSL networking behavior that is easier to reach from Windows and the LAN.
+
+Recommended memory values:
+
+| Physical RAM | Suggested WSL memory |
+|---:|---:|
+| 32 GB | 24 GB |
+| 48 GB | 36 GB |
+| 64 GB | 48 GB |
+| 96 GB+ | 64 GB |
+
+Open the WSL config file:
+
+```powershell
+notepad "$env:USERPROFILE\.wslconfig"
+```
+
+Paste this example, then adjust `memory` for your machine:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+dnsTunneling=true
+autoProxy=true
+firewall=true
+memory=32GB
+processors=8
+```
+
+Save the file, close Notepad, then restart WSL:
+
+```powershell
+wsl --shutdown
+```
+
+If your PC has less than 48 GB RAM, lower `memory` before continuing. Do not allocate all system memory to WSL; leave enough RAM for Windows.
+
+## 5. Install Ubuntu 26.04
 
 List the available WSL distributions:
 
@@ -58,7 +97,7 @@ wsl --install --distribution Ubuntu-26.04
 
 If `Ubuntu-26.04` is not listed, install the closest available official Ubuntu 26.04 entry shown by `wsl --list --online`, then use that exact distribution name when running `install.ps1`.
 
-## 5. Launch Ubuntu once and create the Linux user
+## 6. Launch Ubuntu once and create the Linux user
 
 Before running the Dune installer, start Ubuntu once:
 
@@ -77,7 +116,7 @@ exit
 
 If `whoami` prints your Linux username, continue.
 
-## 6. Run the Dune Windows / WSL installer
+## 7. Run the Dune Windows / WSL installer
 
 Paste this command into the same Administrator PowerShell window:
 
