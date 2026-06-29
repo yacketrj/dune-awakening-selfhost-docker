@@ -76,9 +76,12 @@ Paste this example, then adjust `memory` and `processors` for your machine:
 
 ```ini
 [wsl2]
+networkingMode=mirrored
 localhostForwarding=true
+firewall=true
 memory=32GB
 processors=8
+
 ```
 
 Save the file, close Notepad, then fully restart WSL:
