@@ -34,6 +34,17 @@ require_docker() {
   fi
 }
 
+require_curl_python() {
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required for metrics validation."
+    exit 1
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required for metrics validation output parsing."
+    exit 1
+  fi
+}
+
 ensure_compose_file() {
   if [ ! -f "$compose_file" ]; then
     echo "Missing $compose_file."
@@ -56,6 +67,12 @@ curl_prometheus() {
     return $?
   fi
   return 127
+}
+
+query_prometheus() {
+  local query="$1"
+  curl -fsS --max-time 5 -G "http://127.0.0.1:${prometheus_port}/api/v1/query" \
+    --data-urlencode "query=${query}"
 }
 
 wait_for_prometheus_targets() {
@@ -137,6 +154,169 @@ show_status() {
   show_targets
 }
 
+validate_metrics() {
+  require_docker
+  require_curl_python
+  ensure_compose_file
+
+  local fail=0
+  local tmp_targets tmp_rules tmp_up tmp_pg
+  tmp_targets="$(mktemp)"
+  tmp_rules="$(mktemp)"
+  tmp_up="$(mktemp)"
+  tmp_pg="$(mktemp)"
+
+  echo "=== Metrics validation ==="
+  print_url
+
+  echo
+  echo "Checking Prometheus health..."
+  if curl_prometheus "/-/healthy" >/dev/null 2>&1; then
+    echo "OK   Prometheus health"
+  else
+    echo "FAIL Prometheus is not healthy on 127.0.0.1:${prometheus_port}"
+    fail=1
+  fi
+
+  echo
+  echo "Checking Prometheus targets..."
+  if curl_prometheus "/api/v1/targets" >"$tmp_targets" 2>/dev/null; then
+    if ! python3 - "$tmp_targets" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text())
+targets = payload.get('data', {}).get('activeTargets', [])
+expected = {'dune-prometheus', 'dune-node', 'dune-cadvisor', 'dune-postgres'}
+seen = {target.get('labels', {}).get('job') for target in targets}
+missing = sorted(expected - seen)
+print(f"active_targets={len(targets)}")
+for target in targets:
+    labels = target.get('labels', {})
+    job = labels.get('job', '-')
+    instance = labels.get('instance', '-')
+    health = target.get('health', '-')
+    last_error = target.get('lastError') or ''
+    suffix = f" ({last_error})" if last_error else ''
+    print(f"{job}\t{instance}\t{health}{suffix}")
+if missing:
+    print("Missing required jobs: " + ", ".join(missing))
+    raise SystemExit(1)
+if not targets:
+    print("No active targets returned.")
+    raise SystemExit(1)
+PY
+    then
+      fail=1
+    fi
+  else
+    echo "FAIL target API unavailable"
+    fail=1
+  fi
+
+  echo
+  echo "Checking Prometheus rules..."
+  if curl_prometheus "/api/v1/rules" >"$tmp_rules" 2>/dev/null; then
+    if ! python3 - "$tmp_rules" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text())
+groups = payload.get('data', {}).get('groups', [])
+print(f"rule_groups={len(groups)}")
+for group in groups:
+    name = group.get('name', '-')
+    rules = group.get('rules', [])
+    print(f"{name}\trules={len(rules)}")
+if not groups:
+    print("No rule groups returned.")
+    raise SystemExit(1)
+PY
+    then
+      fail=1
+    fi
+  else
+    echo "FAIL rules API unavailable"
+    fail=1
+  fi
+
+  echo
+  echo "Checking scrape health with query: up"
+  if query_prometheus "up" >"$tmp_up" 2>/dev/null; then
+    if ! python3 - "$tmp_up" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text())
+results = payload.get('data', {}).get('result', [])
+if not results:
+    print("No up results returned.")
+    raise SystemExit(1)
+failed = []
+for result in results:
+    metric = result.get('metric', {})
+    job = metric.get('job', '-')
+    instance = metric.get('instance', '-')
+    value = result.get('value', [None, '0'])[1]
+    print(f"{job}\t{instance}\tup={value}")
+    if value != '1':
+        failed.append(f"{job}/{instance}={value}")
+if failed:
+    print("Unhealthy scrape targets: " + ", ".join(failed))
+    raise SystemExit(1)
+PY
+    then
+      fail=1
+    fi
+  else
+    echo "FAIL Prometheus query failed: up"
+    fail=1
+  fi
+
+  echo
+  echo "Checking Postgres exporter with query: pg_up"
+  if query_prometheus "pg_up" >"$tmp_pg" 2>/dev/null; then
+    if ! python3 - "$tmp_pg" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text())
+results = payload.get('data', {}).get('result', [])
+if not results:
+    print("No pg_up results returned.")
+    raise SystemExit(1)
+failed = []
+for result in results:
+    metric = result.get('metric', {})
+    job = metric.get('job', '-')
+    instance = metric.get('instance', '-')
+    value = result.get('value', [None, '0'])[1]
+    print(f"{job}\t{instance}\tpg_up={value}")
+    if value != '1':
+        failed.append(f"{job}/{instance}={value}")
+if failed:
+    print("Postgres exporter connectivity failed: " + ", ".join(failed))
+    raise SystemExit(1)
+PY
+    then
+      fail=1
+    fi
+  else
+    echo "FAIL Prometheus query failed: pg_up"
+    fail=1
+  fi
+
+  rm -f "$tmp_targets" "$tmp_rules" "$tmp_up" "$tmp_pg"
+
+  echo
+  if [ "$fail" -eq 0 ]; then
+    echo "READY: metrics validation passed."
+  else
+    echo "FAIL: metrics validation failed."
+  fi
+  return "$fail"
+}
+
 case "$command_name" in
   start|up)
     require_docker
@@ -172,6 +352,10 @@ case "$command_name" in
     show_status
     ;;
 
+  validate|check)
+    validate_metrics
+    ;;
+
   logs)
     require_docker
     ensure_compose_file
@@ -198,6 +382,7 @@ Usage:
   dune metrics stop
   dune metrics restart
   dune metrics status
+  dune metrics validate
   dune metrics logs [service]
   dune metrics config
   dune metrics pull
