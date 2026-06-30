@@ -205,20 +205,30 @@ Fix applied after this observation:
 - Empty target output now renders an explicit message instead of silently passing.
 - Metrics compose now uses a separate project name and ignores orphan warnings from the main game/web stack.
 
-## Required Re-Test
+## Validation Result: 2026-06-30, retest after target reporting fix
 
-Re-run the validation commands after the target reporting fix:
+User-reported local result:
 
-```bash
-docker compose -f docker-compose.metrics.yml config
-bash runtime/scripts/metrics-stack.sh config
-bash runtime/scripts/metrics-stack.sh start
-bash runtime/scripts/metrics-stack.sh status
-bash runtime/scripts/metrics-stack.sh stop
-bash runtime/scripts/dune metrics status
-```
+- Metrics stack is running.
+- Prometheus shows configured targets.
+- Prometheus shows loaded rules.
 
-Recommended Prometheus validation after start:
+Conclusion:
+
+- Prometheus startup is validated.
+- Compose service startup is validated after the node exporter mount fix.
+- Prometheus scrape target loading is validated.
+- Prometheus rule loading is validated.
+- The previous blank target output issue is resolved.
+
+RabbitMQ note:
+
+- RabbitMQ scrape jobs may appear down if the game RabbitMQ containers are not running.
+- RabbitMQ endpoint health should be validated with `dune-rmq-admin` and `dune-rmq-game` running before closing all R1 runtime validation.
+
+## Recommended Additional Checks
+
+Prometheus API checks:
 
 ```bash
 curl -fsS http://127.0.0.1:9090/-/healthy
@@ -226,7 +236,14 @@ curl -fsS http://127.0.0.1:9090/api/v1/targets
 curl -fsS http://127.0.0.1:9090/api/v1/rules
 ```
 
-Passing target validation should show at least these jobs as active targets:
+Optional metric-level checks:
+
+```bash
+curl -fsS 'http://127.0.0.1:9090/api/v1/query?query=up'
+curl -fsS 'http://127.0.0.1:9090/api/v1/query?query=pg_up'
+```
+
+Expected always-present jobs:
 
 ```text
 dune-prometheus
@@ -235,7 +252,7 @@ dune-cadvisor
 dune-postgres
 ```
 
-RabbitMQ jobs may be down or unavailable if the game RabbitMQ containers are not running, but they should still be present as configured targets once Prometheus has loaded the scrape config.
+RabbitMQ jobs are expected only when the relevant RabbitMQ containers and Prometheus plugin endpoints are reachable.
 
 ## Regression Expectations
 
@@ -254,10 +271,8 @@ Full game-stack runtime validation remains required before marking R1 complete.
 
 ## Remaining R1 Work
 
-- Re-run Docker Compose validation locally after the target reporting fix.
-- Re-run start/status/stop on a real host.
-- Confirm Prometheus reports configured active targets.
 - Confirm RabbitMQ `15692` endpoints are reachable from Prometheus on `dune-net` when RabbitMQ is running.
-- Confirm postgres_exporter connects to `dune-postgres` with the active `.env` credentials.
-- Confirm cAdvisor works under WSL/Docker Desktop host constraints.
-- Confirm alert rules load cleanly in Prometheus.
+- Confirm postgres_exporter reports `pg_up == 1` against the active `.env` credentials.
+- Confirm cAdvisor transitions from `health: starting` to healthy under WSL/Docker Desktop host constraints.
+- Run regression checks for normal game-stack CLI commands.
+- Run security/static checks before marking PR ready for review.
