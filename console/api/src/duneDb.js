@@ -2964,3 +2964,7 @@ export async function addonOpsHealthSummaryV2(db) {
 
   return { players, farms };
 }
+
+export async function addonOpsHealthSummary(db) {
+  return addonOpsHealthSummaryV2(db);
+}
