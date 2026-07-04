@@ -509,6 +509,52 @@ async function addonBridgeRoute(req, res, path) {
     audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
     return json(res, 200, { ok: true, result });
   }
+  if (action === "ops.health.summary" || action === "ops.health.players" || action === "ops.health.farms" || action === "ops.health.summary.v2") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = action === "ops.health.players"
+      ? await duneDb.addonOpsHealthPlayers(db)
+      : action === "ops.health.farms"
+        ? await duneDb.addonOpsHealthFarms(db)
+        : await duneDb.addonOpsHealthSummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.activity.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsActivitySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.combat.deaths") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsCombatDeaths(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.resources.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsResourcesSummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.economy.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsEconomySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.inventory.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsInventorySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.location.activity") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsLocationActivity(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
   if (action === "database.query" || action === "database.execute") {
     const query = String(body.query || "");
     const readOnly = isReadOnlySql(query);
