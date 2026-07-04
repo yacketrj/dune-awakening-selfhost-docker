@@ -3015,3 +3015,231 @@ function unsupported(feature, requiredTables) {
     reason: `Unsupported by detected schema. Missing required table(s): ${requiredTables.join(", ")}`
   };
 }
+function emptyAddonOpsHealthPlayers() {
+  return {
+    total: 0,
+    onlineStatus: {},
+    lifeState: {},
+    characterState: {},
+    combinations: []
+  };
+}
+
+function emptyAddonOpsHealthFarms() {
+  return {
+    total: 0,
+    ready: 0,
+    alive: 0,
+    connectedPlayers: 0,
+    incomingS2SConnections: 0,
+    outgoingS2SConnections: 0
+  };
+}
+
+function addCount(target, key, count) {
+  target[String(key || "Unknown")] = (target[String(key || "Unknown")] || 0) + count;
+}
+
+export async function addonOpsHealthPlayers(db) {
+  if (!(await tableExists(db, "player_state"))) return emptyAddonOpsHealthPlayers();
+
+  const columns = await columnsFor(db, "player_state");
+  const required = ["online_status", "life_state", "character_state"];
+  if (!required.every((column) => columns.has(column))) return emptyAddonOpsHealthPlayers();
+
+  const result = await db.query(`
+    select coalesce(online_status::text, 'Unknown') as online_status,
+           coalesce(life_state::text, 'Unknown') as life_state,
+           coalesce(character_state::text, 'Unknown') as character_state,
+           count(*)::int as players
+    from dune.player_state
+    group by 1, 2, 3
+    order by 1, 2, 3`);
+
+  const out = emptyAddonOpsHealthPlayers();
+  for (const row of result.rows || []) {
+    const players = Number(row.players || 0);
+    const onlineStatus = String(row.online_status || "Unknown");
+    const lifeState = String(row.life_state || "Unknown");
+    const characterState = String(row.character_state || "Unknown");
+
+    out.total += players;
+    addCount(out.onlineStatus, onlineStatus, players);
+    addCount(out.lifeState, lifeState, players);
+    addCount(out.characterState, characterState, players);
+    out.combinations.push({ onlineStatus, lifeState, characterState, players });
+  }
+
+  return out;
+}
+
+export async function addonOpsHealthFarms(db) {
+  if (!(await tableExists(db, "farm_state"))) return emptyAddonOpsHealthFarms();
+
+  const columns = await columnsFor(db, "farm_state");
+  const boolCount = (column) => columns.has(column)
+    ? `sum(case when coalesce(${quoteIdentifier(column)}, false) then 1 else 0 end)::int`
+    : "0::int";
+  const intSum = (column) => columns.has(column)
+    ? `coalesce(sum(coalesce(${quoteIdentifier(column)}, 0)), 0)::int`
+    : "0::int";
+
+  const result = await db.query(`
+    select count(*)::int as total,
+           ${boolCount("ready")} as ready,
+           ${boolCount("alive")} as alive,
+           ${intSum("connected_players")} as connected_players,
+           ${intSum("incoming_s2s_connections")} as incoming_s2s_connections,
+           ${intSum("outgoing_s2s_connections")} as outgoing_s2s_connections
+    from dune.farm_state`);
+
+  const row = result.rows?.[0] || {};
+  return {
+    total: Number(row.total || 0),
+    ready: Number(row.ready || 0),
+    alive: Number(row.alive || 0),
+    connectedPlayers: Number(row.connected_players || 0),
+    incomingS2SConnections: Number(row.incoming_s2s_connections || 0),
+    outgoingS2SConnections: Number(row.outgoing_s2s_connections || 0)
+  };
+}
+
+export async function addonOpsHealthSummaryV2(db) {
+  const [players, farms] = await Promise.all([
+    addonOpsHealthPlayers(db),
+    addonOpsHealthFarms(db)
+  ]);
+
+  return { players, farms };
+}
+
+export async function addonOpsHealthSummary(db) {
+  return addonOpsHealthSummaryV2(db);
+}
+
+// v0.4.0 Player Activity Foundation
+function emptyAddonActivity() {
+  return {
+    totalPlayers: 0,
+    onlinePlayers: 0,
+    offlinePlayers: 0,
+    activeLast1h: 0,
+    activeLast24h: 0,
+    activeLast7d: 0,
+    sessionCount: 0,
+    returningPlayers: 0,
+    newPlayers: 0,
+    guildActivity: [],
+    factionActivity: [],
+    mapActivity: [],
+    inactivePlayers: 0
+  };
+}
+
+export async function addonOpsActivitySummary(db) {
+  if (!(await tableExists(db, "player_state"))) return emptyAddonActivity();
+
+  const psColumns = await columnsFor(db, "player_state");
+  const hasOnlineStatus = psColumns.has("online_status");
+  const hasLastSeen = psColumns.has("last_seen_time") || psColumns.has("last_seen") || psColumns.has("last_login_time");
+  const lastSeenCol = hasLastSeen
+    ? firstExistingColumn(psColumns, ["last_seen_time", "last_seen", "last_login_time"])
+    : "";
+
+  const onlineCount = hasOnlineStatus
+    ? await db.query(`select count(*)::int as c from dune.player_state where online_status::text = 'Online'`)
+    : { rows: [{ c: 0 }] };
+
+  const totalResult = await db.query("select count(*)::int as c from dune.player_state");
+
+  let active1h = 0, active24h = 0, active7d = 0;
+  if (lastSeenCol) {
+    const active = await db.query(`
+      select
+        count(*) filter (where ${quoteIdentifier(lastSeenCol)} >= (current_timestamp at time zone 'UTC') - interval '1 hour')::int as active_1h,
+        count(*) filter (where ${quoteIdentifier(lastSeenCol)} >= (current_timestamp at time zone 'UTC') - interval '24 hours')::int as active_24h,
+        count(*) filter (where ${quoteIdentifier(lastSeenCol)} >= (current_timestamp at time zone 'UTC') - interval '7 days')::int as active_7d
+      from dune.player_state`);
+    active1h = Number(active.rows[0]?.active_1h || 0);
+    active24h = Number(active.rows[0]?.active_24h || 0);
+    active7d = Number(active.rows[0]?.active_7d || 0);
+  }
+
+  let guildActivity = [];
+  if (await tableExists(db, "guild_members") && await tableExists(db, "guilds")) {
+    const guildResult = await db.query(`
+      select coalesce(g.name, g.guild_name, 'Unknown') as guild_name,
+             count(gm.*)::int as members,
+             count(*) filter (where ps.online_status::text = 'Online')::int as online
+      from dune.guild_members gm
+      join dune.guilds g on g.id = gm.guild_id or g.guild_id = gm.guild_id
+      left join dune.player_state ps on ps.account_id = gm.player_id or ps.player_controller_id = gm.player_id
+      group by g.name, g.guild_name
+      order by members desc
+      limit 20`);
+    guildActivity = guildResult.rows.map((r) => ({
+      guild: String(r.guild_name || "Unknown"),
+      members: Number(r.members || 0),
+      online: Number(r.online || 0)
+    }));
+  }
+
+  let factionActivity = [];
+  if (await tableExists(db, "player_faction") && await tableExists(db, "factions")) {
+    const factionResult = await db.query(`
+      select coalesce(f.name, 'Unknown') as faction_name,
+             count(pf.*)::int as members,
+             count(*) filter (where ps.online_status::text = 'Online')::int as online
+      from dune.player_faction pf
+      left join dune.factions f on f.id = pf.faction_id
+      left join dune.player_state ps on ps.player_pawn_id = pf.actor_id or ps.player_controller_id = pf.actor_id
+      group by f.name
+      order by members desc`);
+    factionActivity = factionResult.rows.map((r) => ({
+      faction: String(r.faction_name || "Unknown"),
+      members: Number(r.members || 0),
+      online: Number(r.online || 0)
+    }));
+  }
+
+  let mapActivity = [];
+  if (await tableExists(db, "actors")) {
+    const mapResult = await db.query(`
+      select coalesce(nullif(a.map, ''), 'Unknown') as map_name,
+             count(*)::int as actors,
+             count(*) filter (where ps.online_status::text = 'Online')::int as online
+      from dune.actors a
+      left join dune.player_state ps on ps.player_pawn_id = a.id
+      where a.class ilike '%PlayerCharacter%'
+      group by a.map
+      order by actors desc
+      limit 20`);
+    mapActivity = mapResult.rows.map((r) => ({
+      map: String(r.map_name || "Unknown"),
+      actors: Number(r.actors || 0),
+      online: Number(r.online || 0)
+    }));
+  }
+
+  const totalOnline = Number(onlineCount.rows[0]?.c || 0);
+  const totalPlayers = Number(totalResult.rows[0]?.c || 0);
+  const inactivePlayers = totalPlayers - active7d;
+
+  return {
+    totalPlayers,
+    onlinePlayers: totalOnline,
+    offlinePlayers: totalPlayers - totalOnline,
+    activeLast1h: active1h,
+    activeLast24h: active24h,
+    activeLast7d: active7d,
+    sessionCount: 0,
+    returningPlayers: 0,
+    newPlayers: 0,
+    guildActivity,
+    factionActivity,
+    mapActivity,
+    inactivePlayers: inactivePlayers > 0 ? inactivePlayers : 0
+  };
+}
+
+// v0.5.0 Combat and Death Analytics
