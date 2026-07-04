@@ -19,7 +19,8 @@ const ALLOWED_ADDON_PERMISSIONS = new Set([
   "server:status",
   "server:restart",
   "files:addon-data",
-  "broadcast:send"
+  "broadcast:send",
+  "ops:read"
 ]);
 
 export async function fetchCommunityAddons(fetchImpl = globalThis.fetch, indexUrl = COMMUNITY_ADDONS_INDEX_URL) {
