@@ -3378,21 +3378,22 @@ export async function addonOpsResourcesSummary(db) {
 
 // v0.7.0 Economy and Trade Analytics
 
+const prometheusHealthCache = { data: null, timestamp: 0 };
+const PROMETHEUS_HEALTH_CACHE_TTL = 30000;
+
 export async function addonOpsPrometheusHealth() {
+  const cached = prometheusHealthCache.data;
+  if (cached && Date.now() - prometheusHealthCache.timestamp < PROMETHEUS_HEALTH_CACHE_TTL) {
+    return cached;
+  }
+
   const prometheusUrl = "http://127.0.0.1:9090";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-
-    let targetsResponse;
-    try {
-      targetsResponse = await fetch(`${prometheusUrl}/api/v1/targets`, { signal: controller.signal });
-      if (!targetsResponse.ok) throw new Error(`Prometheus targets API returned ${targetsResponse.status}`);
-    } catch {
-      clearTimeout(timer);
-      return { healthy: false, error: "Prometheus not reachable" };
-    }
+    const targetsResponse = await fetch(`${prometheusUrl}/api/v1/targets`, { signal: controller.signal });
+    if (!targetsResponse.ok) throw new Error(`Prometheus targets API returned ${targetsResponse.status}`);
 
     const targetsPayload = await targetsResponse.json();
     const activeTargets = targetsPayload?.data?.activeTargets ?? [];
@@ -3440,9 +3441,7 @@ export async function addonOpsPrometheusHealth() {
       }
     } catch {}
 
-    clearTimeout(timer);
-
-    return {
+    const result = {
       healthy: activeCount > 0,
       targets: {
         active: activeCount,
@@ -3457,7 +3456,14 @@ export async function addonOpsPrometheusHealth() {
         totalRestarts
       }
     };
+
+    prometheusHealthCache.data = result;
+    prometheusHealthCache.timestamp = Date.now();
+
+    return result;
   } catch {
-    return { healthy: false, error: "Prometheus health check failed" };
+    return { healthy: false, error: "Prometheus not reachable" };
+  } finally {
+    clearTimeout(timer);
   }
 }
