@@ -3534,3 +3534,87 @@ export async function addonOpsInventorySummary(db) {
 }
 
 // v0.9.0 Location, Territory, and Base Activity
+
+export async function addonOpsPrometheusHealth() {
+  const prometheusUrl = "http://127.0.0.1:9090";
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+
+    let targetsResponse;
+    try {
+      targetsResponse = await fetch(`${prometheusUrl}/api/v1/targets`, { signal: controller.signal });
+      if (!targetsResponse.ok) throw new Error(`Prometheus targets API returned ${targetsResponse.status}`);
+    } catch {
+      clearTimeout(timer);
+      return { healthy: false, error: "Prometheus not reachable" };
+    }
+
+    const targetsPayload = await targetsResponse.json();
+    const activeTargets = targetsPayload?.data?.activeTargets ?? [];
+    const inactiveCount = activeTargets.filter(t => t.health === "down").length;
+    const activeCount = activeTargets.filter(t => t.health === "up").length;
+
+    const services = {};
+    const expectedJobs = ["dune-prometheus", "dune-node", "dune-cadvisor", "dune-postgres", "dune-rabbitmq-admin", "dune-rabbitmq-game"];
+    for (const job of expectedJobs) {
+      const match = activeTargets.find(t => t.labels?.job === job);
+      services[job] = match ? (match.health === "up" ? "up" : "down") : "missing";
+    }
+
+    let avgCpuPercent = null;
+    let avgMemoryMb = null;
+    let totalRestarts = 0;
+
+    try {
+      const cpuResp = await fetch(`${prometheusUrl}/api/v1/query?query=avg(rate(container_cpu_usage_seconds_total{name%3D~%22dune-.*%7Credblink-dune-docker-console%22}[5m]))*100`, { signal: controller.signal });
+      if (cpuResp.ok) {
+        const cpuData = await cpuResp.json();
+        if (cpuData?.data?.result?.length) {
+          avgCpuPercent = Math.round(parseFloat(cpuData.data.result[0].value[1]) * 100) / 100;
+        }
+      }
+    } catch {}
+
+    try {
+      const memResp = await fetch(`${prometheusUrl}/api/v1/query?query=avg(container_memory_working_set_bytes{name%3D~%22dune-.*%7Credblink-dune-docker-console%22})%2F1048576`, { signal: controller.signal });
+      if (memResp.ok) {
+        const memData = await memResp.json();
+        if (memData?.data?.result?.length) {
+          avgMemoryMb = Math.round(parseFloat(memData.data.result[0].value[1]) * 100) / 100;
+        }
+      }
+    } catch {}
+
+    try {
+      const restartResp = await fetch(`${prometheusUrl}/api/v1/query?query=sum(changes(container_last_seen{name%3D~%22dune-.*%7Credblink-dune-docker-console%22}[24h]))`, { signal: controller.signal });
+      if (restartResp.ok) {
+        const restartData = await restartResp.json();
+        if (restartData?.data?.result?.length) {
+          totalRestarts = parseInt(restartData.data.result[0].value[1], 10) || 0;
+        }
+      }
+    } catch {}
+
+    clearTimeout(timer);
+
+    return {
+      healthy: activeCount > 0,
+      targets: {
+        active: activeCount,
+        inactive: inactiveCount,
+        pending: activeTargets.filter(t => t.health === "unknown" || !t.health).length,
+        total: activeTargets.length
+      },
+      services,
+      summary: {
+        avgCpuPercent,
+        avgMemoryMb,
+        totalRestarts
+      }
+    };
+  } catch {
+    return { healthy: false, error: "Prometheus health check failed" };
+  }
+}
