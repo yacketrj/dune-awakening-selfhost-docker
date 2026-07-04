@@ -526,6 +526,12 @@ async function addonBridgeRoute(req, res, path) {
     return json(res, 200, { ok: true, result });
   }
   if (action === "ops.combat.deaths") {
+  if (action === "ops.health.prometheus") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsPrometheusHealth();
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
     const addon = assertInstalledAddonPermission(config, id, "ops:read");
     const result = await duneDb.addonOpsCombatDeaths(db);
     audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
