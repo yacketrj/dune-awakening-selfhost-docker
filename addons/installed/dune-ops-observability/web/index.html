@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" data-addon-id="dune-ops-observability">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dune Ops Observability</title>
+  <link rel="stylesheet" href="addon.css">
+</head>
+<body>
+  <main>
+    <section class="card hero-card">
+      <div>
+        <p class="eyebrow">Read-only operations</p>
+        <h1>Dune Ops Observability <span class="release-version">r0.2.1</span></h1>
+        <p id="status">Addon loaded.</p>
+      </div>
+      <button id="refresh-players" type="button">Refresh player summary</button>
+    </section>
+
+    <section class="summary-grid" aria-label="Player summary totals">
+      <article class="metric-card">
+        <span class="metric-label">Players</span>
+        <strong id="metric-total">0</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Online</span>
+        <strong id="metric-online">0</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Offline</span>
+        <strong id="metric-offline">0</strong>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Factions</span>
+        <strong id="metric-factions">0</strong>
+      </article>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">v0.3.0 target</p>
+          <h2>OPS Health Foundation</h2>
+        </div>
+        <p class="provider-label">Derived from player summary reads</p>
+      </div>
+      <p class="section-copy">Reports bridge/source status, successful read freshness, in-session player impact, and an operator-facing summary without adding permissions.</p>
+      <div class="ops-health-grid" aria-label="OPS health foundation">
+        <article class="metric-card health-card">
+          <span class="metric-label">Source Health</span>
+          <strong id="ops-source-health">Unknown</strong>
+          <p id="ops-source-health-note">Waiting for provider check.</p>
+        </article>
+        <article class="metric-card health-card">
+          <span class="metric-label">Freshness</span>
+          <strong id="ops-freshness">—</strong>
+          <p id="ops-freshness-note">Waiting for the first successful read.</p>
+        </article>
+        <article class="metric-card health-card">
+          <span class="metric-label">Player Impact</span>
+          <strong id="ops-player-impact">—</strong>
+          <p id="ops-player-impact-note">Waiting for comparison data.</p>
+        </article>
+        <article class="metric-card health-card">
+          <span class="metric-label">Operator Status</span>
+          <strong id="ops-operator-status">Unknown</strong>
+          <p id="ops-operator-status-note">Waiting for provider result.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">A3</p>
+          <h2>Player Summary</h2>
+        </div>
+        <p id="provider-label" class="provider-label">Provider: unknown</p>
+      </div>
+
+      <div id="empty-state" class="empty-state" hidden>No player summary data is available.</div>
+
+      <div class="table-wrap">
+        <table aria-label="Player summary table">
+          <thead>
+            <tr>
+              <th scope="col">Player</th>
+              <th scope="col">Level</th>
+              <th scope="col">Faction</th>
+              <th scope="col">Guild</th>
+              <th scope="col">Status</th>
+              <th scope="col">Map / Location</th>
+              <th scope="col">Last Seen</th>
+            </tr>
+          </thead>
+          <tbody id="players-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">A4</p>
+          <h2>KPI Capability</h2>
+        </div>
+        <p class="provider-label">Read-only support map</p>
+      </div>
+      <p class="section-copy">Shows which reporting categories are supportable by the currently available read-only data.</p>
+      <div class="capability-grid" aria-label="KPI capability categories">
+        <article class="capability-card">
+          <h3>Population & Activity</h3>
+          <span class="capability-status capability-supported">supported</span>
+          <p>Player totals and online status are available from player summary data.</p>
+        </article>
+        <article class="capability-card">
+          <h3>Progression</h3>
+          <span class="capability-status capability-partial">partial</span>
+          <p>Level rollups are possible when level fields are present.</p>
+        </article>
+        <article class="capability-card">
+          <h3>Guild & Faction</h3>
+          <span class="capability-status capability-partial">partial</span>
+          <p>Group rollups depend on guild and faction fields in the bridge payload.</p>
+        </article>
+        <article class="capability-card">
+          <h3>Trade</h3>
+          <span class="capability-status capability-unavailable">unavailable</span>
+          <p>No reviewed read-only source is available for this category.</p>
+        </article>
+        <article class="capability-card">
+          <h3>Storage</h3>
+          <span class="capability-status capability-unavailable">unavailable</span>
+          <p>No reviewed read-only source is available for this category.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">A5</p>
+          <h2>Read-only KPI Panels</h2>
+        </div>
+        <p class="provider-label">Derived from player summary</p>
+      </div>
+      <p class="section-copy">These panels calculate only from fields already visible in the player summary payload.</p>
+      <div class="kpi-grid" aria-label="Read-only KPI panels">
+        <article class="kpi-card">
+          <span class="metric-label">Active Rate</span>
+          <strong id="kpi-active-rate">—</strong>
+          <p id="kpi-active-rate-note">Waiting for player data.</p>
+        </article>
+        <article class="kpi-card">
+          <span class="metric-label">Average Level</span>
+          <strong id="kpi-average-level">—</strong>
+          <p id="kpi-average-level-note">Waiting for level data.</p>
+        </article>
+        <article class="kpi-card">
+          <span class="metric-label">Top Faction</span>
+          <strong id="kpi-top-faction">—</strong>
+          <p id="kpi-top-faction-note">Waiting for faction data.</p>
+        </article>
+        <article class="kpi-card">
+          <span class="metric-label">Top Guild</span>
+          <strong id="kpi-top-guild">—</strong>
+          <p id="kpi-top-guild-note">Waiting for guild data.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="card diagnostics-card">
+      <h2>Diagnostics</h2>
+      <pre id="output"></pre>
+    </section>
+  </main>
+  <script src="dune-addon-bridge.js"></script>
+  <script src="data-providers.js"></script>
+  <script src="addon.js"></script>
+</body>
+</html>

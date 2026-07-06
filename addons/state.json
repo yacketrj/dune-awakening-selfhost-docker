@@ -1,0 +1,14 @@
+{
+  "dune-ops-observability": {
+    "approvedPermissions": [
+      "players:read",
+      "ops:read"
+    ],
+    "enabled": true,
+    "installedAt": "2026-06-30T23:53:42.328Z",
+    "lifecycle": "active",
+    "lifecycleMessage": "",
+    "lifecycleUrl": "",
+    "sha256": "71015181a0b336a0c128d642d365dda73e5a80d961482dd8ec8a9fe0227dff2d"
+  }
+}

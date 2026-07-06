@@ -1,0 +1,12 @@
+artifact_id: dune-db-overmap_and_survival_1
+backup_file: dune-db-overmap_and_survival_1-20260628-152733.backup
+created_at: 2026-06-28T15:27:34-07:00
+backup_origin: manual
+database: dune
+format: pg_dump_custom
+scope: overmap_and_survival_1
+maps: Overmap,Survival_1
+server_title: Tabr Tau
+server_region: North America
+server_ip_mode: public
+battlegroup_id: sh-afe0154f3afe602c-buotse

@@ -1,0 +1,560 @@
+687:    'Deleted'
+743:-- Name: deleteplayermarkerdata; Type: TYPE; Schema: dune; Owner: dune
+746:CREATE TYPE dune.deleteplayermarkerdata AS (
+752:ALTER TYPE dune.deleteplayermarkerdata OWNER TO dune;
+983:    'delete_inventory_item',
+986:    'delete_item',
+1751:-- Name: _add_item_delete_log(bigint, bigint, text); Type: FUNCTION; Schema: dune; Owner: dune
+1754:CREATE FUNCTION dune._add_item_delete_log(in_item_id bigint, in_inventory_id bigint, in_template_id text) RETURNS void
+1758:    PERFORM _add_item_trace_log('delete_item', in_item_id, in_inventory_id, in_template_id);
+1763:ALTER FUNCTION dune._add_item_delete_log(in_item_id bigint, in_inventory_id bigint, in_template_id text) OWNER TO dune;
+2376:	DELETE FROM actor_state ast
+2407:		-- we delete the permissions for this vehicle so that they don't get exported and cause duplicated key failures
+2410:		DELETE FROM permission_actor pa WHERE pa.actor_id = to_store.vehicle_id;
+2643:	-- delete invite
+2644:	DELETE FROM guild_invites WHERE invite_id = in_invite_id;
+2700:	-- Delete any sent or reiceived invites from the player who's accepting the invitation
+2701:	DELETE FROM party_invites WHERE sender_player_id = out_player_id OR player_id = out_player_id;
+2856:	-- delete invite
+2858:        DELETE FROM guild_invites WHERE guild_id = in_guild_id;
+2860:	    DELETE FROM guild_invites WHERE guild_id = in_guild_id AND player_id = in_player_id;
+3339:-- Name: base_backup_delete(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+3342:CREATE FUNCTION dune.base_backup_delete(in_base_backup_id bigint) RETURNS void
+3348:    DELETE FROM actors a WHERE id = ANY(
+3354:    DELETE FROM base_backups WHERE id = in_base_backup_id;
+3359:ALTER FUNCTION dune.base_backup_delete(in_base_backup_id bigint) OWNER TO dune;
+3411:    DELETE FROM actor_state a
+3418:    DELETE FROM base_backups
+3691:    PERFORM base_backup_delete(in_base_backup_id);
+3885:        DELETE FROM player_faction WHERE actor_id = in_player_id
+4118:				-- TODO: add default to id and just delete it by filter
+4304:    PERFORM delete_account(in_fls_id, 'incoming char transfer');
+4774:	DELETE FROM guild_invites WHERE invite_sent_timespan < in_cutoff_timespan;
+4789:	DELETE FROM vendor_stock_cycle WHERE player_id = in_player_id;
+4790:	DELETE FROM vendor_stock_state WHERE player_id = in_player_id;
+4805:	DELETE FROM vendor_stock_cycle WHERE vendor_id = ANY(in_vendor_ids);
+4806:	DELETE FROM vendor_stock_state WHERE vendor_id = ANY(in_vendor_ids);
+4821:   vendors_to_delete TEXT[];
+4823:	SELECT array_agg(vendor_id) INTO vendors_to_delete FROM vendor_stock_cycle WHERE last_interacted_timestamp <= in_reference_timestamp;
+4824:	DELETE FROM vendor_stock_cycle WHERE vendor_id = ANY(vendors_to_delete);
+4825:	DELETE FROM vendor_stock_state WHERE vendor_id = ANY(vendors_to_delete);
+4840:    delete from actors
+4845:    truncate account_removal_log;
+4853:-- Name: cleanup_accounts_marked_for_deletion_in_fls(text[]); Type: FUNCTION; Schema: dune; Owner: dune
+4856:CREATE FUNCTION dune.cleanup_accounts_marked_for_deletion_in_fls(in_account_ids text[]) RETURNS void
+4860:	perform delete_account(id, 'deleted in fls') from unnest(in_account_ids) as id;
+4865:ALTER FUNCTION dune.cleanup_accounts_marked_for_deletion_in_fls(in_account_ids text[]) OWNER TO dune;
+4875:	DELETE FROM fgl_entities WHERE fgl_entities.entity_id = OLD.entity_id;
+4891:    DELETE FROM map_areas WHERE character_id IN (SELECT id from player_state WHERE account_id = in_id LIMIT 1);
+4981:	PERFORM delete_markers_for_all_players(in_map_info.marker_types_to_keep, in_server_info.map);
+4985:		DELETE FROM map_areas WHERE map_name = in_server_info.map;
+4990:		DELETE FROM resourcefield_state WHERE map = in_server_info.map;
+5006:	DELETE FROM lore_pickups_temporary;
+5007:	DELETE FROM consumed_temporary_per_player_lore;
+5008:	-- Use encrypted_player_state to allow changes to Deleted accounts
+5026:        PERFORM delete_actors_and_respawns_on_server(in_server_info, (in_map_info).vehicle_classes_spawned_on_map, TRUE);
+5028:		-- Use encrypted_player_state to allow changes to Deleted accounts
+5479:-- Name: delete_account(text, text); Type: FUNCTION; Schema: dune; Owner: dune
+5482:CREATE FUNCTION dune.delete_account(in_user_id text, in_reason text) RETURNS boolean
+5500:    delete_from_cascades as (
+5502:            guild_handle_actor_delete(referenced_actor_ids.ids[1]),
+5504:            ownership_handle_actor_delete(referenced_actor_ids.ids[1]),
+5505:            perform_notify_on_character_delete(in_user_id)
+5508:	delete_character as (
+5510:			SET character_state = 'Deleted', last_character_state_change = now()
+5515:    insert_into_removal_log as (
+5516:        insert into account_removal_log("fls_id", "account_id", "reason") select in_user_id, account_id, in_reason from delete_character
+5518:    SELECT count(*) > 0 INTO was_found FROM delete_from_cascades;
+5524:ALTER FUNCTION dune.delete_account(in_user_id text, in_reason text) OWNER TO dune;
+5527:-- Name: delete_account_permanently(text, text); Type: FUNCTION; Schema: dune; Owner: dune
+5530:CREATE FUNCTION dune.delete_account_permanently(in_user_id text, in_reason text) RETURNS boolean
+5541:    deleted_actors AS
+5543:        DELETE FROM actors USING referenced_actor_ids WHERE id IN (SELECT id FROM actors WHERE id = ANY(referenced_actor_ids.ids) ORDER BY id FOR UPDATE) returning id
+5552:    delete_respawn_beacons AS
+5554:        DELETE FROM actors
+5557:    delete_accounts as (
+5558:        DELETE FROM accounts WHERE accounts.user = in_user_id returning id as account_id
+5560:    insert_into_removal_log as (
+5561:        insert into account_removal_log("fls_id", "account_id", "reason") select in_user_id, account_id, in_reason from delete_accounts
+5563:    delete_from_cascades as (
+5565:            guild_handle_actor_delete(referenced_actor_ids.ids[1]),
+5567:            ownership_handle_actor_delete(referenced_actor_ids.ids[1]),
+5568:            perform_notify_on_character_delete(in_user_id)
+5571:    SELECT count(*) > 0 INTO was_found FROM delete_from_cascades;
+5577:ALTER FUNCTION dune.delete_account_permanently(in_user_id text, in_reason text) OWNER TO dune;
+5580:-- Name: delete_actor_states_travel(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5583:CREATE FUNCTION dune.delete_actor_states_travel(in_actor_id bigint) RETURNS void
+5591:	DELETE FROM actor_state WHERE (actor_id IN (SELECT t.id FROM traveling_actor_ids AS t(id)) OR actor_id = in_actor_id) AND state = 'Travel';
+5596:ALTER FUNCTION dune.delete_actor_states_travel(in_actor_id bigint) OWNER TO dune;
+5599:-- Name: delete_actors(bigint[]); Type: FUNCTION; Schema: dune; Owner: dune
+5602:CREATE FUNCTION dune.delete_actors(in_ids bigint[]) RETURNS void
+5606:	DELETE FROM actors WHERE id = ANY(in_ids);
+5611:ALTER FUNCTION dune.delete_actors(in_ids bigint[]) OWNER TO dune;
+5614:-- Name: delete_actors_and_respawns_on_server(dune.serverinfo, text[], boolean); Type: FUNCTION; Schema: dune; Owner: dune
+5617:CREATE FUNCTION dune.delete_actors_and_respawns_on_server(in_server_info dune.serverinfo, in_vehicle_classes_spawned_on_map text[], in_allow_vehicle_recovery boolean) RETURNS void
+5621:    WITH actors_to_delete AS (
+5631:            -- Actors that are not vehicles should always be deleted
+5633:            -- Only vehicles that are allowed to be spawned on this map should be deleted
+5640:        SELECT COALESCE(ARRAY_AGG(v.id), ARRAY[]::BIGINT[]) AS ids FROM actors_to_delete a JOIN vehicles v ON (a.id = v.id)
+5646:    DELETE FROM actors a USING recovered_vehicles rv
+5647:    WHERE a.id = ANY(SELECT id FROM actors_to_delete)
+5651:		deleted_ids as (
+5652:			DELETE from player_respawn_locations
+5657:			where pending_respawn_location_id in (select * from deleted_ids);
+5662:ALTER FUNCTION dune.delete_actors_and_respawns_on_server(in_server_info dune.serverinfo, in_vehicle_classes_spawned_on_map text[], in_allow_vehicle_recovery boolean) OWNER TO dune;
+5665:-- Name: delete_all_dungeon_completions(text); Type: FUNCTION; Schema: dune; Owner: dune
+5668:CREATE FUNCTION dune.delete_all_dungeon_completions(in_dungeon_id text) RETURNS void
+5672:	DELETE FROM dungeon_completion WHERE dungeon_id = in_dungeon_id;
+5677:ALTER FUNCTION dune.delete_all_dungeon_completions(in_dungeon_id text) OWNER TO dune;
+5680:-- Name: delete_all_dungeon_completions_by_player(text, bigint, boolean); Type: FUNCTION; Schema: dune; Owner: dune
+5683:CREATE FUNCTION dune.delete_all_dungeon_completions_by_player(in_dungeon_id text, in_player_id bigint, in_keep_completion_for_other_players boolean) RETURNS void
+5687:	DELETE FROM dungeon_completion WHERE
+5692:	DELETE FROM dungeon_completion_players
+5701:ALTER FUNCTION dune.delete_all_dungeon_completions_by_player(in_dungeon_id text, in_player_id bigint, in_keep_completion_for_other_players boolean) OWNER TO dune;
+5704:-- Name: delete_all_dungeon_completions_for_all_dungeons_by_player(bigint, boolean); Type: FUNCTION; Schema: dune; Owner: dune
+5707:CREATE FUNCTION dune.delete_all_dungeon_completions_for_all_dungeons_by_player(in_player_id bigint, in_keep_completion_for_other_players boolean) RETURNS void
+5711:	DELETE FROM dungeon_completion WHERE
+5715:	DELETE FROM dungeon_completion_players WHERE in_keep_completion_for_other_players AND player_id = in_player_id;
+5720:ALTER FUNCTION dune.delete_all_dungeon_completions_for_all_dungeons_by_player(in_player_id bigint, in_keep_completion_for_other_players boolean) OWNER TO dune;
+5723:-- Name: delete_all_inactive_farms(); Type: FUNCTION; Schema: dune; Owner: dune
+5726:CREATE FUNCTION dune.delete_all_inactive_farms() RETURNS void
+5730:	DELETE FROM farm_state WHERE server_id NOT IN (SELECT * FROM active_server_ids);
+5735:ALTER FUNCTION dune.delete_all_inactive_farms() OWNER TO dune;
+5738:-- Name: delete_all_journey_story_nodes(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5741:CREATE FUNCTION dune.delete_all_journey_story_nodes(in_account_id bigint) RETURNS void
+5745:	DELETE FROM journey_story_node WHERE character_id IN (SELECT id from player_state WHERE account_id = in_account_id LIMIT 1);
+5749:ALTER FUNCTION dune.delete_all_journey_story_nodes(in_account_id bigint) OWNER TO dune;
+5752:-- Name: delete_all_static_shifting_sand(); Type: FUNCTION; Schema: dune; Owner: dune
+5755:CREATE FUNCTION dune.delete_all_static_shifting_sand() RETURNS void
+5763:ALTER FUNCTION dune.delete_all_static_shifting_sand() OWNER TO dune;
+5766:-- Name: delete_all_tutorial_entries(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5769:CREATE FUNCTION dune.delete_all_tutorial_entries(in_player_id bigint) RETURNS void
+5773:    DELETE FROM tutorial_per_player WHERE tutorial_per_player.player_id = in_player_id;
+5778:ALTER FUNCTION dune.delete_all_tutorial_entries(in_player_id bigint) OWNER TO dune;
+5781:-- Name: delete_building_blueprint(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5784:CREATE FUNCTION dune.delete_building_blueprint(in_building_item_id bigint) RETURNS void
+5788:    DELETE FROM building_blueprints WHERE id = in_building_item_id;
+5793:ALTER FUNCTION dune.delete_building_blueprint(in_building_item_id bigint) OWNER TO dune;
+5796:-- Name: delete_character(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5799:CREATE FUNCTION dune.delete_character(in_actor_id bigint) RETURNS void
+5803:    DELETE FROM actors WHERE id = in_actor_id;
+5804:    DELETE FROM properties WHERE object_id = in_actor_id;
+5805:    DELETE FROM fgl_data WHERE object_id = in_actor_id;
+5806:    DELETE FROM actor_transform WHERE actor_id = in_actor_id;
+5811:ALTER FUNCTION dune.delete_character(in_actor_id bigint) OWNER TO dune;
+5814:-- Name: delete_crafted_map(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5817:CREATE FUNCTION dune.delete_crafted_map(in_item_id bigint) RETURNS void
+5821:    DELETE FROM crafted_maps WHERE item_id = in_item_id;
+5826:ALTER FUNCTION dune.delete_crafted_map(in_item_id bigint) OWNER TO dune;
+5829:-- Name: delete_dialogue_data(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5832:CREATE FUNCTION dune.delete_dialogue_data(in_player_controller_id bigint) RETURNS void
+5836:	DELETE FROM dialogue_met_npcs
+5839:    DELETE FROM dialogue_taken_nodes
+5845:ALTER FUNCTION dune.delete_dialogue_data(in_player_controller_id bigint) OWNER TO dune;
+5848:-- Name: delete_inventory_item(bigint, bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5851:CREATE FUNCTION dune.delete_inventory_item(in_item_id bigint, in_count bigint) RETURNS bigint
+5868:		PERFORM delete_item(in_item_id);
+5874:ALTER FUNCTION dune.delete_inventory_item(in_item_id bigint, in_count bigint) OWNER TO dune;
+5877:-- Name: delete_item(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5880:CREATE FUNCTION dune.delete_item(in_id bigint) RETURNS void
+5883:	DELETE FROM items i
+5887:	RETURNING _add_item_delete_log(
+5895:ALTER FUNCTION dune.delete_item(in_id bigint) OWNER TO dune;
+5898:-- Name: delete_items(bigint[]); Type: FUNCTION; Schema: dune; Owner: dune
+5901:CREATE FUNCTION dune.delete_items(in_ids bigint[]) RETURNS void
+5904:	DELETE FROM items i
+5908:	RETURNING _add_item_delete_log(
+5916:ALTER FUNCTION dune.delete_items(in_ids bigint[]) OWNER TO dune;
+5919:-- Name: delete_items_from_actor(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+5922:CREATE FUNCTION dune.delete_items_from_actor(in_actor_id bigint) RETURNS void
+5926:	PERFORM delete_items(
+5937:ALTER FUNCTION dune.delete_items_from_actor(in_actor_id bigint) OWNER TO dune;
+5940:-- Name: delete_journey_story_ids(text[]); Type: FUNCTION; Schema: dune; Owner: dune
+5943:CREATE FUNCTION dune.delete_journey_story_ids(story_ids text[]) RETURNS void
+5947:	DELETE FROM journey_story_node
+5950:	DELETE FROM journey_story_node_cooldown
+5956:ALTER FUNCTION dune.delete_journey_story_ids(story_ids text[]) OWNER TO dune;
+5959:-- Name: delete_journey_story_node(bigint, text); Type: FUNCTION; Schema: dune; Owner: dune
+5962:CREATE FUNCTION dune.delete_journey_story_node(in_account_id bigint, in_story_node_id text) RETURNS void
+5966:	DELETE FROM journey_story_node WHERE story_node_id = in_story_node_id AND character_id IN (SELECT id from player_state WHERE account_id = in_account_id LIMIT 1);
+5970:ALTER FUNCTION dune.delete_journey_story_node(in_account_id bigint, in_story_node_id text) OWNER TO dune;
+5973:-- Name: delete_journey_story_nodes_for_group_for_player(bigint, dune.journeystoryresetgroup); Type: FUNCTION; Schema: dune; Owner: dune
+5976:CREATE FUNCTION dune.delete_journey_story_nodes_for_group_for_player(in_account_id bigint, in_reset_group dune.journeystoryresetgroup) RETURNS void
+5988:	DELETE FROM journey_story_node_cooldown
+5996:	DELETE FROM journey_story_node
+6001:ALTER FUNCTION dune.delete_journey_story_nodes_for_group_for_player(in_account_id bigint, in_reset_group dune.journeystoryresetgroup) OWNER TO dune;
+6004:-- Name: delete_journey_story_nodes_for_player(text, text[]); Type: FUNCTION; Schema: dune; Owner: dune
+6007:CREATE FUNCTION dune.delete_journey_story_nodes_for_player(in_player_id text, in_story_node_ids text[]) RETURNS void
+6019:	DELETE FROM journey_story_node
+6022:	DELETE FROM journey_story_node_cooldown
+6027:ALTER FUNCTION dune.delete_journey_story_nodes_for_player(in_player_id text, in_story_node_ids text[]) OWNER TO dune;
+6030:-- Name: delete_journey_story_nodes_for_player_account(bigint, text[]); Type: FUNCTION; Schema: dune; Owner: dune
+6033:CREATE FUNCTION dune.delete_journey_story_nodes_for_player_account(in_account_id bigint, in_story_node_ids text[]) RETURNS void
+6045:	DELETE FROM journey_story_node
+6048:	DELETE FROM journey_story_node_cooldown
+6053:ALTER FUNCTION dune.delete_journey_story_nodes_for_player_account(in_account_id bigint, in_story_node_ids text[]) OWNER TO dune;
+6056:-- Name: delete_map_markers(integer, text, dune.deleteplayermarkerdata[]); Type: FUNCTION; Schema: dune; Owner: dune
+6059:CREATE FUNCTION dune.delete_map_markers(in_dimension_index integer, in_map_name text, in_player_marker_data dune.deleteplayermarkerdata[]) RETURNS void
+6064:	player_markers_to_delete AS (
+6072:	DELETE FROM player_markers USING player_markers_to_delete
+6073:	WHERE player_markers.dimension_index = player_markers_to_delete.dimension_index
+6074:		AND player_markers.map_name_id = player_markers_to_delete.map_name_id
+6075:		AND player_markers.player_id = player_markers_to_delete.player_id
+6076:		AND player_markers.marker_hash_id = player_markers_to_delete.marker_hash_id;
+6081:ALTER FUNCTION dune.delete_map_markers(in_dimension_index integer, in_map_name text, in_player_marker_data dune.deleteplayermarkerdata[]) OWNER TO dune;
+6084:-- Name: delete_markers_by_id(integer[]); Type: FUNCTION; Schema: dune; Owner: dune
+6087:CREATE FUNCTION dune.delete_markers_by_id(in_marker_ids integer[]) RETURNS void
+6091:	DELETE FROM markers WHERE marker_hash_id = ANY (in_marker_ids);
+6096:ALTER FUNCTION dune.delete_markers_by_id(in_marker_ids integer[]) OWNER TO dune;
+6099:-- Name: delete_markers_by_static_location_key(text); Type: FUNCTION; Schema: dune; Owner: dune
+6102:CREATE FUNCTION dune.delete_markers_by_static_location_key(p_location_key text) RETURNS void
+6106:    DELETE FROM markers WHERE (payload #>> '{LocationKey}') = p_location_key;
+6111:ALTER FUNCTION dune.delete_markers_by_static_location_key(p_location_key text) OWNER TO dune;
+6114:-- Name: delete_markers_for_all_players(text[], text); Type: FUNCTION; Schema: dune; Owner: dune
+6117:CREATE FUNCTION dune.delete_markers_for_all_players(in_marker_types_to_keep text[], in_map text) RETURNS void
+6127:	-- Lock player_markers to be deleted on cascade
+6135:	-- Delete markers
+6136:	DELETE FROM markers USING affected_markers
+6144:ALTER FUNCTION dune.delete_markers_for_all_players(in_marker_types_to_keep text[], in_map text) OWNER TO dune;
+6147:-- Name: delete_markers_return_actor_ids(integer, text, integer[]); Type: FUNCTION; Schema: dune; Owner: dune
+6150:CREATE FUNCTION dune.delete_markers_return_actor_ids(in_dimension_index integer, in_map_name text, in_marker_ids integer[]) RETURNS TABLE(actor_id bigint, marker_id integer)
+6163:	-- Lock player_markers to be deleted on cascade
+6171:	-- Delete markers
+6172:	deleted_markers AS (
+6173:		DELETE FROM markers USING affected_markers
+6183:ALTER FUNCTION dune.delete_markers_return_actor_ids(in_dimension_index integer, in_map_name text, in_marker_ids integer[]) OWNER TO dune;
+6186:-- Name: delete_mnemonic_recall_lesson(bigint, text); Type: FUNCTION; Schema: dune; Owner: dune
+6189:CREATE FUNCTION dune.delete_mnemonic_recall_lesson(in_account_id bigint, in_lesson_id text) RETURNS void
+6193:    DELETE FROM mnemonic_recall WHERE lesson_id = in_lesson_id AND character_id IN (SELECT id from player_state WHERE account_id = in_account_id LIMIT 1);
+6198:ALTER FUNCTION dune.delete_mnemonic_recall_lesson(in_account_id bigint, in_lesson_id text) OWNER TO dune;
+6201:-- Name: delete_mnemonic_recall_lesson_all(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+6204:CREATE FUNCTION dune.delete_mnemonic_recall_lesson_all(in_account_id bigint) RETURNS void
+6208:    DELETE FROM mnemonic_recall WHERE character_id IN (SELECT id from player_state WHERE account_id = in_account_id LIMIT 1);
+6213:ALTER FUNCTION dune.delete_mnemonic_recall_lesson_all(in_account_id bigint) OWNER TO dune;
+6216:-- Name: delete_server_player_access_codes(bigint, integer, integer); Type: FUNCTION; Schema: dune; Owner: dune
+6219:CREATE FUNCTION dune.delete_server_player_access_codes(in_account_id bigint, in_access_code integer, in_access_code_type integer) RETURNS void
+6223:	DELETE FROM player_access_codes
+6231:ALTER FUNCTION dune.delete_server_player_access_codes(in_account_id bigint, in_access_code integer, in_access_code_type integer) OWNER TO dune;
+6234:-- Name: delete_spawner(text, text, integer); Type: FUNCTION; Schema: dune; Owner: dune
+6237:CREATE FUNCTION dune.delete_spawner(in_map text, in_name text, in_dimension_index integer) RETURNS void
+6241:    DELETE FROM actor_spawners WHERE map = in_map AND name = in_name AND dimension_index = in_dimension_index;
+6246:ALTER FUNCTION dune.delete_spawner(in_map text, in_name text, in_dimension_index integer) OWNER TO dune;
+6249:-- Name: delete_static_location_markers(text[]); Type: FUNCTION; Schema: dune; Owner: dune
+6252:CREATE FUNCTION dune.delete_static_location_markers(p_location_keys text[]) RETURNS void
+6256:    DELETE FROM markers WHERE (payload #>> '{LocationKey}') = ANY(p_location_keys);
+6261:ALTER FUNCTION dune.delete_static_location_markers(p_location_keys text[]) OWNER TO dune;
+6264:-- Name: delete_world_partition_by_map_id(text); Type: FUNCTION; Schema: dune; Owner: dune
+6267:CREATE FUNCTION dune.delete_world_partition_by_map_id(in_map_id text) RETURNS void
+6271:	DELETE FROM world_partition WHERE "map"=in_map_id;
+6276:ALTER FUNCTION dune.delete_world_partition_by_map_id(in_map_id text) OWNER TO dune;
+6520:	-- delete
+6521:	DELETE FROM guilds WHERE guild_id = in_guild_id;
+6544:	DELETE FROM party_members WHERE party_id = in_party_id;
+6545:	DELETE FROM parties WHERE party_id = in_party_id;
+6546:	DELETE FROM platform_parties_mapping WHERE dune_party_id = in_party_id;
+6549:		DELETE FROM party_invites
+6624:    DELETE FROM item_operations_staging_table
+6718:	DELETE FROM dune_exchange_sell_orders WHERE order_id = in_order_id;
+6763:			DELETE FROM dune_exchange_sell_orders WHERE order_id = cur_order.order_id;
+6776:			-- Delete the order. Will cascade into the items table.
+6777:			DELETE FROM dune_exchange_orders WHERE id = order_id;
+6893:			DELETE FROM dune_exchange_orders WHERE id = storage_order_id;
+6915:		DELETE FROM dune_exchange_orders WHERE id = in_order_id;
+7046:		DELETE FROM dune_exchange_orders WHERE id = cur_order.order_id;
+7125:	DELETE FROM dune_exchange_fulfilled_orders WHERE order_id = in_order_id;
+7190:		delete_orders_prices AS (
+7191:			DELETE FROM dune_exchange_orders
+7198:			SELECT SUM(total_price) AS delta FROM delete_orders_prices
+7259:		DELETE FROM dune_exchange_orders WHERE id = in_order_id;
+7315:			DELETE FROM dune_exchange_orders WHERE id = new_order_id;
+7490:    delete from player_tags pt using da_6358_pre_broken_players where pt.character_id = da_6358_pre_broken_players.character_id and pt.tag = 'DialogueFlags.Faction.FooledThufir';
+7536:    delete from player_tags pt using da_6358_broken_players_12400 where pt.character_id = da_6358_broken_players_12400.character_id and pt.tag = 'DialogueFlags.Faction.FooledThufir';
+7683:CREATE FUNCTION dune.gather_removed_accounts_that_left_orphaned_actors_on_server(in_server_info dune.serverinfo) RETURNS TABLE(account_id bigint, removal_reason text, actors_left dune.orphanedplayeractorinfo[])
+7701:            from orphaned_actors_per_account as orphans left join account_removal_log as log using (account_id);
+9722:-- Name: guild_handle_actor_delete(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+9725:CREATE FUNCTION dune.guild_handle_actor_delete(in_player_id bigint) RETURNS void
+9766:ALTER FUNCTION dune.guild_handle_actor_delete(in_player_id bigint) OWNER TO dune;
+9820:-- Name: igwo_delete_world_partitions(bigint[]); Type: FUNCTION; Schema: dune; Owner: dune
+9823:CREATE FUNCTION dune.igwo_delete_world_partitions(in_partition_ids bigint[]) RETURNS void
+9826:	delete from world_partition where partition_id = any(in_partition_ids);
+9830:ALTER FUNCTION dune.igwo_delete_world_partitions(in_partition_ids bigint[]) OWNER TO dune;
+10007:		-- delete events older then the passed in threshold
+10008:		DELETE FROM event_log
+10268:			DELETE FROM world_partition WHERE map = in_map_name and dimension_index = in_dimension_index
+10295:		DELETE FROM vendor_stock_state WHERE vendor_id = in_vendor_id AND player_id = in_player_id;	
+10605:-- Name: journey_story_node_cooldown_delete_expired(timestamp without time zone); Type: FUNCTION; Schema: dune; Owner: dune
+10608:CREATE FUNCTION dune.journey_story_node_cooldown_delete_expired(in_time_to_check timestamp without time zone) RETURNS void
+10612:	DELETE FROM journey_story_node_cooldown WHERE time_to_expire < in_time_to_check AND character_id IN (select id from player_state);
+10616:ALTER FUNCTION dune.journey_story_node_cooldown_delete_expired(in_time_to_check timestamp without time zone) OWNER TO dune;
+11078:	DELETE FROM landsraad_decree_term term WHERE term.end_time < (now() - MAKE_INTERVAL(weeks => number_of_weeks_term_retention)) AND term.term_id < current_term_id - 1;
+11087:	PERFORM journey_story_node_cooldown_delete_expired(now() at time zone 'utc');
+12769:		PERFORM delete_item(in_item_id);
+12849:    ), items_to_delete AS (
+12853:    ), deleted_items AS (
+12854:        SELECT delete_items(item_ids)
+12855:        FROM items_to_delete
+12859:    FROM all_solaris_items, total_solaris, deleted_items
+13007:-- Name: overmap_delete_player_survival_data(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+13010:CREATE FUNCTION dune.overmap_delete_player_survival_data(in_player_id bigint) RETURNS void
+13014:	DELETE FROM overmap_players WHERE player_id = in_player_id;
+13018:ALTER FUNCTION dune.overmap_delete_player_survival_data(in_player_id bigint) OWNER TO dune;
+13058:-- Name: ownership_handle_actor_delete(bigint); Type: FUNCTION; Schema: dune; Owner: dune
+13061:CREATE FUNCTION dune.ownership_handle_actor_delete(in_player_id bigint) RETURNS void
+13082:		DELETE FROM permission_actor_rank WHERE permission_actor_id = ANY(actors_with_permission);
+13083:		DELETE FROM MARKERS	WHERE marker_hash_id = ANY(actors_with_permission);
+13085:		PERFORM pg_notify('permission_notify_channel', format('owner_delete#{"PlayerId" : %s}', in_player_id));
+13091:ALTER FUNCTION dune.ownership_handle_actor_delete(in_player_id bigint) OWNER TO dune;
+13109:-- Name: perform_notify_on_character_delete(text); Type: FUNCTION; Schema: dune; Owner: dune
+13112:CREATE FUNCTION dune.perform_notify_on_character_delete(in_user_id text) RETURNS void
+13116:	PERFORM pg_notify('player_info_notify_channel', format('character_deleted#%s', in_user_id));
+13121:ALTER FUNCTION dune.perform_notify_on_character_delete(in_user_id text) OWNER TO dune;
+13218:	DELETE FROM permission_actor_rank WHERE permission_actor_id = in_actor_id;
+13219:	DELETE FROM permission_actor WHERE actor_id = in_actor_id;
+13221:	DELETE FROM markers WHERE marker_hash_id = in_actor_id;
+13222:	DELETE FROM player_markers WHERE marker_hash_id = in_actor_id;
+13287:	DELETE FROM permission_actor_rank WHERE permission_actor_id = in_entry.actor_id;
+13329:	DELETE FROM permission_actor_rank WHERE permission_actor_id = in_actor_id AND player_id = in_player_id;
+13332:	DELETE FROM player_markers WHERE player_id = in_player_id AND marker_hash_id = in_actor_id;
+13969:	DELETE FROM guild_invites WHERE invite_id = in_invite_id;
+13988:            DELETE FROM actor_state WHERE actor_state.state = 'AbortedAuthorityTransfer'
+14009:	DELETE FROM character_transfer_imports WHERE fls_id = in_fls_id;
+14024:    DELETE FROM communinet_player_channels WHERE channel_name = in_channel_name AND character_id IN (SELECT id from player_state WHERE account_id = in_account_id LIMIT 1);
+14051:		DELETE FROM guild_members
+14071:    PERFORM delete_items(
+14109:    -- delete the items
+14197:      perform delete_inventory_item(allocated_ingredient_info.item_unique_id, allocated_ingredient_info.amount);
+14239:	-- delete invite
+14241:		DELETE FROM party_invites WHERE invite_id = in_invite_id RETURNING player_id, sender_player_id INTO out_player_id, out_sender_player_id;
+14267:	DELETE FROM party_members WHERE player_id = in_player_id RETURNING player_id, party_id INTO removed_player_id, out_party_id;
+14290:				DELETE FROM platform_parties_mapping WHERE platform_name = out_player_platform_name AND dune_party_id = out_party_id;
+14354:	DELETE 
+14446:	DELETE FROM journey_story_node_cooldown
+14461:	DELETE FROM player_access_codes
+14478:	DELETE FROM purchased_specialization_keystones WHERE player_id = in_player_id;
+14492:	DELETE FROM specialization_tracks WHERE player_id = in_player_id;
+14536:    DELETE FROM backup_vehicles WHERE vehicle_id = found_vehicle_id;
+14537:    RAISE INFO 'Deleted backup record for vehicle %.', found_vehicle_id;
+14540:    DELETE FROM actor_state WHERE actor_id = found_vehicle_id;
+14541:    RAISE INFO 'Deleted actor state for vehicle %.', found_vehicle_id;
+14607:    DELETE FROM recovered_vehicles WHERE vehicle_id = found_vehicle_id;
+14608:    RAISE INFO 'Deleted recovery record for vehicle %.', found_vehicle_id;
+14611:    DELETE FROM actor_state WHERE actor_id = found_vehicle_id;
+14612:    RAISE INFO 'Deleted actor state for vehicle %.', found_vehicle_id;
+14791:		delete_missing_entity_links as (
+14792:			delete from actor_fgl_entities as existing using missing_entities
+14794:				returning existing.entity_id as deleted_entity_id
+14796:		delete_missing_entities as (
+14797:			delete from fgl_entities as existing using missing_entities
+14812:					where not entity_id in (select deleted_entity_id from delete_missing_entity_links)
+14923:		DELETE FROM building_instances
+15023:		DELETE FROM building_blueprints WHERE id = in_building_blueprint_id;
+15599:CREATE FUNCTION dune.save_vehicle_modules(in_add_list dune.vehiclemodule[], in_delete_list bigint[], in_stat_update dune.itemstatupdate[]) RETURNS SETOF bigint
+15619:	--RAISE NOTICE 'Delete vehicle modules';
+15620:	-- delete modules
+15621:	DELETE FROM vehicle_modules WHERE id = ANY(in_delete_list);
+15634:ALTER FUNCTION dune.save_vehicle_modules(in_add_list dune.vehiclemodule[], in_delete_list bigint[], in_stat_update dune.itemstatupdate[]) OWNER TO dune;
+15985:CREATE FUNCTION dune.store_recovered_vehicle(in_vehicle_id bigint, in_chassis_durability real, in_customization_id text, in_reason dune.recoveredvehiclereason DEFAULT 'Normal'::dune.recoveredvehiclereason, in_delete_items boolean DEFAULT false) RETURNS void
+16041:	IF in_delete_items THEN
+16042:		PERFORM delete_items_from_actor(in_vehicle_id);
+16050:ALTER FUNCTION dune.store_recovered_vehicle(in_vehicle_id bigint, in_chassis_durability real, in_customization_id text, in_reason dune.recoveredvehiclereason, in_delete_items boolean) OWNER TO dune;
+16056:CREATE FUNCTION dune.store_recovered_vehicles_wiped_before_spawn(in_vehicle_ids bigint[], in_reason dune.recoveredvehiclereason DEFAULT 'Normal'::dune.recoveredvehiclereason, in_delete_items boolean DEFAULT true) RETURNS void
+16079:		PERFORM store_recovered_vehicle(to_store.vehicle_id, 0.25, to_store.customization_id, in_reason, in_delete_items);
+16088:ALTER FUNCTION dune.store_recovered_vehicles_wiped_before_spawn(in_vehicle_ids bigint[], in_reason dune.recoveredvehiclereason, in_delete_items boolean) OWNER TO dune;
+16283:    DELETE FROM tax_invoice WHERE id = ANY(invoices_to_remove);
+16303:    DELETE FROM tax_invoice WHERE totem_id = totem_actor_id;
+16538:	-- Use encrypted_player_state to allow changes to Deleted accounts
+16630:CREATE FUNCTION dune.update_inventory(in_delete_list bigint[], in_stack_update dune.itemstackupdate[], in_quality_update dune.itemqualityupdate[], in_stat_update dune.itemstatupdate[], in_item_locations dune.inventoryitemlocation[]) RETURNS void
+16634:    delete_item_id BIGINT;
+16652:	-- delete items
+16653:	PERFORM delete_items(in_delete_list);
+16672:ALTER FUNCTION dune.update_inventory(in_delete_list bigint[], in_stack_update dune.itemstackupdate[], in_quality_update dune.itemqualityupdate[], in_stat_update dune.itemstatupdate[], in_item_locations dune.inventoryitemlocation[]) OWNER TO dune;
+16837:    delete from player_tags where character_id = active_character_id and tag = ANY(tags_to_remove);
+16925:    delete_missing_respawn_locations AS (
+16926:        DELETE FROM player_respawn_locations AS existing
+17068:	DELETE FROM purchased_specialization_keystones WHERE player_id = in_player_id AND keystone_id = ANY(in_removed_keystones);
+17112:	delete_actor_state_ids AS (
+17113:		delete from actor_state as acs
+17117:	delete from travel_actor_parent
+17451:		-- Delete all items in this vehicle's inventories (excluding module inventories)
+17452:        PERFORM delete_items(
+17488:	DELETE FROM game_events WHERE universe_time < to_timestamp(in_days_limit);
+17516:-- Name: account_removal_log; Type: TABLE; Schema: dune; Owner: dune
+17519:CREATE TABLE dune.account_removal_log (
+17527:ALTER TABLE dune.account_removal_log OWNER TO dune;
+17530:-- Name: account_removal_log_account_id_seq; Type: SEQUENCE; Schema: dune; Owner: dune
+17533:CREATE SEQUENCE dune.account_removal_log_account_id_seq
+17541:ALTER SEQUENCE dune.account_removal_log_account_id_seq OWNER TO dune;
+17544:-- Name: account_removal_log_account_id_seq; Type: SEQUENCE OWNED BY; Schema: dune; Owner: dune
+17547:ALTER SEQUENCE dune.account_removal_log_account_id_seq OWNED BY dune.account_removal_log.account_id;
+20979:-- Name: account_removal_log account_id; Type: DEFAULT; Schema: dune; Owner: dune
+20982:ALTER TABLE ONLY dune.account_removal_log ALTER COLUMN account_id SET DEFAULT nextval('dune.account_removal_log_account_id_seq'::regclass);
+21238:-- Data for Name: account_removal_log; Type: TABLE DATA; Schema: dune; Owner: dune
+21241:COPY dune.account_removal_log (event_time, fls_id, account_id, reason) FROM stdin;
+21242:2026-06-29 05:20:12.727345+00	AFE0154F3AFE602C	1	new char in fls
+21633:TECH-20018_character_deletion_on_battlegroup_restart	2026-06-29 03:07:05.738694
+21691:DUNE-107700_guild_handle_character_delete	2026-06-29 03:07:05.796694
+21693:DUNE-112389_fix_guild_character_delete	2026-06-29 03:07:05.798694
+21711:DUNE-108419_player_lifestate_delete	2026-06-29 03:07:05.816694
+21713:DUNE-114596_delete_buildings_without_instances	2026-06-29 03:07:05.818694
+21715:TECH-21342_fix_account_deletion_error_when_in_guild	2026-06-29 03:07:05.820694
+21718:DUNE-101769_handle_character_deletion_ownership_permission	2026-06-29 03:07:05.823694
+21766:DUNE-120298_landsraad_delete_old_terms	2026-06-29 03:07:05.871694
+21781:DUNE-124258_dont_delete_other_players_respawn_locations_in_save_player	2026-06-29 03:07:05.886694
+21827:TECH-23626_always_delete_actors_in_order	2026-06-29 03:07:05.932694
+21834:DUNE-128917_fixed_delete_markers_return_actor_ids	2026-06-29 03:07:05.939694
+21858:DUNE-134684_delete_old_invoices_in_live_servers	2026-06-29 03:07:05.963694
+21870:DUNE-134487_batch_delete_access_codes	2026-06-29 03:07:05.975694
+21879:TECH-24157_optimize_delete_actors	2026-06-29 03:07:05.984694
+21880:TECH-24291_optimize_delete_account	2026-06-29 03:07:05.985694
+21915:TECH-24753_perform_notify_on_character_delete	2026-06-29 03:07:06.020694
+21916:TECH-24753_perform_notify_on_character_delete_1103	2026-06-29 03:07:06.021694
+22023:DUNE-155383_add_proper_auditing_on_account_deletion	2026-06-29 03:07:06.128694
+22077:DUNE-162378_new_cheats_to_delete_dungeon_completions	2026-06-29 03:07:06.182694
+22115:TECH-28061_fix_delete_actor_states_travel	2026-06-29 03:07:06.220694
+22119:TECH-28061_fix_build_delete_actor_states_travel	2026-06-29 03:07:06.224694
+22161:DUNE-166103_fix_coriolis_delete_actors_and_respawns_failing	2026-06-29 03:07:06.266694
+22190:DA-6543_add_index_to_speed_up_delete_actor_query	2026-06-29 03:07:06.295694
+22245:DA-12814_fix_actor_deletion_on_coriolis_and_instanced_maps	2026-06-29 03:07:06.350694
+22255:DA-11417_keep_or_delete_vehicle_inventory_on_stored_to_recovery	2026-06-29 03:07:06.360694
+22256:DA-2783_non_destructive_delete_account	2026-06-29 03:07:06.361694
+22367:1	2026-06-29 05:27:17.030376+00	AFE0154F3AFE602C	player_undermeshed
+22562:1	AFE0154F3AFE602C	\\x426572657447656e65736973233234383732	f	76561198019583480	Steam
+22571:1	\\x	\N	\N	1	3	2	\N	Alive	Online	\N	1	t	0	\N	\N	\N	2026-06-29 05:20:12.482081+00	\N	\N	1	Deleted	2026-06-29 05:20:12.727345	0
+26172:AFE0154F3AFE602C	0
+26792:-- Name: account_removal_log_account_id_seq; Type: SEQUENCE SET; Schema: dune; Owner: dune
+26795:SELECT pg_catalog.setval('dune.account_removal_log_account_id_seq', 1, false);
+29066:CREATE TRIGGER actor_fgl_entities_cleanup_orphaned_entities AFTER DELETE ON dune.actor_fgl_entities FOR EACH ROW EXECUTE FUNCTION dune.cleanup_orphaned_entities();
+29123:    ADD CONSTRAINT actor_fgl_entities_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29139:    ADD CONSTRAINT actor_inventories_inventory_id_fkey FOREIGN KEY (inventory_id) REFERENCES dune.inventories(id) ON DELETE CASCADE;
+29147:    ADD CONSTRAINT actor_spawner_actors_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29155:    ADD CONSTRAINT actor_spawner_actors_spawner_id_fkey FOREIGN KEY (spawner_id) REFERENCES dune.actor_spawners(id) ON DELETE CASCADE;
+29163:    ADD CONSTRAINT actor_state_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29171:    ADD CONSTRAINT backup_vehicles_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29179:    ADD CONSTRAINT backup_vehicles_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES dune.vehicles(id) ON DELETE CASCADE;
+29187:    ADD CONSTRAINT base_backup_linked_actors_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29195:    ADD CONSTRAINT base_backup_linked_actors_id_fkey FOREIGN KEY (id) REFERENCES dune.base_backups(id) ON DELETE CASCADE;
+29203:    ADD CONSTRAINT base_backups_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29211:    ADD CONSTRAINT building_blueprint_instances_building_blueprint_id_fkey FOREIGN KEY (building_blueprint_id) REFERENCES dune.building_blueprints(id) ON DELETE CASCADE;
+29219:    ADD CONSTRAINT building_blueprint_pentashields_building_blueprint_id_fkey FOREIGN KEY (building_blueprint_id) REFERENCES dune.building_blueprints(id) ON DELETE CASCADE;
+29227:    ADD CONSTRAINT building_blueprint_placeables_building_blueprint_id_fkey FOREIGN KEY (building_blueprint_id) REFERENCES dune.building_blueprints(id) ON DELETE CASCADE;
+29235:    ADD CONSTRAINT building_blueprints_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29243:    ADD CONSTRAINT building_favorites_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29251:    ADD CONSTRAINT building_instances_building_id_fkey FOREIGN KEY (building_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29259:    ADD CONSTRAINT building_instances_owner_entity_id_fkey FOREIGN KEY (owner_entity_id) REFERENCES dune.fgl_entities(entity_id) ON DELETE SET NULL;
+29267:    ADD CONSTRAINT building_progression_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29275:    ADD CONSTRAINT buildings_id_fkey FOREIGN KEY (id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29283:    ADD CONSTRAINT communinet_player_channels_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29291:    ADD CONSTRAINT communinet_player_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29299:    ADD CONSTRAINT consumed_per_player_lore_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29307:    ADD CONSTRAINT consumed_temporary_per_player_lore_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29315:    ADD CONSTRAINT dialogue_met_npcs_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29323:    ADD CONSTRAINT dialogue_taken_nodes_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29331:    ADD CONSTRAINT dune_exchange_accesspoints_exchange_id_fkey FOREIGN KEY (exchange_id) REFERENCES dune.dune_exchanges(id) ON DELETE CASCADE;
+29339:    ADD CONSTRAINT dune_exchange_fulfilled_orders_order_id_fkey FOREIGN KEY (order_id) REFERENCES dune.dune_exchange_orders(id) ON DELETE CASCADE;
+29347:    ADD CONSTRAINT dune_exchange_fulfilled_orders_source_order_id_fkey FOREIGN KEY (source_order_id) REFERENCES dune.dune_exchange_orders(id) ON DELETE SET NULL;
+29355:    ADD CONSTRAINT dune_exchange_orders_access_point_id_fkey FOREIGN KEY (access_point_id) REFERENCES dune.dune_exchange_accesspoints(id) ON DELETE CASCADE;
+29363:    ADD CONSTRAINT dune_exchange_orders_exchange_id_fkey FOREIGN KEY (exchange_id) REFERENCES dune.dune_exchanges(id) ON DELETE CASCADE;
+29371:    ADD CONSTRAINT dune_exchange_orders_item_id_fkey FOREIGN KEY (item_id) REFERENCES dune.items(id) ON DELETE CASCADE;
+29379:    ADD CONSTRAINT dune_exchange_orders_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29387:    ADD CONSTRAINT dune_exchange_sell_orders_order_id_fkey FOREIGN KEY (order_id) REFERENCES dune.dune_exchange_orders(id) ON DELETE CASCADE;
+29395:    ADD CONSTRAINT dune_exchange_users_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29403:    ADD CONSTRAINT dune_exchanges_inventory_id_fkey FOREIGN KEY (inventory_id) REFERENCES dune.inventories(id) ON DELETE CASCADE;
+29411:    ADD CONSTRAINT dungeon_completion_players_completion_id_fkey FOREIGN KEY (completion_id) REFERENCES dune.dungeon_completion(completion_id) ON DELETE CASCADE;
+29419:    ADD CONSTRAINT dungeon_completion_players_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29427:    ADD CONSTRAINT encrypted_player_state_account_id_fkey FOREIGN KEY (account_id) REFERENCES dune.encrypted_accounts(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29435:    ADD CONSTRAINT encrypted_player_state_player_controller_id_fkey FOREIGN KEY (player_controller_id) REFERENCES dune.actors(id) ON DELETE SET NULL;
+29443:    ADD CONSTRAINT encrypted_player_state_player_pawn_id_fkey FOREIGN KEY (player_pawn_id) REFERENCES dune.actors(id) ON DELETE SET NULL;
+29451:    ADD CONSTRAINT encrypted_player_state_player_state_id_fkey FOREIGN KEY (player_state_id) REFERENCES dune.actors(id) ON DELETE SET NULL;
+29475:    ADD CONSTRAINT game_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29483:    ADD CONSTRAINT guild_invites_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES dune.guilds(guild_id) ON DELETE CASCADE;
+29491:    ADD CONSTRAINT guild_invites_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29499:    ADD CONSTRAINT guild_invites_sender_player_id_fkey FOREIGN KEY (sender_player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29507:    ADD CONSTRAINT guild_members_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES dune.guilds(guild_id) ON DELETE CASCADE;
+29515:    ADD CONSTRAINT guild_members_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29523:    ADD CONSTRAINT inventories_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29531:    ADD CONSTRAINT inventories_exchange_id_fkey FOREIGN KEY (exchange_id) REFERENCES dune.dune_exchanges(id) ON DELETE CASCADE;
+29539:    ADD CONSTRAINT inventories_item_id_fkey FOREIGN KEY (item_id) REFERENCES dune.items(id) ON DELETE CASCADE;
+29547:    ADD CONSTRAINT inventories_vehicle_module_id_fkey FOREIGN KEY (vehicle_module_id) REFERENCES dune.vehicle_modules(id) ON DELETE CASCADE;
+29555:    ADD CONSTRAINT item_id_fk FOREIGN KEY (item_id) REFERENCES dune.items(id) ON DELETE CASCADE;
+29563:    ADD CONSTRAINT items_inventory_id_fkey FOREIGN KEY (inventory_id) REFERENCES dune.inventories(id) ON DELETE CASCADE;
+29571:    ADD CONSTRAINT journey_story_node_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29579:    ADD CONSTRAINT journey_story_node_cooldown_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29587:    ADD CONSTRAINT journey_tracked_cards_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29595:    ADD CONSTRAINT landclaim_segments_totem_id_fkey FOREIGN KEY (totem_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29603:    ADD CONSTRAINT landsraad_decree_rotation_decree_id_fk FOREIGN KEY (decree_id) REFERENCES dune.landsraad_decrees(id) ON DELETE CASCADE;
+29611:    ADD CONSTRAINT landsraad_house_rewards_player_id_fk FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29619:    ADD CONSTRAINT landsraad_task_faction_contributions_faction_id_fk FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29627:    ADD CONSTRAINT landsraad_task_faction_contributions_task_id_fk FOREIGN KEY (task_id) REFERENCES dune.landsraad_tasks(id) ON DELETE CASCADE;
+29635:    ADD CONSTRAINT landsraad_task_guild_contributions_faction_id_fk FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29643:    ADD CONSTRAINT landsraad_task_guild_contributions_guild_id_fk FOREIGN KEY (guild_id) REFERENCES dune.guilds(guild_id) ON DELETE SET NULL;
+29651:    ADD CONSTRAINT landsraad_task_guild_contributions_task_id_fk FOREIGN KEY (task_id) REFERENCES dune.landsraad_tasks(id) ON DELETE CASCADE;
+29659:    ADD CONSTRAINT landsraad_task_player_contributions_faction_id_fk FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29667:    ADD CONSTRAINT landsraad_task_player_contributions_player_id_fk FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29675:    ADD CONSTRAINT landsraad_task_player_contributions_task_id_fk FOREIGN KEY (task_id) REFERENCES dune.landsraad_tasks(id) ON DELETE CASCADE;
+29683:    ADD CONSTRAINT landsraad_task_progress_faction_id_fk FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29691:    ADD CONSTRAINT landsraad_task_progress_guild_id_fk FOREIGN KEY (guild_id) REFERENCES dune.guilds(guild_id) ON DELETE CASCADE;
+29699:    ADD CONSTRAINT landsraad_task_progress_player_id_fk FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29707:    ADD CONSTRAINT landsraad_task_progress_progress_id_fk FOREIGN KEY (progress_id) REFERENCES dune.landsraad_task_progress(id) ON DELETE CASCADE;
+29715:    ADD CONSTRAINT landsraad_task_progress_progress_id_fk FOREIGN KEY (progress_id) REFERENCES dune.landsraad_task_progress(id) ON DELETE CASCADE;
+29723:    ADD CONSTRAINT landsraad_task_progress_task_id_fk FOREIGN KEY (task_id) REFERENCES dune.landsraad_tasks(id) ON DELETE CASCADE;
+29731:    ADD CONSTRAINT landsraad_task_reveal_state_faction_id_fk FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29739:    ADD CONSTRAINT landsraad_task_reveal_state_task_id_fk FOREIGN KEY (task_id) REFERENCES dune.landsraad_tasks(id) ON DELETE CASCADE;
+29747:    ADD CONSTRAINT landsraad_task_rewards_task_id_fk FOREIGN KEY (task_id) REFERENCES dune.landsraad_tasks(id) ON DELETE CASCADE;
+29755:    ADD CONSTRAINT landsraad_task_term_id_fk FOREIGN KEY (term_id) REFERENCES dune.landsraad_decree_term(term_id) ON DELETE CASCADE;
+29763:    ADD CONSTRAINT landsraad_task_winning_faction_id_fk FOREIGN KEY (winning_faction_id) REFERENCES dune.factions(id) ON DELETE SET NULL;
+29771:    ADD CONSTRAINT landsraad_term_active_decree_id_fk FOREIGN KEY (active_decree_id) REFERENCES dune.landsraad_decrees(id) ON DELETE SET NULL;
+29779:    ADD CONSTRAINT landsraad_term_elected_decree_id_fk FOREIGN KEY (elected_decree_id) REFERENCES dune.landsraad_decrees(id) ON DELETE SET NULL;
+29787:    ADD CONSTRAINT landsraad_term_reigning_faction_id_fk FOREIGN KEY (reigning_faction_id) REFERENCES dune.factions(id) ON DELETE SET NULL;
+29795:    ADD CONSTRAINT landsraad_term_winning_faction_id_fk FOREIGN KEY (winning_faction_id) REFERENCES dune.factions(id) ON DELETE SET NULL;
+29803:    ADD CONSTRAINT landsraad_votes_decree_id_fk FOREIGN KEY (decree_id) REFERENCES dune.landsraad_decrees(id) ON DELETE CASCADE;
+29811:    ADD CONSTRAINT landsraad_votes_guild_id_fk FOREIGN KEY (guild_id) REFERENCES dune.guilds(guild_id) ON DELETE SET NULL;
+29819:    ADD CONSTRAINT landsraad_votes_player_id_fk FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE SET NULL;
+29827:    ADD CONSTRAINT map_areas_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29835:    ADD CONSTRAINT markers_map_name_id_fkey FOREIGN KEY (map_name_id) REFERENCES dune.map_names(map_name_id) ON DELETE CASCADE;
+29843:    ADD CONSTRAINT mnemonic_recall_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29851:    ADD CONSTRAINT overmap_players_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29859:    ADD CONSTRAINT overmap_players_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES dune.actors(id) ON DELETE SET NULL;
+29867:    ADD CONSTRAINT parties_party_leader_id_fkey FOREIGN KEY (party_leader_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29875:    ADD CONSTRAINT partition_id_fk FOREIGN KEY (partition_id) REFERENCES dune.world_partition(partition_id) ON DELETE SET NULL;
+29883:    ADD CONSTRAINT party_invites_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29891:    ADD CONSTRAINT party_invites_sender_player_id_fkey FOREIGN KEY (sender_player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29899:    ADD CONSTRAINT party_members_party_id_fkey FOREIGN KEY (party_id) REFERENCES dune.parties(party_id) ON DELETE CASCADE;
+29907:    ADD CONSTRAINT party_members_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29915:    ADD CONSTRAINT permission_actor_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29923:    ADD CONSTRAINT permission_actor_rank_permission_actor_id_fkey FOREIGN KEY (permission_actor_id) REFERENCES dune.permission_actor(actor_id) ON DELETE CASCADE;
+29931:    ADD CONSTRAINT permission_actor_rank_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29939:    ADD CONSTRAINT placeables_id_fkey FOREIGN KEY (id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29947:    ADD CONSTRAINT placeables_owner_entity_id_fkey FOREIGN KEY (owner_entity_id) REFERENCES dune.fgl_entities(entity_id) ON DELETE SET NULL;
+29955:    ADD CONSTRAINT player_access_codes_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+29963:    ADD CONSTRAINT player_faction_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29971:    ADD CONSTRAINT player_faction_faction_id_fkey FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29979:    ADD CONSTRAINT player_faction_reputation_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+29987:    ADD CONSTRAINT player_faction_reputation_faction_id_fkey FOREIGN KEY (faction_id) REFERENCES dune.factions(id) ON DELETE CASCADE;
+29995:    ADD CONSTRAINT player_markers_marker_hash_id_dimension_index_map_name_id_fkey FOREIGN KEY (marker_hash_id, dimension_index, map_name_id) REFERENCES dune.markers(marker_hash_id, dimension_index, map_name_id) ON DELETE CASCADE;
+30003:    ADD CONSTRAINT player_markers_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30011:    ADD CONSTRAINT player_respawn_locations_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+30019:    ADD CONSTRAINT player_respawn_locations_locator_actor_id_fkey FOREIGN KEY (locator_actor_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30027:    ADD CONSTRAINT player_tags_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+30035:    ADD CONSTRAINT player_virtual_currency_balances_player_controller_id_fkey FOREIGN KEY (player_controller_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30043:    ADD CONSTRAINT purchased_specialization_keystones_keystone_id_fkey FOREIGN KEY (keystone_id) REFERENCES dune.specialization_keystones_map(id) ON DELETE CASCADE;
+30051:    ADD CONSTRAINT purchased_specialization_keystones_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30059:    ADD CONSTRAINT recovered_vehicles_character_id_fkey FOREIGN KEY (character_id) REFERENCES dune.encrypted_player_state(id) ON UPDATE CASCADE ON DELETE CASCADE;
+30067:    ADD CONSTRAINT recovered_vehicles_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES dune.vehicles(id) ON DELETE CASCADE;
+30075:    ADD CONSTRAINT server_id_fk FOREIGN KEY (server_id) REFERENCES dune.farm_state(server_id) ON DELETE CASCADE;
+30083:    ADD CONSTRAINT serverid_fk FOREIGN KEY (server_id) REFERENCES dune.farm_state(server_id) ON DELETE SET NULL;
+30091:    ADD CONSTRAINT sinkcharts_item_id_fkey FOREIGN KEY (item_id) REFERENCES dune.items(id) ON DELETE CASCADE;
+30099:    ADD CONSTRAINT specialization_refund_id_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30107:    ADD CONSTRAINT specialization_tracks_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30115:    ADD CONSTRAINT tax_invoice_totem_id_fkey FOREIGN KEY (totem_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30123:    ADD CONSTRAINT totems_id_fkey FOREIGN KEY (id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30131:    ADD CONSTRAINT travel_actor_parent_id_fkey FOREIGN KEY (id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30139:    ADD CONSTRAINT travel_actor_parent_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30147:    ADD CONSTRAINT travel_return_info_player_controller_id_fkey FOREIGN KEY (player_controller_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30155:    ADD CONSTRAINT tutorial_per_player_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30163:    ADD CONSTRAINT tutorial_per_player_tutorial_id_fkey FOREIGN KEY (tutorial_id) REFERENCES dune.tutorials(id) ON DELETE CASCADE;
+30171:    ADD CONSTRAINT vehicle_module_inventories_inventory_id_fkey FOREIGN KEY (inventory_id) REFERENCES dune.inventories(id) ON DELETE CASCADE;
+30179:    ADD CONSTRAINT vehicle_modules_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES dune.vehicles(id) ON DELETE CASCADE;
+30187:    ADD CONSTRAINT vehicles_id_fkey FOREIGN KEY (id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30195:    ADD CONSTRAINT vendor_stock_cycle_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30203:    ADD CONSTRAINT vendor_stock_state_player_id_fkey FOREIGN KEY (player_id) REFERENCES dune.actors(id) ON DELETE CASCADE;
+30211:    ADD CONSTRAINT world_partition_reset_seed_partition_id_fkey FOREIGN KEY (partition_id) REFERENCES dune.world_partition(partition_id) ON DELETE CASCADE;

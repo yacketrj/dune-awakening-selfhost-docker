@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"dune-ops-observability","name":"Dune Ops Observability","description":"Read-only operations and analytics addon for Dune Docker Console.","author":"DarkDante","version":"0.3.0","type":"ui","entry":{"navigation":"Ops Observability","path":"web/index.html"},"permissions":{"players":["read"],"ops":["read"]}}

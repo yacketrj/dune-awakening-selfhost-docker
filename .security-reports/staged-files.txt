@@ -1,0 +1,8 @@
+.security-reports/pr-files/.env.example
+.security-reports/pr-files/console/api/src/auth.js
+.security-reports/pr-files/console/api/src/bridgeRateLimit.js
+.security-reports/pr-files/console/api/src/config.js
+.security-reports/pr-files/console/api/src/rmq.js
+.security-reports/pr-files/console/api/src/server.js
+.security-reports/pr-files/runtime/scripts/admin-tools.sh
+.security-reports/pr-files/tests/test-command-auth-token.sh

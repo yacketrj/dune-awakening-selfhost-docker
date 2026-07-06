@@ -1,0 +1,312 @@
+[
+  {
+    "map": "Survival_1",
+    "id": 1,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "Overmap",
+    "id": 2,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "SH_Arrakeen",
+    "id": 3,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "SH_HarkoVillage",
+    "id": 4,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Story_Hephaestus",
+    "id": 5,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Story_Ecolab_Carthag",
+    "id": 6,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Story_WaterFatManor",
+    "id": 7,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "DeepDesert_1",
+    "id": 8,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "Story_ProcesVerbal",
+    "id": 9,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "DLC_Story_LostHarvest_EcolabA",
+    "id": 10,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "DLC_Story_LostHarvest_EcolabB",
+    "id": 11,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "DLC_Story_LostHarvest_ForgottenLab",
+    "id": 12,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "Story_ArtOfKanly",
+    "id": 13,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Dungeon_Hephaestus",
+    "id": 14,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Dungeon_OldCarthag",
+    "id": 15,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "Story_Faction_Outpost_Atre",
+    "id": 16,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "Story_Faction_Outpost_Hark",
+    "id": 17,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "Story_HeighlinerDungeon",
+    "id": 18,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Ecolab_Bronze_Green_089",
+    "id": 19,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Ecolab_Bronze_Green_152",
+    "id": 20,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Ecolab_Bronze_Green_024",
+    "id": 21,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Ecolab_Bronze_Green_195",
+    "id": 22,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Ecolab_Bronze_Green_136",
+    "id": 23,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Overland_M_01",
+    "id": 24,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Overland_S_04",
+    "id": 25,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Overland_S_06",
+    "id": 26,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Story_BanditFortress01",
+    "id": 27,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Overland_S_07",
+    "id": 28,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Overland_S_08",
+    "id": 29,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "CB_Dungeon_ThePit",
+    "id": 30,
+    "dimension": 0,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  },
+  {
+    "map": "DeepDesert_1",
+    "id": 31,
+    "dimension": 1,
+    "disable": false,
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1,
+    "maxY": 1
+  }
+]

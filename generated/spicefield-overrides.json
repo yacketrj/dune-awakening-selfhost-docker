@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-06-30T23:59:31.012Z",
+  "overrides": {
+    "14": {
+      "spicefield_type_id": 14,
+      "map_name": "DeepDesert",
+      "field_type": "Large",
+      "dimension_index": 0,
+      "updatedAt": "2026-06-30T23:59:31.012Z",
+      "max_globally_active": 2,
+      "max_globally_primed": 2,
+      "is_spawning_active": true,
+      "global_spawn_weight": 0.5
+    }
+  }
+}

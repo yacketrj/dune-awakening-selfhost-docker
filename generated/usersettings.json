@@ -1,0 +1,13 @@
+{
+  "engine": {},
+  "maps": {},
+  "partitions": {
+    "1": {
+      "map": "Survival_1",
+      "userengine": {
+        "server_display_name": "Sietch Sayyadina",
+        "server_login_password": "WaterOfLife*Fremen22"
+      }
+    }
+  }
+}

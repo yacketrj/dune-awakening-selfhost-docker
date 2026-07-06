@@ -1,0 +1,20 @@
+./.github/pull_request_template.md:47:grep -RniE 'cpuset|DUNE_CPUSET|m_MaxFps|NetServerMaxTickRate|MaxPhysicsDeltaTime|m_MaxSimulationTimeStepDefault|DefaultGame.ini|DefaultEngine.ini|udp-relay|start-relay' \
+./.github/pull_request_template.md:64:CpusetCpus={{.HostConfig.CpusetCpus}}
+./runtime/scripts/doctor.sh:76:  local cpuset
+./runtime/scripts/doctor.sh:84:    cpuset="$(docker inspect -f '{{.HostConfig.CpusetCpus}}' "$container" 2>/dev/null || true)"
+./runtime/scripts/doctor.sh:85:    if [ -n "$cpuset" ] && [ "$cpuset" != "<no value>" ]; then
+./runtime/scripts/doctor.sh:86:      warn_msg "Game container CPU pinning detected: $container cpuset=$cpuset"
+./runtime/text-router/director-current.log:9:[20:14:48 1 WRN Router] Ggwp config not available at /DuneSandbox/Config/DefaultEngine.ini.
+./docs/ISSUE-74-CLEAN-REPRO.md:95:runtime/scripts/start-relay.sh
+./docs/ISSUE-74-CLEAN-REPRO.md:96:runtime/scripts/udp-relay.py
+./docs/ISSUE-74-CLEAN-REPRO.md:108:grep -RniE 'cpuset|DUNE_CPUSET|m_MaxFps|NetServerMaxTickRate|MaxPhysicsDeltaTime|m_MaxSimulationTimeStepDefault|DefaultGame.ini|DefaultEngine.ini|udp-relay|start-relay' \
+./docs/ISSUE-74-CLEAN-REPRO.md:131:CpusetCpus={{.HostConfig.CpusetCpus}}
+./docs/ISSUE-74-CLEAN-REPRO.md:145:- `CpusetCpus=` is empty for game containers.
+./docs/ISSUE-74-CLEAN-REPRO.md:146:- No `DefaultGame.ini` mount.
+./docs/ISSUE-74-CLEAN-REPRO.md:147:- No `DefaultEngine.ini` mount.
+./docs/ISSUE-74-CLEAN-REPRO.md:195:grep -RniE 'cpuset|DUNE_CPUSET|m_MaxFps|NetServerMaxTickRate|MaxPhysicsDeltaTime|m_MaxSimulationTimeStepDefault|DefaultGame.ini|DefaultEngine.ini|udp-relay|start-relay' \
+runtime/scripts/doctor.sh:76:  local cpuset
+runtime/scripts/doctor.sh:84:    cpuset="$(docker inspect -f '{{.HostConfig.CpusetCpus}}' "$container" 2>/dev/null || true)"
+runtime/scripts/doctor.sh:85:    if [ -n "$cpuset" ] && [ "$cpuset" != "<no value>" ]; then
+runtime/scripts/doctor.sh:86:      warn_msg "Game container CPU pinning detected: $container cpuset=$cpuset"
+runtime/text-router/director-current.log:9:[20:14:48 1 WRN Router] Ggwp config not available at /DuneSandbox/Config/DefaultEngine.ini.

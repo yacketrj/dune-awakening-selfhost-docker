@@ -1,0 +1,42 @@
+---- dune-server-gateway ----
+
+Name=/dune-server-gateway
+Image=registry.funcom.com/funcom/self-hosting/seabass-server-gateway:2007976-0-shipping
+NetworkMode=dune-net
+CpusetCpus=
+NanoCpus=0
+Memory=0
+MemorySwap=0
+Mounts=/home/darkdante/dune-clean-repro/runtime/server-gateway/config -> /etc/app/conf.d; 
+StartedAt=2026-06-29T20:16:24.67330672Z
+RestartCount=0
+OOMKilled=false
+
+---- dune-server-overmap ----
+
+Name=/dune-server-overmap
+Image=registry.funcom.com/funcom/self-hosting/seabass-server:2007976-0-shipping
+NetworkMode=host
+CpusetCpus=
+NanoCpus=0
+Memory=3221225472
+MemorySwap=6442450944
+Mounts=/home/darkdante/dune-clean-repro/runtime/generated/dune-fake-k8s-serviceaccount-overmap-3505201 -> /run/secrets/kubernetes.io/serviceaccount; /home/darkdante/dune-clean-repro/runtime/game/overmap/Saved -> /home/dune/server/DuneSandbox/Saved; /home/darkdante/dune-clean-repro/runtime/game/artifacts -> /home/dune/artifacts; /home/darkdante/dune-clean-repro/runtime/container -> /opt/dune-local; 
+StartedAt=2026-06-29T20:15:48.73164543Z
+RestartCount=0
+OOMKilled=false
+
+---- dune-server-survival-1 ----
+
+Name=/dune-server-survival-1
+Image=registry.funcom.com/funcom/self-hosting/seabass-server:2007976-0-shipping
+NetworkMode=host
+CpusetCpus=
+NanoCpus=0
+Memory=17179869184
+MemorySwap=34359738368
+Mounts=/home/darkdante/dune-clean-repro/runtime/generated/dune-fake-k8s-serviceaccount-survival-1-3502345 -> /run/secrets/kubernetes.io/serviceaccount; /home/darkdante/dune-clean-repro/runtime/game/survival-1/Saved -> /home/dune/server/DuneSandbox/Saved; /home/darkdante/dune-clean-repro/runtime/game/artifacts -> /home/dune/artifacts; /home/darkdante/dune-clean-repro/runtime/container -> /opt/dune-local; 
+StartedAt=2026-06-29T20:15:18.489850834Z
+RestartCount=0
+OOMKilled=false
+

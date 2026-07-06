@@ -1,0 +1,2166 @@
+[
+  {
+    "index": 0,
+    "name": "server-set-0",
+    "map": "Survival_1",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "12Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Survival_1",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "partitions": [
+        1
+      ],
+      "replicas": 1,
+      "resources": {
+        "limits": {
+          "memory": "12Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 1,
+    "name": "server-set-1",
+    "map": "Overmap",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Overmap",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "partitions": [
+        2
+      ],
+      "replicas": 1,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 2,
+    "name": "server-set-2",
+    "map": "SH_Arrakeen",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "SH_Arrakeen",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 3,
+    "name": "server-set-3",
+    "map": "SH_HarkoVillage",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "SH_HarkoVillage",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 4,
+    "name": "server-set-4",
+    "map": "CB_Story_Hephaestus",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Story_Hephaestus",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 5,
+    "name": "server-set-5",
+    "map": "CB_Story_Ecolab_Carthag",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Story_Ecolab_Carthag",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 6,
+    "name": "server-set-6",
+    "map": "CB_Story_WaterFatManor",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Story_WaterFatManor",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 7,
+    "name": "server-set-7",
+    "map": "DeepDesert_1",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "15Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "DeepDesert_1",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "15Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 8,
+    "name": "server-set-8",
+    "map": "Story_ProcesVerbal",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Story_ProcesVerbal",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 9,
+    "name": "server-set-9",
+    "map": "DLC_Story_LostHarvest_EcolabA",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "DLC_Story_LostHarvest_EcolabA",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 10,
+    "name": "server-set-10",
+    "map": "DLC_Story_LostHarvest_EcolabB",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "DLC_Story_LostHarvest_EcolabB",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 11,
+    "name": "server-set-11",
+    "map": "DLC_Story_LostHarvest_ForgottenLab",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "DLC_Story_LostHarvest_ForgottenLab",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 12,
+    "name": "server-set-12",
+    "map": "Story_ArtOfKanly",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Story_ArtOfKanly",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 13,
+    "name": "server-set-13",
+    "map": "CB_Dungeon_Hephaestus",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Dungeon_Hephaestus",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 14,
+    "name": "server-set-14",
+    "map": "CB_Dungeon_OldCarthag",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Dungeon_OldCarthag",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 15,
+    "name": "server-set-15",
+    "map": "Story_Faction_Outpost_Atre",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Story_Faction_Outpost_Atre",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 16,
+    "name": "server-set-16",
+    "map": "Story_Faction_Outpost_Hark",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Story_Faction_Outpost_Hark",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 17,
+    "name": "server-set-17",
+    "map": "Story_HeighlinerDungeon",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "Story_HeighlinerDungeon",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 18,
+    "name": "server-set-18",
+    "map": "CB_Ecolab_Bronze_Green_089",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "6Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Ecolab_Bronze_Green_089",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "6Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 19,
+    "name": "server-set-19",
+    "map": "CB_Ecolab_Bronze_Green_152",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Ecolab_Bronze_Green_152",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 20,
+    "name": "server-set-20",
+    "map": "CB_Ecolab_Bronze_Green_024",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Ecolab_Bronze_Green_024",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 21,
+    "name": "server-set-21",
+    "map": "CB_Ecolab_Bronze_Green_195",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Ecolab_Bronze_Green_195",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 22,
+    "name": "server-set-22",
+    "map": "CB_Ecolab_Bronze_Green_136",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Ecolab_Bronze_Green_136",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 23,
+    "name": "server-set-23",
+    "map": "CB_Overland_M_01",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Overland_M_01",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 24,
+    "name": "server-set-24",
+    "map": "CB_Overland_S_04",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Overland_S_04",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 25,
+    "name": "server-set-25",
+    "map": "CB_Overland_S_06",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "3Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Overland_S_06",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "3Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 26,
+    "name": "server-set-26",
+    "map": "CB_Story_BanditFortress01",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Story_BanditFortress01",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 27,
+    "name": "server-set-27",
+    "map": "CB_Overland_S_07",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Overland_S_07",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 28,
+    "name": "server-set-28",
+    "map": "CB_Overland_S_08",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Overland_S_08",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  },
+  {
+    "index": 29,
+    "name": "server-set-29",
+    "map": "CB_Dungeon_ThePit",
+    "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+    "args": [],
+    "env": [],
+    "resources": {
+      "limits": {
+        "memory": "2Gi"
+      }
+    },
+    "raw": {
+      "arguments": [
+        "-FarmRegion=PLACEHOLDER_WORLD_REGION",
+        "-ini:engine:[FuncomLiveServices]:ServiceAuthToken=PLACEHOLDER_FLS_SECRET",
+        "-RMQGameTlsEnabled=true"
+      ],
+      "connectDirector": false,
+      "dedicatedScaling": true,
+      "connectionMode": "AutoDiscovery",
+      "envSecretSelectors": [
+        {
+          "matchLabels": {
+            "igw.funcom.com/env-for-server": "default"
+          }
+        }
+      ],
+      "ignoreUnreadyDatabase": false,
+      "image": "registry.funcom.com/funcom/self-hosting/seabass-server:PLACEHOLDER_WORLD_IMAGE_TAG",
+      "map": "CB_Dungeon_ThePit",
+      "messageQueues": [
+        {
+          "argumentNames": {
+            "hostname": "--RMQGameHostname",
+            "port": "--RMQGamePort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "game"
+            }
+          }
+        },
+        {
+          "argumentNames": {
+            "hostname": "--RMQAdminHostname",
+            "port": "--RMQAdminPort"
+          },
+          "mode": "Internal",
+          "port": "amqp",
+          "serviceLabelSelector": {
+            "matchLabels": {
+              "messagequeue": "admin"
+            }
+          }
+        }
+      ],
+      "replicas": 0,
+      "resources": {
+        "limits": {
+          "memory": "2Gi"
+        }
+      },
+      "restartMode": "Individual",
+      "runCommand": "/home/dune/run.sh",
+      "schedulerName": "memory-focused-scheduler",
+      "storageMode": "Combined",
+      "terminationGracePeriodSeconds": 120
+    }
+  }
+]

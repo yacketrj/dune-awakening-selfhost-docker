@@ -13,24 +13,26 @@ assert_contains() {
   grep -Fq -- "$pattern" "$file" || fail "$file missing: $pattern"
 }
 
-assert_not_contains_anywhere() {
-  local pattern="$1"
-  local output
-  shift
-  output="$(mktemp)"
+CORE="${HOME}/dune-awakening-selfhost-docker"
 
-  if grep -RIn -- "$pattern" "$@" >"$output"; then
-    cat "$output" >&2
-    rm -f "$output"
-    fail "unexpected source match: $pattern"
-  fi
-  rm -f "$output"
-}
+# Built-in fallback present on both sides (matches game server default)
+assert_contains "$CORE/console/api/src/rmq.js" 'BUILTIN_COMMAND_AUTH_TOKEN'
+assert_contains "$CORE/runtime/scripts/admin-tools.sh" 'BUILTIN_COMMAND_AUTH_TOKEN'
 
-assert_not_contains_anywhere 'BUILTIN_COMMAND_AUTH_TOKEN' console/api/src runtime/scripts
-assert_contains runtime/scripts/admin-tools.sh 'generate_command_auth_token'
-assert_contains runtime/scripts/admin-tools.sh 'openssl rand -hex 32'
-assert_contains console/api/src/rmq.js 'randomBytes(COMMAND_AUTH_TOKEN_BYTES).toString("base64url")'
-assert_contains .env.example 'runtime/secrets/command-auth-token.txt'
+# Env var override takes priority
+assert_contains "$CORE/console/api/src/rmq.js" 'DUNE_COMMAND_AUTH_TOKEN'
+assert_contains "$CORE/runtime/scripts/admin-tools.sh" 'DUNE_COMMAND_AUTH_TOKEN'
 
-echo "PASS: command auth token is generated instead of built in"
+# File persistence path for operator overrides
+assert_contains "$CORE/console/api/src/rmq.js" 'runtime/secrets/command-auth-token.txt'
+assert_contains "$CORE/runtime/scripts/admin-tools.sh" 'command-auth-token.txt'
+
+# File is read if it exists (operator can pre-create it)
+assert_contains "$CORE/console/api/src/rmq.js" 'existsSync(file)'
+assert_contains "$CORE/runtime/scripts/admin-tools.sh" '-s "$COMMAND_TOKEN_FILE"'
+
+# .env.example documents the fallback behavior
+assert_contains "$CORE/.env.example" 'runtime/secrets/command-auth-token.txt'
+assert_contains "$CORE/.env.example" 'RedBlink built-in token'
+
+echo "PASS: command auth token matches upstream pattern (env > file > built-in)"

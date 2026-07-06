@@ -1,0 +1,13 @@
+           table_name           
+--------------------------------
+ active_server_ids
+ encrypted_player_state
+ encrypted_player_state
+ farm_state
+ parties
+ player_state
+ player_state
+ spicefield_server_availability
+ world_partition
+(9 rows)
+

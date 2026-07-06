@@ -1,0 +1,256 @@
+{
+  "enabled": true,
+  "version": "care-package-v1",
+  "activeKitId": "care-package-v1",
+  "autoGrantKitId": "care-package-v1",
+  "kits": [
+    {
+      "id": "care-package-v1",
+      "name": "Care Package",
+      "items": [
+        {
+          "itemName": "Maraqeb Stillsuit Boots",
+          "itemId": "Stillsuit_Unique_Efficient_04_Boots",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Maraqeb Stillsuit Garment",
+          "itemId": "Stillsuit_Unique_Efficient_04_Top",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Maraqeb Stillsuit Gloves",
+          "itemId": "Stillsuit_Unique_Efficient_04_Gloves",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Maraqeb Stillsuit Mask",
+          "itemId": "Stillsuit_Unique_Efficient_04_Mask",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Literjon Mk6",
+          "itemId": "Literjon_T6",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Holtzman Shield Mk5",
+          "itemId": "HoltzmanShieldActiveDrain3",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Power Pack Mk5",
+          "itemId": "PowerPack7",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Full Suspensor Belt",
+          "itemId": "FullSuspensorBelt",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Filter Extractor Mk5",
+          "itemId": "BodyFluidExtractor_Unique_Water_05",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Scipio's Bloodbag",
+          "itemId": "Bloodsack_Unique_Durable_02",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Cutteray Mk5",
+          "itemId": "MiningTool_2h_Light",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Feyd's Drinker",
+          "itemId": "Kindjal_Unique_Blood_06",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Assassin's Rifle",
+          "itemId": "LongRifle_Unique_Poison_03",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Personal Light",
+          "itemId": "PortableLight",
+          "quantity": 1,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Solari",
+          "itemId": "SolarisCoin",
+          "quantity": 100000,
+          "quality": 0,
+          "durability": 1
+        },
+        {
+          "itemName": "Heavy Darts",
+          "itemId": "HeavyAmmo",
+          "quantity": 1000,
+          "quality": 0,
+          "durability": 1
+        }
+      ],
+      "xp": 4190,
+      "sendMessage": ""
+    }
+  ],
+  "items": [
+    {
+      "itemName": "Maraqeb Stillsuit Boots",
+      "itemId": "Stillsuit_Unique_Efficient_04_Boots",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Maraqeb Stillsuit Garment",
+      "itemId": "Stillsuit_Unique_Efficient_04_Top",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Maraqeb Stillsuit Gloves",
+      "itemId": "Stillsuit_Unique_Efficient_04_Gloves",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Maraqeb Stillsuit Mask",
+      "itemId": "Stillsuit_Unique_Efficient_04_Mask",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Literjon Mk6",
+      "itemId": "Literjon_T6",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Holtzman Shield Mk5",
+      "itemId": "HoltzmanShieldActiveDrain3",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Power Pack Mk5",
+      "itemId": "PowerPack7",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Full Suspensor Belt",
+      "itemId": "FullSuspensorBelt",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Filter Extractor Mk5",
+      "itemId": "BodyFluidExtractor_Unique_Water_05",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Scipio's Bloodbag",
+      "itemId": "Bloodsack_Unique_Durable_02",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Cutteray Mk5",
+      "itemId": "MiningTool_2h_Light",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Feyd's Drinker",
+      "itemId": "Kindjal_Unique_Blood_06",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Assassin's Rifle",
+      "itemId": "LongRifle_Unique_Poison_03",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Personal Light",
+      "itemId": "PortableLight",
+      "quantity": 1,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Solari",
+      "itemId": "SolarisCoin",
+      "quantity": 100000,
+      "quality": 0,
+      "durability": 1
+    },
+    {
+      "itemName": "Heavy Darts",
+      "itemId": "HeavyAmmo",
+      "quantity": 1000,
+      "quality": 0,
+      "durability": 1
+    }
+  ],
+  "xp": 4190,
+  "allowRepeatGrants": false,
+  "autoGrantEnabled": true,
+  "autoGrantIntervalSeconds": 60,
+  "grantWhen": "first_online",
+  "autoGrantRules": [
+    {
+      "id": "auto-rule-1",
+      "enabled": true,
+      "kitId": "care-package-v1",
+      "grantWhen": "first_online",
+      "lastSeenDays": 30
+    }
+  ]
+}

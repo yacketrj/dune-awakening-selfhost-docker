@@ -1,0 +1,119 @@
+
+Starting Dune Docker Console Installer.
+
+==> Installing the dune command.
+Installed dune command:
+/usr/local/bin/dune
+
+==> Choosing the Web UI port.
+Enter the Web UI port, or press Enter to use 8088: Web UI port set to 8088.
+
+==> Starting the Web UI.
+ Container dune-orchestrator Stopping 
+ Container dune-orchestrator Stopped 
+ Container dune-orchestrator Removing 
+ Container dune-orchestrator Removed 
+ Image redblink-dune-docker-console:dev Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 635B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.94kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-bookworm
+#3 DONE 1.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 377B done
+#4 DONE 0.0s
+
+#5 [web-build 1/7] FROM docker.io/library/node:20-bookworm@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5
+#5 resolve docker.io/library/node:20-bookworm@sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5 0.0s done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 142.74kB 0.1s done
+#6 DONE 0.1s
+
+#7 [web-build 6/7] COPY console/web ./
+#7 CACHED
+
+#8 [web-build 3/7] COPY console/web/package.json ./
+#8 CACHED
+
+#9 [web-build 5/7] RUN npm ci
+#9 CACHED
+
+#10 [web-build 2/7] WORKDIR /app/web
+#10 CACHED
+
+#11 [web-build 4/7] COPY console/web/package-lock.json ./
+#11 CACHED
+
+#12 [web-build 7/7] RUN npm run build
+#12 CACHED
+
+#13 [stage-1 3/9] RUN apt-get update     && apt-get install -y --no-install-recommends         iproute2         ca-certificates         curl         bash         unzip         procps         netcat-openbsd     && rm -rf /var/lib/apt/lists/*     && arch="$(dpkg --print-architecture)"     && case "$arch" in         amd64) docker_arch="x86_64"; compose_arch="x86_64" ;;         arm64) docker_arch="aarch64"; compose_arch="aarch64" ;;         *) echo "Unsupported architecture for Docker CLI: $arch" >&2; exit 1 ;;        esac     && curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-27.5.1.tgz" -o /tmp/docker.tgz     && tar -xzf /tmp/docker.tgz -C /tmp     && mv /tmp/docker/docker /usr/local/bin/docker     && chmod +x /usr/local/bin/docker     && rm -rf /tmp/docker /tmp/docker.tgz     && mkdir -p /usr/local/lib/docker/cli-plugins     && curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-${compose_arch}"         -o /usr/local/lib/docker/cli-plugins/docker-compose     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose     && docker --version     && docker compose version
+#13 CACHED
+
+#14 [stage-1 5/9] COPY console/api/package-lock.json ./
+#14 CACHED
+
+#15 [stage-1 4/9] COPY console/api/package.json ./
+#15 CACHED
+
+#16 [stage-1 2/9] WORKDIR /app
+#16 CACHED
+
+#17 [stage-1 6/9] RUN npm ci --omit=dev
+#17 CACHED
+
+#18 [stage-1 7/9] COPY console/api/src ./src
+#18 DONE 0.1s
+
+#19 [stage-1 8/9] COPY --from=web-build /app/web/dist /app/web-dist
+#19 DONE 0.9s
+
+#20 [stage-1 9/9] WORKDIR /repo
+#20 DONE 0.1s
+
+#21 exporting to image
+#21 exporting layers
+#21 exporting layers 1.9s done
+#21 exporting manifest sha256:a2102f439fa941854bea008a35a787c7b87c6c4c61c96f3250c3843c28e59c0b 0.0s done
+#21 exporting config sha256:68afbffa73c2d79dbf89d3f909adee5435f4c68298ad7c532a2dfaea18433926 0.0s done
+#21 exporting attestation manifest sha256:1503d21186f7c1067ba878f31fac2f63d14ca6c0fc6f701c084bd588985c6df7 0.0s done
+#21 exporting manifest list sha256:dba491693fac8aade0b70706adc7a687fe0bc786e08f46033ca96466008b3cd8 0.0s done
+#21 naming to docker.io/library/redblink-dune-docker-console:dev done
+#21 unpacking to docker.io/library/redblink-dune-docker-console:dev
+#21 unpacking to docker.io/library/redblink-dune-docker-console:dev 0.7s done
+#21 DONE 2.7s
+
+#22 resolving provenance for metadata file
+#22 DONE 0.0s
+ Image redblink-dune-docker-console:dev Built 
+ Container redblink-dune-docker-console Creating 
+ Container redblink-dune-docker-console Created 
+ Container redblink-dune-docker-console Starting 
+ Container redblink-dune-docker-console Started 
+
+Dune Docker Console is ready.
+
+Open the Web UI in your browser:
+  Remote / public access: http://50.123.64.61:8088
+  Same network access:    http://192.168.68.21:8088
+
+If you are on the same local network as this server, use the same-network address.
+If you are connecting over the internet, use the public address and make sure TCP 8088 is allowed by the server firewall or VPS firewall.
+
+Current Web UI admin password file:
+  /home/darkdante/dune-clean-repro/runtime/secrets/admin-web-password.txt
+Use this current password to sign in:
+  Arrakeen*Fremen2026
+If you later change the Web UI password, this printed password becomes obsolete.
+The password file above will then contain the new current password.
+
+After signing in, the setup wizard will check the server and finish everything from the browser.
+If you prefer the terminal, you can also run: dune --help

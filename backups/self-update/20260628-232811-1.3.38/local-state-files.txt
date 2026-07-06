@@ -1,0 +1,8 @@
+.env
+runtime/generated/battlegroup.env
+runtime/generated/map-runtime-modes.json
+runtime/generated/sietch-config.json
+runtime/generated/usersettings.json
+runtime/generated/gameplay-profile.ini
+runtime/generated/care-package.json
+runtime/secrets/funcom-token.txt
