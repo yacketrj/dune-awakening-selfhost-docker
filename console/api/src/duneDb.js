@@ -3393,11 +3393,32 @@ export async function addonOpsResourcesSummary(db) {
     resourcesByMap = mapResult.rows || [];
   } catch { }
 
+  let spiceFieldsBySize = [];
+  try {
+    const spiceExists = await tableExists(db, "spicefield_types");
+    if (spiceExists) {
+      const spiceResult = await db.query(`
+        select field_type as size,
+               map_name as map,
+               count(*)::int as types,
+               coalesce(sum(current_globally_active), 0)::int as currently_active,
+               coalesce(sum(max_globally_active), 0)::int as max_active,
+               coalesce(sum(current_globally_primed), 0)::int as currently_primed,
+               coalesce(sum(max_globally_primed), 0)::int as max_primed
+        from dune.spicefield_types
+        where is_spawning_active = true
+        group by field_type, map_name
+        order by map_name, field_type`);
+      spiceFieldsBySize = spiceResult.rows || [];
+    }
+  } catch { }
+
   return {
     totalFields: Number(r.total_fields || 0),
     totalValueRemaining: Number(r.total_value || 0),
     resourcesByType,
-    resourcesByMap
+    resourcesByMap,
+    spiceFieldsBySize
   };
 }
 
