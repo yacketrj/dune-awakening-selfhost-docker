@@ -50,8 +50,8 @@ export function isDiscordAdapterRoute(path) {
 }
 
 export async function handleDiscordAdapterRoute({ req, res, path, config, readJson, json, statusProvider, readinessProvider, servicesProvider, populationProvider }) {
-  const safeStatusProvider = typeof statusProvider === "function" ? statusProvider : () => discordStatusProvider(config);
-  const safeReadinessProvider = typeof readinessProvider === "function" ? readinessProvider : () => discordReadinessProvider(config);
+  const safeStatusProvider = typeof statusProvider === "function" ? statusProvider : (opts) => discordStatusProvider(config, opts);
+  const safeReadinessProvider = typeof readinessProvider === "function" ? readinessProvider : (opts) => discordReadinessProvider(config, opts);
   const safeServicesProvider = typeof servicesProvider === "function" ? servicesProvider : () => discordServicesProvider(config);
   const safePopulationProvider = typeof populationProvider === "function" ? populationProvider : () => defaultPopulationProvider(config);
   try {
@@ -143,6 +143,16 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
         route: path,
         announcements: [],
         message: "Announcements route is planned. Requires game server event bridge."
+      });
+    }
+
+    // Backups route — returns metadata from dune db list
+    if (path === DISCORD_ADAPTER_ROUTES.BACKUPS_LIST && req.method === "GET") {
+      return json(res, 200, {
+        ok: true,
+        route: path,
+        backups: [],
+        message: "Backups route is planned. Requires dune db list integration."
       });
     }
 
