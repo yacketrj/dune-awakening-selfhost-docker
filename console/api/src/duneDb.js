@@ -3384,13 +3384,15 @@ export async function addonOpsResourcesSummary(db) {
       const spiceResult = await db.query(`
         select sft.field_type as size,
                sft.map_name as map,
-               count(rfs.*)::int as active_fields,
-               coalesce(sum(rfs.value_remaining), 0)::bigint as total_value,
                coalesce(sum(sft.current_globally_active), 0)::int as currently_active,
-               coalesce(sum(sft.max_globally_active), 0)::int as max_active
+               coalesce(sum(sft.max_globally_active), 0)::int as max_active,
+               (select coalesce(sum(value_remaining), 0)::bigint
+                from dune.resourcefield_state rfs
+                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as total_value,
+               (select count(*)::int
+                from dune.resourcefield_state rfs
+                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as active_fields
         from dune.spicefield_types sft
-        left join dune.resourcefield_state rfs
-          on rfs.map = sft.map_name and rfs.field_kind_id = 1
         where sft.is_spawning_active = true
         group by sft.field_type, sft.map_name
         order by sft.map_name, sft.field_type`);
