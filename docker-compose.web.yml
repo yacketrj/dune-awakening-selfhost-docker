@@ -47,6 +47,8 @@ services:
       DUNE_DB_USER: "${DUNE_DB_USER:-}"
       DUNE_DB_PASSWORD: "${DUNE_DB_PASSWORD:-}"
       DUNE_COMMAND_AUTH_TOKEN: "${DUNE_COMMAND_AUTH_TOKEN:-}"
+      DUNE_DISCORD_ADAPTER_ENABLED: "true"
+      DUNE_BOT_API_TOKEN_FILE: /repo/secrets/bot-api-token.txt
     volumes:
       - "${DUNE_HOST_REPO_ROOT:-.}:/repo"
       - /etc/localtime:/etc/localtime:ro
