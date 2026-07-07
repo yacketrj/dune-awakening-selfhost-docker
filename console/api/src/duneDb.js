@@ -3365,22 +3365,6 @@ export async function addonOpsResourcesSummary(db) {
 
   const r = result.rows?.[0] || {};
 
-  let resourcesByType = [];
-  try {
-    const typeResult = await db.query(`
-      select case field_kind_id
-               when 0 then 'Ore'
-               when 1 then 'Spice'
-               else 'Unknown (' || field_kind_id::text || ')'
-             end as type,
-             count(*)::int as fields,
-             coalesce(sum(value_remaining), 0)::bigint as total_value
-      from dune.resourcefield_state
-      group by field_kind_id
-      order by fields desc`);
-    resourcesByType = typeResult.rows || [];
-  } catch { }
-
   let resourcesByMap = [];
   try {
     const mapResult = await db.query(`
@@ -3416,14 +3400,13 @@ export async function addonOpsResourcesSummary(db) {
   return {
     totalFields: Number(r.total_fields || 0),
     totalValueRemaining: Number(r.total_value || 0),
-    resourcesByType,
     resourcesByMap,
     spiceFieldsBySize
   };
 }
 
 function emptyResourcesSummary() {
-  return { totalFields: 0, totalValueRemaining: 0, resourcesByType: [], resourcesByMap: [] };
+  return { totalFields: 0, totalValueRemaining: 0, resourcesByMap: [], spiceFieldsBySize: [] };
 }
 
 export async function addonOpsCombatDeaths(db) {
