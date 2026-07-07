@@ -3361,19 +3361,21 @@ export async function addonOpsResourcesSummary(db) {
   const result = await db.query(`
     select count(*)::int as total_fields,
            coalesce(sum(value_remaining), 0)::bigint as total_value
-    from dune.resourcefield_state`);
+    from dune.resourcefield_state
+    where field_kind_id = 1`);
 
   const r = result.rows?.[0] || {};
 
   let resourcesByMap = [];
   try {
-    const mapResult = await db.query(`
-      select map,
-             count(*)::int as fields,
-             coalesce(sum(value_remaining), 0)::bigint as total_value
-      from dune.resourcefield_state
-      group by map
-      order by fields desc`);
+      const mapResult = await db.query(`
+        select map,
+               count(*)::int as fields,
+               coalesce(sum(value_remaining), 0)::bigint as total_value
+        from dune.resourcefield_state
+        where field_kind_id = 1
+        group by map
+        order by fields desc`);
     resourcesByMap = mapResult.rows || [];
   } catch { }
 
