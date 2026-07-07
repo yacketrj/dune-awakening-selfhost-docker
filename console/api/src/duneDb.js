@@ -3351,3 +3351,53 @@ function emptyActivitySummary() {
     guildActivity: [], factionActivity: [], mapActivity: []
   };
 }
+
+export async function addonOpsResourcesSummary(db) {
+  if (!(await tableExists(db, "resourcefield_state"))) return emptyResourcesSummary();
+
+  const result = await db.query(`
+    select count(*)::int as total_fields,
+           coalesce(sum(value_remaining), 0)::bigint as total_value
+    from dune.resourcefield_state`);
+
+  const r = result.rows?.[0] || {};
+
+  let resourcesByType = [];
+  try {
+    const typeResult = await db.query(`
+      select case field_kind_id
+               when 0 then 'Ore'
+               when 1 then 'Spice'
+               else 'Unknown (' || field_kind_id::text || ')'
+             end as type,
+             count(*)::int as fields,
+             coalesce(sum(value_remaining), 0)::bigint as total_value
+      from dune.resourcefield_state
+      group by field_kind_id
+      order by fields desc`);
+    resourcesByType = typeResult.rows || [];
+  } catch { }
+
+  let resourcesByMap = [];
+  try {
+    const mapResult = await db.query(`
+      select map,
+             count(*)::int as fields,
+             coalesce(sum(value_remaining), 0)::bigint as total_value
+      from dune.resourcefield_state
+      group by map
+      order by fields desc`);
+    resourcesByMap = mapResult.rows || [];
+  } catch { }
+
+  return {
+    totalFields: Number(r.total_fields || 0),
+    totalValueRemaining: Number(r.total_value || 0),
+    resourcesByType,
+    resourcesByMap
+  };
+}
+
+function emptyResourcesSummary() {
+  return { totalFields: 0, totalValueRemaining: 0, resourcesByType: [], resourcesByMap: [] };
+}
