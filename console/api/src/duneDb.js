@@ -3390,14 +3390,31 @@ export async function addonOpsResourcesSummary(db) {
     resourcesByMap = mapResult.rows || [];
   } catch { }
 
+  let itemsByTemplate = [];
+  try {
+    const itemsExist = await tableExists(db, "items");
+    if (itemsExist) {
+      const itemResult = await db.query(`
+        select template_id,
+               count(*)::int as stacks,
+               coalesce(sum(stack_size), 0)::bigint as total_quantity
+        from dune.items
+        group by template_id
+        order by total_quantity desc
+        limit 50`);
+      itemsByTemplate = itemResult.rows || [];
+    }
+  } catch { }
+
   return {
     totalFields: Number(r.total_fields || 0),
     totalValueRemaining: Number(r.total_value || 0),
     resourcesByType,
-    resourcesByMap
+    resourcesByMap,
+    itemsByTemplate
   };
 }
 
 function emptyResourcesSummary() {
-  return { totalFields: 0, totalValueRemaining: 0, resourcesByType: [], resourcesByMap: [] };
+  return { totalFields: 0, totalValueRemaining: 0, resourcesByType: [], resourcesByMap: [], itemsByTemplate: [] };
 }
