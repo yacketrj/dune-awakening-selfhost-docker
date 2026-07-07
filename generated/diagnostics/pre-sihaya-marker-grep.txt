@@ -281,7 +281,7 @@
 10007:		-- delete events older then the passed in threshold
 10008:		DELETE FROM event_log
 10268:			DELETE FROM world_partition WHERE map = in_map_name and dimension_index = in_dimension_index
-10295:		DELETE FROM vendor_stock_state WHERE vendor_id = in_vendor_id AND player_id = in_player_id;	
+10295:		DELETE FROM vendor_stock_state WHERE vendor_id = in_vendor_id AND player_id = in_player_id;
 10605:-- Name: journey_story_node_cooldown_delete_expired(timestamp without time zone); Type: FUNCTION; Schema: dune; Owner: dune
 10608:CREATE FUNCTION dune.journey_story_node_cooldown_delete_expired(in_time_to_check timestamp without time zone) RETURNS void
 10612:	DELETE FROM journey_story_node_cooldown WHERE time_to_expire < in_time_to_check AND character_id IN (select id from player_state);
@@ -327,7 +327,7 @@
 14241:		DELETE FROM party_invites WHERE invite_id = in_invite_id RETURNING player_id, sender_player_id INTO out_player_id, out_sender_player_id;
 14267:	DELETE FROM party_members WHERE player_id = in_player_id RETURNING player_id, party_id INTO removed_player_id, out_party_id;
 14290:				DELETE FROM platform_parties_mapping WHERE platform_name = out_player_platform_name AND dune_party_id = out_party_id;
-14354:	DELETE 
+14354:	DELETE
 14446:	DELETE FROM journey_story_node_cooldown
 14461:	DELETE FROM player_access_codes
 14478:	DELETE FROM purchased_specialization_keystones WHERE player_id = in_player_id;

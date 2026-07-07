@@ -1,38 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-fail() {
-  echo "FAIL: $*" >&2
-  exit 1
-}
+fail() { echo "FAIL: $*" >&2; exit 1; }
+assert_contains() { grep -Fq -- "$2" "$1" || fail "$1 missing: $2"; }
 
-assert_contains() {
-  local file="$1"
-  local pattern="$2"
+CORE="${HOME}/dune-docker-addon/e2e-integration"
 
-  grep -Fq -- "$pattern" "$file" || fail "$file missing: $pattern"
-}
-
-CORE="${HOME}/dune-awakening-selfhost-docker"
-
-# Built-in fallback present on both sides (matches game server default)
-assert_contains "$CORE/console/api/src/rmq.js" 'BUILTIN_COMMAND_AUTH_TOKEN'
-assert_contains "$CORE/runtime/scripts/admin-tools.sh" 'BUILTIN_COMMAND_AUTH_TOKEN'
-
-# Env var override takes priority
+# Auto-generation on both sides (PR #35 merged upstream)
+assert_contains "$CORE/console/api/src/rmq.js" 'generateCommandAuthTokenFile'
+assert_contains "$CORE/console/api/src/rmq.js" 'randomBytes(COMMAND_AUTH_TOKEN_BYTES)'
+assert_contains "$CORE/console/api/src/rmq.js" 'runtime/secrets/command-auth-token.txt'
 assert_contains "$CORE/console/api/src/rmq.js" 'DUNE_COMMAND_AUTH_TOKEN'
 assert_contains "$CORE/runtime/scripts/admin-tools.sh" 'DUNE_COMMAND_AUTH_TOKEN'
-
-# File persistence path for operator overrides
-assert_contains "$CORE/console/api/src/rmq.js" 'runtime/secrets/command-auth-token.txt'
 assert_contains "$CORE/runtime/scripts/admin-tools.sh" 'command-auth-token.txt'
 
-# File is read if it exists (operator can pre-create it)
-assert_contains "$CORE/console/api/src/rmq.js" 'existsSync(file)'
-assert_contains "$CORE/runtime/scripts/admin-tools.sh" '-s "$COMMAND_TOKEN_FILE"'
+# No hardcoded fallback (removed by PR #35)
+if grep -rn 'BUILTIN_COMMAND_AUTH_TOKEN' "$CORE/console/api/src" "$CORE/runtime/scripts" >/dev/null 2>&1; then
+  fail "BUILTIN_COMMAND_AUTH_TOKEN still present — upstream PR #35 removed it"
+fi
 
-# .env.example documents the fallback behavior
-assert_contains "$CORE/.env.example" 'runtime/secrets/command-auth-token.txt'
-assert_contains "$CORE/.env.example" 'RedBlink built-in token'
-
-echo "PASS: command auth token matches upstream pattern (env > file > built-in)"
+echo "PASS: command auth token generated without hardcoded fallback (upstream PR #35)"

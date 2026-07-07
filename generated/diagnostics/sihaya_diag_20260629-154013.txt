@@ -24,7 +24,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== PSQL sanity =====
-              now              | current_database | current_user 
+              now              | current_database | current_user
 -------------------------------+------------------+--------------
  2026-06-29 22:40:13.963863+00 | dune             | dune
 (1 row)
@@ -32,7 +32,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== DB table counts =====
-       table_name       | count 
+       table_name       | count
 ------------------------+-------
  account_removal_log    |     2
  accounts               |     1
@@ -47,12 +47,12 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Account rows for FLS id =====
- id |       user       |     funcom_id      |    platform_id    | platform_name 
+ id |       user       |     funcom_id      |    platform_id    | platform_name
 ----+------------------+--------------------+-------------------+---------------
   1 | AFE0154F3AFE602C | BeretGenesis#24872 | 76561198019583480 | Steam
 (1 row)
 
- id |       user       |    platform_id    | platform_name | takeoverable 
+ id |       user       |    platform_id    | platform_name | takeoverable
 ----+------------------+-------------------+---------------+--------------
   1 | AFE0154F3AFE602C | 76561198019583480 | Steam         | f
 (1 row)
@@ -60,7 +60,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== All encrypted_player_state rows for this FLS account =====
- account_id | id | encrypted_character_name_escape | character_state | life_state | online_status |        last_login_time        |    last_avatar_activity    |       server_id        | previous_server_partition_id | home_dimension_index | return_dimension_index | player_controller_id | player_pawn_id | player_state_id | last_character_state_change | transfer_count 
+ account_id | id | encrypted_character_name_escape | character_state | life_state | online_status |        last_login_time        |    last_avatar_activity    |       server_id        | previous_server_partition_id | home_dimension_index | return_dimension_index | player_controller_id | player_pawn_id | player_state_id | last_character_state_change | transfer_count
 ------------+----+---------------------------------+-----------------+------------+---------------+-------------------------------+----------------------------+------------------------+------------------------------+----------------------+------------------------+----------------------+----------------+-----------------+-----------------------------+----------------
           1 |  1 |                                 | Deleted         | Alive      | Online        | 2026-06-29 05:20:12.482081+00 |                            |                        |                            1 |                      |                      0 |                    1 |              3 |               2 | 2026-06-29 05:20:12.727345  |              0
           1 |  2 | Sihaya                          | Deleted         | Alive      | Online        | 2026-06-29 22:21:40.198252+00 | 2026-06-29 05:47:50.595+00 | Sumwl0tiSxmdGf2h2BgIjw |                            1 |                    0 |                      0 |                    4 |              6 |               5 | 2026-06-29 22:21:40.437327  |              0
@@ -70,7 +70,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Visible player_state rows =====
- account_id | id | character_name | character_state | life_state | online_status |        last_login_time        |    last_avatar_activity    |       server_id        | previous_server_partition_id | home_dimension_index | return_dimension_index | player_controller_id | player_pawn_id | player_state_id 
+ account_id | id | character_name | character_state | life_state | online_status |        last_login_time        |    last_avatar_activity    |       server_id        | previous_server_partition_id | home_dimension_index | return_dimension_index | player_controller_id | player_pawn_id | player_state_id
 ------------+----+----------------+-----------------+------------+---------------+-------------------------------+----------------------------+------------------------+------------------------------+----------------------+------------------------+----------------------+----------------+-----------------
           1 |  3 | Sihaya         | Active          | Alive      | Offline       | 2026-06-29 22:21:40.449089+00 | 2026-06-29 22:22:32.112+00 | Sumwl0tiSxmdGf2h2BgIjw |                            1 |                    0 |                      0 |                    7 |              9 |               8
 (1 row)
@@ -78,13 +78,13 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Current server routing =====
-       server_id        
+       server_id
 ------------------------
  4KIbNlTVQfC3csbIo9wkSQ
  Sumwl0tiSxmdGf2h2BgIjw
 (2 rows)
 
-      fls_id      | login_target_dimension_index 
+      fls_id      | login_target_dimension_index
 ------------------+------------------------------
  AFE0154F3AFE602C |                            0
 (1 row)
@@ -92,7 +92,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== World partitions =====
- partition_id |       server_id        |                map                 |                               partition_definition                               | dimension_index | blocked |             label              
+ partition_id |       server_id        |                map                 |                               partition_definition                               | dimension_index | blocked |             label
 --------------+------------------------+------------------------------------+----------------------------------------------------------------------------------+-----------------+---------+--------------------------------
             1 | Sumwl0tiSxmdGf2h2BgIjw | Survival_1                         | {"box": {"max_x": 1, "max_y": 1, "min_x": 0, "min_y": 0}, "type": "box2d_array"} |               0 | f       | Sietch Sayyadina
             2 | 4KIbNlTVQfC3csbIo9wkSQ | Overmap                            | {"box": {"max_x": 1, "max_y": 1, "min_x": 0, "min_y": 0}, "type": "box2d_array"} |               0 | f       | Overland
@@ -129,7 +129,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Actor table schema =====
- ordinal_position |   column_name    |  data_type   | udt_name  | is_nullable 
+ ordinal_position |   column_name    |  data_type   | udt_name  | is_nullable
 ------------------+------------------+--------------+-----------+-------------
                 1 | id               | bigint       | int8      | NO
                 2 | class            | text         | text      | YES
@@ -146,7 +146,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Actor rows referenced by this account's character rows =====
- id |                                     class                                      |    map     | partition_id | dimension_index | owner_account_id | serial |                                               transform_prefix                                               |                                                                                                                     properties_prefix                                                                                                                      
+ id |                                     class                                      |    map     | partition_id | dimension_index | owner_account_id | serial |                                               transform_prefix                                               |                                                                                                                     properties_prefix
 ----+--------------------------------------------------------------------------------+------------+--------------+-----------------+------------------+--------+--------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   1 |                                                                                |            |              |               0 |                1 |      0 |                                                                                                              | {}
   2 |                                                                                |            |              |               0 |                1 |      0 |                                                                                                              | {}
@@ -162,7 +162,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Actor rows 1 through 20 =====
- id |                                     class                                      |    map     | partition_id | dimension_index | owner_account_id | serial |                                               transform_prefix                                               |                                                                                                                     properties_prefix                                                                                                                      
+ id |                                     class                                      |    map     | partition_id | dimension_index | owner_account_id | serial |                                               transform_prefix                                               |                                                                                                                     properties_prefix
 ----+--------------------------------------------------------------------------------+------------+--------------+-----------------+------------------+--------+--------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   1 |                                                                                |            |              |               0 |                1 |      0 |                                                                                                              | {}
   2 |                                                                                |            |              |               0 |                1 |      0 |                                                                                                              | {}
@@ -178,7 +178,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Actor audit for ids 1 through 20 =====
- id |   class    
+ id |   class
 ----+------------
   1 | Controller
   2 | State
@@ -194,7 +194,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Actor-related tables and estimated live rows =====
- schemaname |          relname          | n_live_tup 
+ schemaname |          relname          | n_live_tup
 ------------+---------------------------+------------
  dune       | actor_audit               |          9
  dune       | actor_fgl_entities        |         18
@@ -212,7 +212,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Actor-related columns =====
-             table_name             |         column_name         |    data_type     |  udt_name  
+             table_name             |         column_name         |    data_type     |  udt_name
 ------------------------------------+-----------------------------+------------------+------------
  actor_audit                        | id                          | bigint           | int8
  actor_audit                        | class                       | text             | text
@@ -280,7 +280,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Account removal log for this account =====
-          event_time           |      fls_id      | account_id |     reason      
+          event_time           |      fls_id      | account_id |     reason
 -------------------------------+------------------+------------+-----------------
  2026-06-29 05:20:12.727345+00 | AFE0154F3AFE602C |          1 | new char in fls
  2026-06-29 22:21:40.437327+00 | AFE0154F3AFE602C |          1 | new char in fls
@@ -289,7 +289,7 @@ dune-autoscaler                Up 42 minutes                    2657ee63bbf4    
 
 
 ===== Cheater tracking for this account =====
- id |          event_time           |      fls_id      |     cheat_type     
+ id |          event_time           |      fls_id      |     cheat_type
 ----+-------------------------------+------------------+--------------------
   1 | 2026-06-29 05:27:17.030376+00 | AFE0154F3AFE602C | player_undermeshed
 (1 row)

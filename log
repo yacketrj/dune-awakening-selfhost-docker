@@ -107,7 +107,7 @@
 519:[2026.07.06-16.49.15:784][141][936][1]LogInit: Log: BSD IPv4/6: Socket queue. Rx: 2097152 (config 1048576) Tx: 2097152 (config 1048576)
 579:[2026.07.06-16.50.00:071][142][936][1]LogIgwDatabaseInterface: Warning: RemoveAbortedAuthTransfers returned no actors, nothing to spawn.
 583:[2026.07.06-16.50.00:537][142][936][1]LogTravelDestination: Display: BeginPlay - Registering 7 travel destinations
-607:[2026.07.06-16.50.01:399][142][936][1]LogJourneySubsystem: Error: Ensure condition failed: !m_StoryManagerMap.Contains(StoryLevel) [File:.\../../DuneSandbox/Source/DuneSandbox/JourneySystem/JourneySubsystem.cpp] [Line: 290] [Cat: LogJourneySubsystem] 
+607:[2026.07.06-16.50.01:399][142][936][1]LogJourneySubsystem: Error: Ensure condition failed: !m_StoryManagerMap.Contains(StoryLevel) [File:.\../../DuneSandbox/Source/DuneSandbox/JourneySystem/JourneySubsystem.cpp] [Line: 290] [Cat: LogJourneySubsystem]
 608:[2026.07.06-16.50.01:405][142][936][1]LogResourceField: Error: Resource Field /Game/Dune/Maps/Arrakis/SOC_1/Survival_1.Survival_1:PersistentLevel.FlourSand_Small_Inst_25 overlaps with another field
 609:[2026.07.06-16.50.01:405][142][936][1]LogResourceField: Error: Resource Field /Game/Dune/Maps/Arrakis/SOC_1/Survival_1.Survival_1:PersistentLevel.FlourSand_Small_Inst_11 overlaps with another field
 610:[2026.07.06-16.50.01:406][142][936][1]LogResourceField: Error: Resource Field /Game/Dune/Maps/Arrakis/SOC_1/Survival_1.Survival_1:PersistentLevel.FlourSand_Small_Inst_7 overlaps with another field
@@ -118,8 +118,8 @@
 780:[2026.07.06-16.50.38:985][151][936][1]LogStreaming: Error: This will hitch streaming because it ends up searching the disk instead of finding the file in the pak file.
 781:[2026.07.06-16.50.38:986][151][936][1]LogStreaming: Error: Found 1 dependent packages...
 782:[2026.07.06-16.50.38:986][151][936][1]LogStreaming: Error:   /Game/Dune/AI/BehaviorTrees/BP_BTD_StatAttributeCompare
-898:[2026.07.06-16.51.11:060][679][936][1]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry] 
-899:[2026.07.06-16.51.11:060][679][936][1]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance] 
+898:[2026.07.06-16.51.11:060][679][936][1]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry]
+899:[2026.07.06-16.51.11:060][679][936][1]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance]
 905:[2026.07.06-16.52.37:437][403][936][1]LogSpiceHarvestingSystem: Error: Fields of type Small do not have a spawn rate multiplier over coriolis cycle set. Will use base spawn rate.
 
 ===== runtime/game/overmap/Saved/Logs/DuneSandbox_PIDX-2.log =====
@@ -241,8 +241,8 @@
 478:[2026.07.06-16.49.15:486][ 51][936]LogInit: Log: BSD IPv4/6: Socket queue. Rx: 2097152 (config 1048576) Tx: 2097152 (config 1048576)
 512:[2026.07.06-16.49.18:798][ 62][936][2]LogIgwDatabaseInterface: Warning: RemoveAbortedAuthTransfers returned no actors, nothing to spawn.
 515:[2026.07.06-16.49.18:799][ 62][936][2]LogTravelDestination: Display: BeginPlay - Registering 36 travel destinations
-573:[2026.07.06-16.50.00:173][476][936][2]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry] 
-574:[2026.07.06-16.50.00:173][476][936][2]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance] 
+573:[2026.07.06-16.50.00:173][476][936][2]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry]
+574:[2026.07.06-16.50.00:173][476][936][2]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance]
 
 ===== game/survival-1/Saved/Logs/DuneSandbox_PIDX-1.log =====
 334:[2026.07.03-15.04.18:455][  0][690]LogTravelDestination: Display: Register TravelDestination(Overland_to_Survival1_E2) for Map(HaggaBasin)
@@ -351,7 +351,7 @@
 488:[2026.07.03-15.04.36:198][101][690]LogInit: Log: BSD IPv4/6: Socket queue. Rx: 2097152 (config 1048576) Tx: 2097152 (config 1048576)
 586:[2026.07.03-15.05.45:594][142][690][1]LogIgwDatabaseInterface: Warning: RemoveAbortedAuthTransfers returned no actors, nothing to spawn.
 590:[2026.07.03-15.05.46:104][142][690][1]LogTravelDestination: Display: BeginPlay - Registering 7 travel destinations
-614:[2026.07.03-15.05.46:792][142][690][1]LogJourneySubsystem: Error: Ensure condition failed: !m_StoryManagerMap.Contains(StoryLevel) [File:.\../../DuneSandbox/Source/DuneSandbox/JourneySystem/JourneySubsystem.cpp] [Line: 290] [Cat: LogJourneySubsystem] 
+614:[2026.07.03-15.05.46:792][142][690][1]LogJourneySubsystem: Error: Ensure condition failed: !m_StoryManagerMap.Contains(StoryLevel) [File:.\../../DuneSandbox/Source/DuneSandbox/JourneySystem/JourneySubsystem.cpp] [Line: 290] [Cat: LogJourneySubsystem]
 615:[2026.07.03-15.05.46:801][142][690][1]LogResourceField: Error: Resource Field /Game/Dune/Maps/Arrakis/SOC_1/Survival_1.Survival_1:PersistentLevel.FlourSand_Small_Inst_25 overlaps with another field
 616:[2026.07.03-15.05.46:802][142][690][1]LogResourceField: Error: Resource Field /Game/Dune/Maps/Arrakis/SOC_1/Survival_1.Survival_1:PersistentLevel.FlourSand_Small_Inst_11 overlaps with another field
 617:[2026.07.03-15.05.46:802][142][690][1]LogResourceField: Error: Resource Field /Game/Dune/Maps/Arrakis/SOC_1/Survival_1.Survival_1:PersistentLevel.FlourSand_Small_Inst_7 overlaps with another field
@@ -362,8 +362,8 @@
 781:[2026.07.03-15.06.21:866][149][690][1]LogStreaming: Error: This will hitch streaming because it ends up searching the disk instead of finding the file in the pak file.
 782:[2026.07.03-15.06.21:866][149][690][1]LogStreaming: Error: Found 1 dependent packages...
 783:[2026.07.03-15.06.21:866][149][690][1]LogStreaming: Error:   /Game/Dune/AI/BehaviorTrees/BP_BTD_StatAttributeCompare
-890:[2026.07.03-15.06.55:159][683][690][1]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry] 
-891:[2026.07.03-15.06.55:159][683][690][1]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance] 
+890:[2026.07.03-15.06.55:159][683][690][1]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry]
+891:[2026.07.03-15.06.55:159][683][690][1]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance]
 898:[2026.07.03-15.08.17:358][312][690][1]LogSpiceHarvestingSystem: Error: Fields of type Small do not have a spawn rate multiplier over coriolis cycle set. Will use base spawn rate.
 
 ===== game/overmap/Saved/Logs/DuneSandbox_PIDX-2.log =====
@@ -485,8 +485,8 @@
 485:[2026.07.03-15.04.36:375][ 62][690][2]LogInit: Log: BSD IPv4/6: Socket queue. Rx: 2097152 (config 1048576) Tx: 2097152 (config 1048576)
 513:[2026.07.03-15.04.40:039][ 82][690][2]LogIgwDatabaseInterface: Warning: RemoveAbortedAuthTransfers returned no actors, nothing to spawn.
 516:[2026.07.03-15.04.40:040][ 82][690][2]LogTravelDestination: Display: BeginPlay - Registering 36 travel destinations
-605:[2026.07.03-15.05.45:722][739][690][2]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry] 
-606:[2026.07.03-15.05.45:722][739][690][2]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance] 
+605:[2026.07.03-15.05.45:722][739][690][2]LogEventsEntry: Error: Ensure condition failed: MulticastDelegate.Remove(DelegateHandle) [File:.\../Plugins/Funcom/GamePhaseManager/Source/GamePhaseManager/Private/EventsEntry.cpp] [Line: 56] [Cat: LogEventsEntry]
+606:[2026.07.03-15.05.45:722][739][690][2]LogGpmInstance: Error: Ensure condition failed: m_EventsEntry->RemoveClientDelegate(PhaseId, OnEvent, ClientDelegateHandle) [File:../Plugins/Funcom/GamePhaseManager/Source\GamePhaseManager/Public\GpmInstance.inl] [Line: 73] [Cat: LogGpmInstance]
 
 ===== game/deepdesert-1-8/Saved/Logs/DuneSandbox_PIDX-8.log =====
 273:[2026.06.30-07.02.03:139][  0][936]LogInit: Log: Using OS detected locale (en-US-POSIX).

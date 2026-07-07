@@ -9,11 +9,11 @@ Installed dune command:
 Enter the Web UI port, or press Enter to use 8088: Web UI port set to 8088.
 
 ==> Starting the Web UI.
- Container dune-orchestrator Stopping 
- Container dune-orchestrator Stopped 
- Container dune-orchestrator Removing 
- Container dune-orchestrator Removed 
- Image redblink-dune-docker-console:dev Building 
+ Container dune-orchestrator Stopping
+ Container dune-orchestrator Stopped
+ Container dune-orchestrator Removing
+ Container dune-orchestrator Removed
+ Image redblink-dune-docker-console:dev Building
 #1 [internal] load local bake definitions
 #1 reading from stdin 635B done
 #1 DONE 0.0s
@@ -93,11 +93,11 @@ Enter the Web UI port, or press Enter to use 8088: Web UI port set to 8088.
 
 #22 resolving provenance for metadata file
 #22 DONE 0.0s
- Image redblink-dune-docker-console:dev Built 
- Container redblink-dune-docker-console Creating 
- Container redblink-dune-docker-console Created 
- Container redblink-dune-docker-console Starting 
- Container redblink-dune-docker-console Started 
+ Image redblink-dune-docker-console:dev Built
+ Container redblink-dune-docker-console Creating
+ Container redblink-dune-docker-console Created
+ Container redblink-dune-docker-console Starting
+ Container redblink-dune-docker-console Started
 
 Dune Docker Console is ready.
 

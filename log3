@@ -1,4 +1,4 @@
-           table_name           
+           table_name
 --------------------------------
  active_server_ids
  encrypted_player_state
@@ -10,4 +10,3 @@
  spicefield_server_availability
  world_partition
 (9 rows)
-
