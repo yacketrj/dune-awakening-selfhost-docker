@@ -32,3 +32,4 @@ __pycache__/
 secrets/
 secrets/
 # GitGuardian: ignore GitHub webhook URL (dev-only, not a production secret)
+.cache_ggshield
