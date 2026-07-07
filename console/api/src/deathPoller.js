@@ -78,15 +78,16 @@ export function createDeathPoller(config) {
   let snapshot = new Map();
   let running = false;
   let started = false;
+  let pollerDb = null;
 
   async function tick() {
-    if (running) return;
+    if (running || !pollerDb) return;
     running = true;
     try {
-      const current = await queryCurrentStates(config.db);
+      const current = await queryCurrentStates(pollerDb);
       const deaths = detectTransitions(snapshot, current);
       for (const d of deaths) {
-        await insertDeath(config.db, d).catch(() => { /* individual insert failure — skip */ });
+        await insertDeath(pollerDb, d).catch(() => { });
       }
       saveSnapshot(config.repoRoot, current);
       snapshot = current;
@@ -103,6 +104,7 @@ export function createDeathPoller(config) {
   async function init(db, repoRoot) {
     if (started) return;
     started = true;
+    pollerDb = db;
     await ensureTable(db);
     snapshot = loadSnapshot(repoRoot);
   }
