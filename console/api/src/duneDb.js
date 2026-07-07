@@ -3404,3 +3404,36 @@ export async function addonOpsResourcesSummary(db) {
 function emptyResourcesSummary() {
   return { totalFields: 0, totalValueRemaining: 0, resourcesByType: [], resourcesByMap: [] };
 }
+
+export async function addonOpsCombatDeaths(db) {
+  const exists = await tableExists(db, "player_death_log");
+  if (!exists) return emptyCombatDeaths();
+
+  const result = await db.query(`
+    select count(*)::int as total_deaths,
+           count(*) filter (where death_cause = 'Dead')::int as unknown_deaths,
+           count(*) filter (where death_cause = 'DeadByCoriolis')::int as coriolis_deaths,
+           count(*) filter (where death_cause = 'DeadBySandworm')::int as sandworm_deaths
+    from dune.player_death_log`);
+
+  const r = result.rows?.[0] || {};
+  const causes = [
+    { cause: "Sandworm", count: Number(r.sandworm_deaths || 0) },
+    { cause: "Coriolis", count: Number(r.coriolis_deaths || 0) },
+    { cause: "Unknown", count: Number(r.unknown_deaths || 0) }
+  ].filter(d => d.count > 0);
+
+  return {
+    totalDeaths: Number(r.total_deaths || 0),
+    pvpDeaths: 0,
+    pveDeaths: Number(r.total_deaths || 0),
+    deathsByCause: causes,
+    deathsByMap: [],
+    topHostileNpcs: [],
+    kdRatio: null
+  };
+}
+
+function emptyCombatDeaths() {
+  return { totalDeaths: 0, pvpDeaths: 0, pveDeaths: 0, deathsByCause: [], deathsByMap: [], topHostileNpcs: [], kdRatio: null };
+}

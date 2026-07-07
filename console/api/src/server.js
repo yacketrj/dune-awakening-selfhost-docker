@@ -25,6 +25,7 @@ import { serveStatic, contentTypeForPath } from "./http/staticFiles.js";
 import { discoverServices } from "./services/serviceDiscovery.js";
 import { createBackupDownloadArchive, enrichBackupRows, nextImportedBackupName, normalizeImportedBackupMetadata, validBackupDownloadName } from "./services/backups.js";
 import { createMemoryBalancer } from "./services/memoryBalancer.js";
+import { createDeathPoller } from "./deathPoller.js";
 import { updateEnvFileValue as updateEnvValue } from "./services/envFile.js";
 import { funcomAuthMismatchDetected, matchingFuncomAuthLines, saveFuncomTokenValue as writeFuncomToken, validDockerSince } from "./services/funcomAuth.js";
 import { readCharacterTransferSettings, saveCharacterTransferSettings } from "./services/characterTransferSettings.js";
@@ -52,6 +53,7 @@ let playerAnnouncementsAutoLastRun = 0;
 let playerAnnouncementsAutoNextAllowedRun = 0;
 const journeyTagsData = loadJourneyTagsData();
 const memoryBalancer = createMemoryBalancer(config);
+const deathPoller = createDeathPoller(config);
 const POSTGRES_UNAVAILABLE_MESSAGE = "Postgres is not running or is restarting. Wait for the database service to come back online, then refresh.";
 const DEFAULT_ALWAYS_ON_STARTUP_PARALLELISM = 1;
 const MAX_ALWAYS_ON_STARTUP_PARALLELISM = 16;
@@ -102,6 +104,12 @@ setInterval(() => {
   if (!memoryBalancer.publicState().enabled) return;
   runBackgroundTick("Memory balancer", () => memoryBalancer.tick());
 }, memoryBalancer.intervalMs).unref?.();
+
+setInterval(() => {
+  if (deathPoller.tick) runBackgroundTick("Death poller", () => deathPoller.tick());
+}, deathPoller.intervalMs).unref?.();
+
+deathPoller.init(db, config.repoRoot).catch(() => {});
 
 function runBackgroundTick(label, fn) {
   Promise.resolve()
@@ -558,6 +566,12 @@ async function addonBridgeRoute(req, res, path) {
   if (action === "ops.resources.summary") {
     const addon = assertInstalledAddonPermission(config, id, "ops:read");
     const result = await duneDb.addonOpsResourcesSummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.combat.deaths") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsCombatDeaths(db);
     audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
     return json(res, 200, { ok: true, result });
   }
