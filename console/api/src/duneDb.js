@@ -3269,6 +3269,7 @@ export async function addonOpsActivitySummary(db) {
   const result = await db.query(`
     select count(*)::int as total_players,
            count(*) filter (where online_status = 'Online')::int as online_players,
+           count(*) filter (where life_state::text <> 'Alive')::int as players_dead,
            ${constraints.join(",\n           ")}
     from dune.player_state`);
 
@@ -3337,6 +3338,7 @@ export async function addonOpsActivitySummary(db) {
     inactivePlayers: r.inactive_players != null ? Number(r.inactive_players) : null,
     returningPlayers: r.returning_players != null ? Number(r.returning_players) : null,
     newPlayers: r.new_players != null ? Number(r.new_players) : null,
+    playersDead: Number(r.players_dead || 0),
     guildActivity,
     factionActivity,
     mapActivity
@@ -3348,6 +3350,7 @@ function emptyActivitySummary() {
     totalPlayers: 0, onlinePlayers: 0,
     activeLast1h: null, activeLast24h: null, activeLast7d: null,
     inactivePlayers: null, returningPlayers: null, newPlayers: null,
+    playersDead: 0,
     guildActivity: [], factionActivity: [], mapActivity: []
   };
 }
