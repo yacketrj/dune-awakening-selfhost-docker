@@ -30,3 +30,5 @@ __pycache__/
 *.pyc
 .security-reports/
 secrets/
+secrets/
+# GitGuardian: ignore GitHub webhook URL (dev-only, not a production secret)
