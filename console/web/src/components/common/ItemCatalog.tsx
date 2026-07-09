@@ -121,6 +121,13 @@ export function grantItemDurability() {
   return 1;
 }
 
+export const MAX_WEAPON_AUGMENTS = 3;
+export const MAX_ARMOR_AUGMENTS = 2;
+
+export function augmentLimit(itemName: string) {
+  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(itemName) ? MAX_ARMOR_AUGMENTS : MAX_WEAPON_AUGMENTS;
+}
+
 export function packageItemTextLine(item: { itemName?: string; itemId?: string; quantity?: unknown; quality?: unknown; grade?: unknown; durability?: unknown }) {
   return `${item.itemId || item.itemName || ""},${Number(item.quantity) || 1},${itemGrade(item)}`;
 }

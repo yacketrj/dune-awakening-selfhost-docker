@@ -20,6 +20,7 @@ import {
   type CatalogItem
 } from "../../components/common/ItemCatalog";
 import { formatUiSentence } from "../../lib/display";
+import { augmentLimit } from "../../components/common/ItemCatalog";
 import { titleCaseWords } from "../players/playerAdminUtils";
 
 type HomeTaskResult = { status: "running" | "succeeded" | "failed" | "stopped"; title: string; message?: string; details?: string };
@@ -402,7 +403,7 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
               <label>Grade<ItemGradeSelect value={packageDraft.grade} onChange={(grade) => setPackageDraft({ ...packageDraft, grade })} /></label>
               {(() => {
                 const filteredAugs = carePkgFilterAugments(packageDraft.itemName, packageDraft.itemId, selectedPackageItem?.category || "", augmentCatalog);
-                return filteredAugs.length === 0 ? null : <label>Augments<select className="augment-picker" multiple value={packageDraft.augments} onChange={(event) => { const selected = Array.from(event.target.selectedOptions, (opt) => opt.value).slice(0, /chest|armor|guard|garment/i.test(packageDraft.itemName) ? 2 : 3); setPackageDraft({ ...packageDraft, augments: selected }); }} style={{ minWidth: 320, maxWidth: 420, height: 60 }}>{filteredAugs.map((aug) => <option key={aug.id} value={aug.id}>{aug.name}</option>)}</select></label>;
+                return filteredAugs.length === 0 ? null : <label>Augments<select className="augment-picker" multiple value={packageDraft.augments} onChange={(event) => { const selected = Array.from(event.target.selectedOptions, (opt) => opt.value).slice(0, augmentLimit(packageDraft.itemName)); setPackageDraft({ ...packageDraft, augments: selected }); }} style={{ minWidth: 320, maxWidth: 420, height: 60 }}>{filteredAugs.map((aug) => <option key={aug.id} value={aug.id}>{aug.name}</option>)}</select></label>;
               })()}
               <button disabled={!selectedPackageItem} onClick={addPackageItem}>Add Item</button>
             </div>
