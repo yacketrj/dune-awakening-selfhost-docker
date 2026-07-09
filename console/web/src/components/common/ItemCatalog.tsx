@@ -121,7 +121,10 @@ export function grantItemDurability() {
   return 1;
 }
 
-export const MAX_WEAPON_AUGMENTS = 3;
+// Augment limits — match game config defaults from /Script/DuneSandbox.AugmentSettings:
+//   m_MaxRangedWeaponAugments (default 3), m_MaxMeleeWeaponAugments (default 3), m_MaxArmorAugments (default 2).
+export const MAX_RANGED_AUGMENTS = 3;
+export const MAX_MELEE_AUGMENTS = 3;
 export const MAX_ARMOR_AUGMENTS = 2;
 
 export function isWeapon(name: string) {
@@ -132,9 +135,14 @@ export function isArmor(name: string) {
   return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
 }
 
+export function isMelee(name: string) {
+  return /melee|[Ss]word|blade|knife|fremen|Dirk|Rapier|Kindjal|Minotaur|DualBlades|CHOAMSword|Crysknife|DewReaper|Ghola|ScrapMetalKnife|UniqueSword|UniqueDirk|UniqueRapier/i.test(name);
+}
+
 export function augmentLimit(itemName: string) {
   if (isArmor(itemName)) return MAX_ARMOR_AUGMENTS;
-  if (isWeapon(itemName)) return MAX_WEAPON_AUGMENTS;
+  if (isMelee(itemName)) return MAX_MELEE_AUGMENTS;
+  if (isWeapon(itemName)) return MAX_RANGED_AUGMENTS;
   return 0;
 }
 
