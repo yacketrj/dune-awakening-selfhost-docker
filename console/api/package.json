@@ -8,6 +8,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
+    "check": "npm test && npm run sbom",
     "coverage": "c8 --reporter=text --reporter=lcov --exclude='test/**' --exclude='node_modules/**' node --test test/*.test.js",
     "coverage:check": "c8 --reporter=text --reporter=lcov --exclude='test/**' --exclude='node_modules/**' --lines=50 --functions=50 --branches=40 --statements=50 node --test test/*.test.js",
     "sbom": "node ../../scripts/generate-sbom.js"

@@ -48,6 +48,10 @@ jobs:
         run: git fetch upstream main
       - name: Run security PR checks
         run: bash tests/security-pr-checks.sh
+      - name: Validate CHANGELOG
+        run: bash scripts/validate-changelog.sh
+      - name: Check SBOM freshness
+        run: bash scripts/check-sbom-fresh.sh
 
   api-dependency-audit:
     runs-on: ubuntu-latest
