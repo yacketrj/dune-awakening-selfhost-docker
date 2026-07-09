@@ -1,0 +1,36 @@
+name: Image Sign
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  sign-console-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@c56c24e918809bd5bb9e1877cd32867239c2bff8
+
+      - name: Build console image
+        run: docker build -t ghcr.io/${{ github.repository }}/dune-console:${{ github.ref_name }} -f console/api/Dockerfile .
+
+      - name: Sign console image with cosign (keyless)
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/dune-console:${{ github.ref_name }}
+
+      - name: Verify signature
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/image-sign.yml@refs/tags/${{ github.ref_name }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ghcr.io/${{ github.repository }}/dune-console:${{ github.ref_name }}

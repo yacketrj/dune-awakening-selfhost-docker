@@ -61,3 +61,50 @@ jobs:
       - name: npm audit
         run: npm audit --audit-level=high
         working-directory: console/api
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/api/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: console/api
+      - name: Run coverage
+        run: npm run coverage:check
+        working-directory: console/api
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a
+        with:
+          node-version: "22"
+      - name: Generate SBOM
+        run: node scripts/generate-sbom.js
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sbom
+          path: |
+            dist/*.cdx.json
+            dist/*.cdx.json.sha256
+          if-no-files-found: error
+
+  image-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - name: Build console image
+        run: docker build -t dune-console:ci -f console/api/Dockerfile .
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@2d50410d417fdb11d4e7b2dee1e5d618ea50b2c9
+        with:
+          image-ref: dune-console:ci
+          format: table
+          exit-code: "0"
+          severity: HIGH,CRITICAL

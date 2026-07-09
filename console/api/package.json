@@ -7,12 +7,18 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "coverage": "c8 --reporter=text --reporter=lcov --exclude='test/**' --exclude='node_modules/**' node --test test/*.test.js",
+    "coverage:check": "c8 --reporter=text --reporter=lcov --exclude='test/**' --exclude='node_modules/**' --lines=50 --functions=50 --branches=40 --statements=50 node --test test/*.test.js",
+    "sbom": "node ../../scripts/generate-sbom.js"
   },
   "engines": {
     "node": ">=18.19.0"
   },
   "dependencies": {
     "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "c8": "^11.0.0"
   }
 }
