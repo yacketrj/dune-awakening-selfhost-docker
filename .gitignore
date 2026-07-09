@@ -32,3 +32,9 @@ __pycache__/
 
 # Added by ggshield
 .cache_ggshield
+
+# Coverage reports
+console/api/coverage/
+
+# SBOM artifacts
+dist/
