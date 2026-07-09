@@ -272,7 +272,7 @@ export function PlayerDetailTab({
               }
               return true;
             });
-            return filtered.length === 0 ? <p>No matching augments for this item type.</p> : <>
+            return augmentLimit(String(row.template_id)) === 0 ? <p>Augments only available for weapons and armor.</p> : filtered.length === 0 ? <p>No matching augments for this item type.</p> : <>
             <select className="augment-picker" multiple value={augmentSelected} size={Math.min(filtered.length, 12)} onChange={(event) => { const selected = Array.from(event.target.selectedOptions, (opt) => opt.value).slice(0, augmentLimit(String(row.template_id))); setAugmentSelected(selected); }} style={{ width: "100%", maxHeight: 280, fontSize: "12px" }}>
               {filtered.map((aug) => <option key={aug.id} value={aug.id}>{aug.id} — {aug.name}</option>)}
             </select>

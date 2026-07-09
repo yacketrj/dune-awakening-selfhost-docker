@@ -124,8 +124,18 @@ export function grantItemDurability() {
 export const MAX_WEAPON_AUGMENTS = 3;
 export const MAX_ARMOR_AUGMENTS = 2;
 
+export function isWeapon(name: string) {
+  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|UniqueAr|ChoamLg|ChoamSda|UniqueSda|UniqueFlameThrower|UniqueScattergun|melee|[Ss]word|blade|knife|fremen|Dirk|Rapier|Kindjal|Minotaur|DualBlades|CHOAMSword|Crysknife|DewReaper|Ghola|ScrapMetalKnife|UniqueSword|UniqueDirk|UniqueRapier/i.test(name);
+}
+
+export function isArmor(name: string) {
+  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
+}
+
 export function augmentLimit(itemName: string) {
-  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(itemName) ? MAX_ARMOR_AUGMENTS : MAX_WEAPON_AUGMENTS;
+  if (isArmor(itemName)) return MAX_ARMOR_AUGMENTS;
+  if (isWeapon(itemName)) return MAX_WEAPON_AUGMENTS;
+  return 0;
 }
 
 export function packageItemTextLine(item: { itemName?: string; itemId?: string; quantity?: unknown; quality?: unknown; grade?: unknown; durability?: unknown }) {
