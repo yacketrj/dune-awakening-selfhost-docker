@@ -26,6 +26,7 @@ import {
   itemSearchProvider,
   inventorySearchProvider
 } from "./inventoryProvider.js";
+import { broadcastProvider } from "./broadcastProvider.js";
 
 async function defaultPopulationProvider(config) {
   try {
@@ -151,15 +152,14 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
       return json(res, 200, { ok: false, error: `OPS provider not found for: ${path}` });
     }
 
-    // Broadcast route
+    // Broadcast route — gated behind write enablement, actor identity, and admin capability.
     if (path === DISCORD_ADAPTER_ROUTES.BROADCAST && req.method === "POST") {
       const body = await readJson(req);
-      return json(res, 200, {
-        ok: true,
-        status: "planned",
-        route: path,
-        message: "Broadcast route is planned. Requires game server RabbitMQ integration."
-      });
+      const actor = validateDiscordActor(body.actor);
+      const mapping = discordRoleMappingFromEnv();
+      requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.STATUS_READ);
+      const result = await broadcastProvider(config, { message: body.message });
+      return json(res, 200, result);
     }
 
     // Announcements route
