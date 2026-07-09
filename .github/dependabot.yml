@@ -1,0 +1,54 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/console/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      patch-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "deps"
+    open-pull-requests-limit: 3
+    pull-request-branch-name:
+      separator: "-"
+    rebase-strategy: "auto"
+
+  - package-ecosystem: "npm"
+    directory: "/console/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      patch-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "deps"
+    open-pull-requests-limit: 3
+    pull-request-branch-name:
+      separator: "-"
+    rebase-strategy: "auto"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "ci"
+    open-pull-requests-limit: 3
+    pull-request-branch-name:
+      separator: "-"
+    rebase-strategy: "auto"

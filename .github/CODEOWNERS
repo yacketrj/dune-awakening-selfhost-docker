@@ -1,0 +1,22 @@
+# CODEOWNERS — Dune Awakening Self-Host Docker
+#
+# Last reviewed: 2026-07-09
+# Rule: last matching pattern wins. Use * as catch-all.
+
+# Core infrastructure
+/console/api/                        @yacketrj
+/console/web/                        @yacketrj
+/runtime/                            @yacketrj
+/orchestrator/                       @yacketrj
+/docs/                               @yacketrj
+
+# Security-critical paths
+*.md                                 @yacketrj
+.env.example                         @yacketrj
+docker-compose*.yml                  @yacketrj
+Dockerfile*                          @yacketrj
+.dockerignore                        @yacketrj
+.gitignore                           @yacketrj
+
+# CI/CD and automation
+/.github/                            @yacketrj
