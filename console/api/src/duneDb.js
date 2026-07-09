@@ -2649,6 +2649,28 @@ export async function augmentInventoryItem(db, playerId, itemId, { augments = []
   });
 }
 
+export async function clearItemAugments(db, playerId, itemId) {
+  await requireCapability(await supportsInventoryEdit(db), "Clear item augments requires dune.items and dune.inventories.");
+  const safeItemId = intParam(itemId, "item id", 1);
+  return db.transaction(async (tx) => {
+    const player = await resolvePlayerMutationTarget(tx, playerId);
+    const owned = await tx.query(`
+      select i.id, i.stats, i.template_id
+      from dune.items i
+      join dune.inventories inv on inv.id = i.inventory_id
+      where i.id = $1 and inv.actor_id = $2
+      for update`, [safeItemId, player.actorId]);
+    if (!owned.rows[0]) throw new Error("Inventory item was not found");
+    const existing = owned.rows[0].stats || {};
+    const fc = Array.isArray(existing.FCustomizationStats) ? existing.FCustomizationStats : [[], {}];
+    const previous = Array.isArray(fc[0]) ? fc[0] : [];
+    if (previous.length === 0) return { ok: true, itemId: safeItemId, cleared: 0 };
+    const nextStats = { ...existing, FCustomizationStats: [[], fc[1] || {}] };
+    await tx.query("update dune.items set stats = $1::jsonb where id = $2", [JSON.stringify(nextStats), safeItemId]);
+    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, cleared: previous.length, previous };
+  });
+}
+
 export async function giveItemToStorage(db, storageId, { itemName = "", itemId = "", templateId = "", quantity = 1, quality = 0, augments = [] }) {
   await requireCapability(await supportsStorageGiveItem(db), "Storage give-item requires compatible dune.inventories and dune.items insert columns.");
   const target = intParam(storageId, "storage id", 1);

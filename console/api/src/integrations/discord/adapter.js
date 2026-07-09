@@ -29,9 +29,13 @@ export const DISCORD_ADAPTER_ROUTES = Object.freeze({
   PLAYERS_INVENTORY: "/api/integrations/discord/players/inventory",
   PLAYERS_STORAGE: "/api/integrations/discord/players/storage",
   PLAYERS_FIND: "/api/integrations/discord/players/find",
-  PLAYERS_INVENTORY_SEARCH: "/api/integrations/discord/players/inventory/search",
-  GUILD_STORAGE: "/api/integrations/discord/guild/storage",
-  GUILD_FIND: "/api/integrations/discord/guild/find"
+  PLAYERS_INVENTORY_SEARCH: "/api/integrations/discord/players/inventory-search",
+  GUILD_STORAGE: "/api/integrations/discord/guilds/storage",
+  GUILD_FIND: "/api/integrations/discord/guilds/find",
+  VERSION: "/api/integrations/discord/version",
+  SERVERS: "/api/integrations/discord/servers",
+  PORTS: "/api/integrations/discord/ports",
+  DB: "/api/integrations/discord/db"
 });
 
 export const DISCORD_LIVE_ADAPTER_ROUTES = Object.freeze([
@@ -50,7 +54,11 @@ export const DISCORD_LIVE_ADAPTER_ROUTES = Object.freeze([
   DISCORD_ADAPTER_ROUTES.PLAYERS_FIND,
   DISCORD_ADAPTER_ROUTES.PLAYERS_INVENTORY_SEARCH,
   DISCORD_ADAPTER_ROUTES.GUILD_STORAGE,
-  DISCORD_ADAPTER_ROUTES.GUILD_FIND
+  DISCORD_ADAPTER_ROUTES.GUILD_FIND,
+  DISCORD_ADAPTER_ROUTES.VERSION,
+  DISCORD_ADAPTER_ROUTES.SERVERS,
+  DISCORD_ADAPTER_ROUTES.PORTS,
+  DISCORD_ADAPTER_ROUTES.DB
 ]);
 
 export const DISCORD_PLANNED_ADAPTER_ROUTES = Object.freeze(
