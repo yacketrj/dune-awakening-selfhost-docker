@@ -441,7 +441,7 @@ export function App() {
           <div className="faction-selector">
             {[
               { id: "atreides", name: "Atreides", color: "#16a34a" },
-              { id: "harkonnen", name: "Harkonnen", color: "#1e3a5f" },
+              { id: "harkonnen", name: "Harkonnen", color: "#ef4444" },
               { id: "fremen", name: "Fremen", color: "#2563eb" }
             ].map((f) => (
               <button type="button" key={f.id}

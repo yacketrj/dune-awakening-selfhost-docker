@@ -3401,8 +3401,28 @@ export async function discordPlayerLinksTableCreate(db) {
     create table if not exists dune.discord_player_links (
       discord_user_id text primary key,
       player_controller_id text not null,
+      faction text default 'fremen',
       linked_at timestamp with time zone default now()
     )`);
+  // Add faction column to existing tables (migration)
+  try { await db.query("alter table dune.discord_player_links add column if not exists faction text default 'fremen'"); } catch {}
+}
+
+export async function setPlayerFaction(db, discordUserId, faction) {
+  await discordPlayerLinksTableCreate(db);
+  await db.query(
+    "update dune.discord_player_links set faction = $2 where discord_user_id = $1",
+    [String(discordUserId), String(faction)]
+  );
+}
+
+export async function getPlayerFaction(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const result = await db.query(
+    "select coalesce(faction, 'fremen') as faction from dune.discord_player_links where discord_user_id = $1",
+    [String(discordUserId)]
+  );
+  return result.rows[0]?.faction || "fremen";
 }
 
 export async function resolvePlayerByName(db, characterName) {

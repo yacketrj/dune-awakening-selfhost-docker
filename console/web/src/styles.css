@@ -1,9 +1,107 @@
-/* ── Base Theme (Fremen — Spice Blue) ──
-   Frank Herbert's Dune: Fremen are a culture, not a House.
-   Their identity is the desert — blue-within-blue eyes from spice melange. */
+/* ── Default Theme (Violet — Raw Spice) ── */
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bg: #0a0614;
+  --panel: #150f22;
+  --panel-soft: #110d1c;
+  --panel-muted: #0d0a17;
+  --border: #2a1a4a;
+  --border-strong: #3a2a6a;
+  --text: #e0dde8;
+  --text-strong: #e0d6ff;
+  --muted: #8a7aba;
+  --muted-warm: #9a8aca;
+  --title: #c4b5fd;
+  --accent: #7c3aed;
+  --accent-strong: #8b5cf6;
+  --accent-bg: rgba(124, 58, 237, .15);
+  --accent-glow: rgba(124, 58, 237, .22);
+  --success: #1e7a4a;
+  --success-text: #9be6bd;
+  --danger: #a74949;
+  --danger-strong: #8d3434;
+  --danger-text: #ffb4a8;
+  --warning: #8b7a2e;
+  --faction-color: #7c3aed;
+  --faction-name: "Unchosen";
+  --spice: #7c3aed;
+  --spice-text: #c4b5fd;
+  --spice-glow: #a78bfa;
+  --spice-bg: rgba(124, 58, 237, .12);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ── Atreides Theme (Green & Gold) ──
+   Nobility, Honor, Nature. "the green and black Atreides banner" */
+:root[data-faction="atreides"] {
+  --bg: #060e06;
+  --panel: #0d1a0d;
+  --panel-soft: #0a160a;
+  --panel-muted: #081208;
+  --border: #1a3a1a;
+  --border-strong: #2a5a2a;
+  --text: #d8e8d8;
+  --text-strong: #ccffcc;
+  --muted: #7a9a7a;
+  --muted-warm: #8aaa8a;
+  --title: #f59e0b;
+  --accent: #16a34a;
+  --accent-strong: #22c55e;
+  --accent-bg: rgba(22, 163, 74, .15);
+  --accent-glow: rgba(22, 163, 74, .22);
+  --success: #1e7a4a;
+  --success-text: #9be6bd;
+  --danger: #a74949;
+  --danger-strong: #8d3434;
+  --danger-text: #ffb4a8;
+  --warning: #f59e0b;
+  --faction-color: #16a34a;
+  --faction-name: "Atreides";
+  --spice: #166534;
+  --spice-text: #86efac;
+  --spice-glow: #22c55e;
+  --spice-bg: rgba(22, 163, 74, .12);
+  background: radial-gradient(circle at top left, rgba(22, 163, 74, .10), transparent 38%), var(--bg);
+}
+
+/* ── Harkonnen Theme (Red & Black) ──
+   Ruthlessness, Ambition, Power. Fresh spice color. */
+:root[data-faction="harkonnen"] {
+  --bg: #0c0808;
+  --panel: #1a1010;
+  --panel-soft: #160e0e;
+  --panel-muted: #120b0b;
+  --border: #3d1a1a;
+  --border-strong: #5c2828;
+  --text: #e8dfdf;
+  --text-strong: #fee2e2;
+  --muted: #b09a9a;
+  --muted-warm: #cc9e9e;
+  --title: #fca5a5;
+  --accent: #ef4444;
+  --accent-strong: #f87171;
+  --accent-bg: rgba(239, 68, 68, .15);
+  --accent-glow: rgba(239, 68, 68, .22);
+  --success: #2d7a52;
+  --success-text: #9be6bd;
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --danger-text: #fecaca;
+  --warning: #9e7a2a;
+  --faction-color: #ef4444;
+  --faction-name: "Harkonnen";
+  --spice: #7c3aed;
+  --spice-text: #c4b5fd;
+  --spice-glow: #f59e0b;
+  --spice-bg: rgba(124, 58, 237, .12);
+  background: radial-gradient(circle at top left, rgba(239, 68, 68, .12), transparent 38%), var(--bg);
+}
+
+/* ── Fremen Theme (Spice Blue) ──
+   Desert culture, spice melange, blue-within-blue eyes. */
+:root[data-faction="fremen"] {
   --bg: #070c14;
   --panel: #0f1a2e;
   --panel-soft: #0c1626;
@@ -33,75 +131,6 @@
   --spice-bg: rgba(37, 99, 235, .12);
   background: var(--bg);
   color: var(--text);
-}
-
-/* ── Atreides Theme (Green & Black) ──
-   Book canon: "The Atreides banner was green and black, with a red hawk."
-   Frank Herbert, Dune (1965). */
-:root[data-faction="atreides"] {
-  --bg: #060e06;
-  --panel: #0d1a0d;
-  --panel-soft: #0a160a;
-  --panel-muted: #081208;
-  --border: #1a3a1a;
-  --border-strong: #2a5a2a;
-  --text: #d8e8d8;
-  --text-strong: #ccffcc;
-  --muted: #7a9a7a;
-  --muted-warm: #8aaa8a;
-  --title: #4ade80;
-  --accent: #16a34a;
-  --accent-strong: #22c55e;
-  --accent-bg: rgba(22, 163, 74, .15);
-  --accent-glow: rgba(22, 163, 74, .22);
-  --success: #1e7a4a;
-  --success-text: #9be6bd;
-  --danger: #a74949;
-  --danger-strong: #8d3434;
-  --danger-text: #ffb4a8;
-  --warning: #8b7a2e;
-  --faction-color: #16a34a;
-  --faction-name: "Atreides";
-  --spice: #166534;
-  --spice-text: #86efac;
-  --spice-glow: #22c55e;
-  --spice-bg: rgba(22, 163, 74, .12);
-  background: radial-gradient(circle at top left, rgba(22, 163, 74, .10), transparent 38%), var(--bg);
-}
-
-/* ── Harkonnen Theme (Blue & Orange) ──
-   Book canon: "A blue griffin on an orange field" — the Harkonnen banner.
-   Baron Vladimir wears "a long robe of dark blue... lined with scarlet."
-   Frank Herbert, Dune (1965), Chapter 2. */
-:root[data-faction="harkonnen"] {
-  --bg: #06080f;
-  --panel: #0d1322;
-  --panel-soft: #0a0f1c;
-  --panel-muted: #080c17;
-  --border: #1a2a4a;
-  --border-strong: #2a3a6a;
-  --text: #d8dde8;
-  --text-strong: #c4ccee;
-  --muted: #7a8aaa;
-  --muted-warm: #8a9aba;
-  --title: #f59e0b;
-  --accent: #dc2626;
-  --accent-strong: #ef4444;
-  --accent-bg: rgba(220, 38, 38, .15);
-  --accent-glow: rgba(220, 38, 38, .22);
-  --success: #2d7a52;
-  --success-text: #9be6bd;
-  --danger: #f59e0b;
-  --danger-strong: #d97706;
-  --danger-text: #fde68a;
-  --warning: #8b7a2e;
-  --faction-color: #1e3a5f;
-  --faction-name: "Harkonnen";
-  --spice: #7c3aed;
-  --spice-text: #c4b5fd;
-  --spice-glow: #f59e0b;
-  --spice-bg: rgba(124, 58, 237, .12);
-  background: radial-gradient(circle at top left, rgba(30, 58, 95, .15), transparent 38%), var(--bg);
 }
 
 * { box-sizing: border-box; }

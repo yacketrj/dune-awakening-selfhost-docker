@@ -1,6 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
+  getLinkedPlayer, getPlayerFaction, setPlayerFaction
+} from "../../duneDb.js";
+import {
   discordAdapterEnabled, discordAdapterErrorResponse, discordAdapterHealth,
   discordAdapterPopulation, discordAdapterReadiness, discordAdapterServices,
   discordAdapterStatus, DISCORD_ADAPTER_ROUTES, DISCORD_PLANNED_ADAPTER_ROUTES,
@@ -239,9 +242,31 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
       const body = await readJson(req);
       const actor = validateDiscordActor(body.actor);
       requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.INVENTORY_READ);
-      return json(res, 200, await whoamiProvider(db, {
-        discordUserId: actor.userId
-      }));
+      const linked = await getLinkedPlayer(db, actor.userId);
+      const faction = await getPlayerFaction(db, actor.userId);
+      return json(res, 200, {
+        ok: true,
+        linked: !!linked,
+        characterName: linked?.character_name,
+        player: linked ? {
+          controllerId: linked.player_controller_id,
+          pawnId: linked.player_pawn_id,
+          onlineStatus: linked.online_status,
+          characterName: linked.character_name
+        } : null,
+        faction
+      });
+    }
+
+    if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_FACTION && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      const faction = String(body.faction || "fremen").toLowerCase();
+      if (!["atreides", "harkonnen", "fremen"].includes(faction)) {
+        return json(res, 400, { ok: false, error: "Faction must be atreides, harkonnen, or fremen." });
+      }
+      await setPlayerFaction(db, actor.userId, faction);
+      return json(res, 200, { ok: true, faction });
     }
 
     // Players inventory
