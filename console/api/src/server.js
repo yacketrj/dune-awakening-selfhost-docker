@@ -443,8 +443,8 @@ async function handleApi(req, res) {
 
       setSessionCookie(res, session, config);
       audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dune Console — Logged In</title><style>body{background:#0a0614;color:#e0dde8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}a{color:#8b5cf6;font-size:18px;text-decoration:none;padding:10px 20px;border:2px solid #8b5cf6;border-radius:8px;display:inline-block;margin-top:12px}</style></head><body><div><p style="font-size:20px;font-weight:bold">Welcome, ${user.username}</p><p style="color:#94a3b8">You are now logged in.</p><a href="/" id="continue">Continue to Console</a></div><script>document.getElementById("continue").click();</script></body></html>`);
+      res.writeHead(302, { Location: "/" });
+      return res.end();
     } catch (error) {
       return json(res, 500, { ok: false, error: "Discord authentication failed." });
     }
