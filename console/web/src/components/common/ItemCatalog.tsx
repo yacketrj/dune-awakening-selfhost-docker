@@ -171,7 +171,9 @@ export function PackageItemPreview({ item }: { item: { itemId?: string; image?: 
 }
 
 export function catalogItemId(item: { itemId?: string }) {
-  return item.itemId || "Resolved on grant";
+  const raw = item.itemId || "";
+  if (!raw) return "Resolved on grant";
+  return friendlyCatalogName(raw);
 }
 
 export function friendlyCatalogName(value: string) {
