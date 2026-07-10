@@ -3828,11 +3828,11 @@ function emptyActivitySummary() {
 
 function mapDisplayName(backendName) {
   const mapping = {
-    HaggaBasin: "Survival_1",
-    DeepDesert: "DeepDesert_1",
+    HaggaBasin: "Hagga Basin",
+    DeepDesert: "Deep Desert",
     Overland: "Overmap",
-    Arrakeen: "SH_Arrakeen",
-    HarkoVillage: "SH_HarkoVillage"
+    Arrakeen: "Arrakeen",
+    HarkoVillage: "Harko Village"
   };
   return mapping[backendName] || backendName;
 }
