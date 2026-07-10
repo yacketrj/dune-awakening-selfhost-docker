@@ -1,4 +1,4 @@
-// Resource requirements for buildings/placeables sourced from https://dune.gaming.tools/placeables
+// Resource requirement data sourced from https://dune.gaming.tools/placeables
 export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]> = {
   "AdvancedWearablesFabricator_Patent": [
     { name: "Plastanium Ingot", qty: 140 },
@@ -233,8 +233,29 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
   ]
 };
 
-// Map admin-items.json building IDs to placeable resource keys
-export function placeableRecipeKey(itemId: string): string | null {
+// Map human-readable resource names to game template IDs
+export const RESOURCE_TEMPLATE_IDS: Record<string, string> = {
+  "Plastanium Ingot": "T6RefinedResourceA",
+  "Silicone Block": "Silicone",
+  "Aluminum Ingot": "AluminiumBar",
+  "Iron Ingot": "IronBar",
+  "Iron Bar": "IronBar",
+  "Steel Ingot": "SteelBar",
+  "Copper Bar": "CopperBar",
+  "Copper Ingot": "CopperBar",
+  "Cobalt Paste": "CobaltBar",
+  "Spice Melange": "MelangeSpice",
+  "Complex Machinery": "T2MachineComponent",
+  "Basic Machinery": "T1MachineComponent",
+  "Plant Fiber": "PlantFiber",
+  "Concrete": "ConcreteBase",
+  "Armor Plating": "T2HeavyComponent",
+  "Duraluminum Ingot": "DuraluminiumBar",
+};
+
+export function resourceTemplateId(name: string): string {
+  return RESOURCE_TEMPLATE_IDS[name] || name.replace(/\s+/g, "");
+}
   const id = String(itemId || "");
   if (PLACEABLE_RESOURCES[id]) return id;
   const lower = id.toLowerCase().replace(/_patent$|_placeable$/, "");

@@ -6,7 +6,7 @@ import type { Task } from "../../api/setup";
 import { compareTableValues, DataTable, useResizableColumns, useSortableRows, useSortState } from "../../components/common/DataTable";
 import { InlineActionResult } from "../../components/common/InlineActionResult";
 import { ItemCatalogSelector, ItemGradeSelect, MAX_ARMOR_AUGMENTS, PackageItemPreview, AugmentPicker, augmentLimit, catalogItemId, catalogItemName, friendlyCatalogName, buildingSubCategory, CatalogItemThumb, grantItemDurability, itemGrade, normalizeItemGrade, type CatalogItem } from "../../components/common/ItemCatalog";
-import { PLACEABLE_RESOURCES, placeableRecipeKey } from "../../data/placeableResources";
+import { PLACEABLE_RESOURCES, placeableRecipeKey, resourceTemplateId } from "../../data/placeableResources";
 import { firstDefined, formatCell } from "../../lib/display";
 import { PlayerCategoryIconRail } from "./PlayerCategoryIconRail";
 import { PlayerDetailTab } from "./PlayerDetailTab";
@@ -177,7 +177,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
       let granted = 0, failed = 0;
       for (const r of resources) {
         try {
-          await playersApi.giveItemId(dbPlayerId, { itemId: r.name.replace(/\s+/g, ""), quantity: r.qty, durability: 1 });
+          await playersApi.giveItemId(dbPlayerId, { itemId: resourceTemplateId(r.name), quantity: r.qty, durability: 1 });
           granted++;
         } catch { failed++; }
       }
