@@ -259,16 +259,51 @@ function auditWrite(req, action, targetType, targetId, detail = {}) {
     actorId, actorName, action, targetType, targetId,
     route: req.url || "unknown", result: "success", detail
   }).catch(() => {});
-} // short-lived OAuth2 state tokens
+}
+
+const oauthStates = new Map();
 
 function handleAPI(method, pathPattern, capability, handler) {
   const key = `${method}:${pathPattern}`;
-  if (routeCapabilities.has(key)) {
-    console.warn(`handleAPI: route ${key} already registered with ${routeCapabilities.get(key)}, overwriting with ${capability}`);
-  }
   routeCapabilities.set(key, capability);
   return handler;
 }
+
+function registerRoute(method, pathPattern, capability) {
+  routeCapabilities.set(`${method}:${pathPattern}`, capability);
+}
+
+// ── Route Capability Registrations ──
+// Players
+registerRoute("POST", "/api/players/:id/give-item", "players:write");
+registerRoute("POST", "/api/players/:id/give-items", "players:write");
+registerRoute("POST", "/api/players/:id/give-item-id", "players:write");
+registerRoute("POST", "/api/players/:id/add-currency", "players:write");
+registerRoute("POST", "/api/players/:id/add-faction-reputation", "players:write");
+registerRoute("POST", "/api/players/:id/add-intel", "players:write");
+registerRoute("POST", "/api/players/:id/augment-item", "players:write");
+registerRoute("POST", "/api/players/:id/clear-augments", "players:write");
+registerRoute("POST", "/api/players/:id/inventory/:itemId", "players:write");
+registerRoute("DELETE", "/api/players/:id/inventory/:itemId", "players:delete");
+registerRoute("POST", "/api/players/:id/clean-inventory", "players:delete");
+registerRoute("POST", "/api/players/:id/specializations/add-xp", "players:write");
+registerRoute("POST", "/api/players/:id/specializations/grant-max", "players:write");
+registerRoute("POST", "/api/players/:id/specializations/reset", "players:write");
+// Server Control
+registerRoute("POST", "/api/server/restart", "server:control");
+registerRoute("POST", "/api/server/start", "server:control");
+registerRoute("POST", "/api/server/stop", "server:control");
+registerRoute("POST", "/api/server/update", "server:control");
+// Backups
+registerRoute("POST", "/api/backups/create", "backups:manage");
+registerRoute("POST", "/api/backups/restore", "backups:manage");
+registerRoute("DELETE", "/api/backups/:id", "backups:manage");
+// Database
+registerRoute("POST", "/api/database/query", "database:query");
+// Config
+registerRoute("POST", "/api/settings", "server:control");
+// RBAC Admin
+registerRoute("PUT", "/api/rbac/roles/:id", "auth:manage");
 
 function requireRouteCapability(req, res, path) {
   const session = req.authSession;

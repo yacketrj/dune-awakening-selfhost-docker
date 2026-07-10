@@ -43,7 +43,10 @@ export const DISCORD_CAPABILITIES = Object.freeze({
 
   // Server Control
   SERVER_CONTROL: "server:control",
-  BROADCAST_SEND: "broadcast:send"
+  BROADCAST_SEND: "broadcast:send",
+
+  // Administration
+  AUTH_MANAGE: "auth:manage"
 });
 
 // ── Capability Descriptions ──
