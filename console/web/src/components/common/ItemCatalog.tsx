@@ -77,7 +77,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           return <tr className={active ? "active" : ""} key={`${item.id}-${item.name}-${item.source}`} title={fullName} onClick={() => onSelect(item)}>
             <td><CatalogItemThumb item={item} small /></td>
             <td className="catalog-item-name-cell">{fullName}</td>
-            <td>{friendlyCatalogName(item.id)}</td>
+            <td>{item.name}</td>
             <td>{item.category ? titleCase(item.category) : ""}</td>
             <td>{item.source || ""}</td>
           </tr>;
@@ -89,7 +89,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           <CatalogItemThumb item={item} />
           <span>
             <strong>{fullName}</strong>
-            <small>{friendlyCatalogName(item.id)}{item.category ? ` - ${titleCase(item.category)}` : ""}</small>
+            <small>{item.name}{item.category ? ` - ${titleCase(item.category)}` : ""}</small>
           </span>
         </button>;
       })}
@@ -97,7 +97,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
     </div>
     {selected && <div className="catalog-selected-item">
       <CatalogItemThumb item={selected} large />
-      <KeyValueGrid items={[["Item Name", selected.name], ["Item ID", friendlyCatalogName(selected.id)], ["Category", selected.category ? titleCase(selected.category) : ""], ["Source", selected.source || ""]]} />
+      <KeyValueGrid items={[["Item Name", selected.name], ["Item ID", selected.name], ["Category", selected.category ? titleCase(selected.category) : ""], ["Source", selected.source || ""]]} />
     </div>}
   </div>;
 }
