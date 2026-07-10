@@ -440,9 +440,9 @@ export function App() {
           <p>Spice Clearance Required</p>
           <div className="faction-selector">
             {[
-              { id: "atreides", name: "Atreides", color: "#3b82f6" },
-              { id: "harkonnen", name: "Harkonnen", color: "#ef4444" },
-              { id: "fremen", name: "Fremen", color: "#f59e0b" }
+              { id: "atreides", name: "Atreides", color: "#16a34a" },
+              { id: "harkonnen", name: "Harkonnen", color: "#1e3a5f" },
+              { id: "fremen", name: "Fremen", color: "#2563eb" }
             ].map((f) => (
               <button type="button" key={f.id}
                 className={`faction-chip ${faction === f.id ? "active" : ""}`}
