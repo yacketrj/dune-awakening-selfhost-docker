@@ -140,11 +140,12 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
     { name: "Armor Plating", qty: 20 }
   ],
   "AugmentStation_Patent": [
-    { name: "Plastanium Ingot", qty: 120 },
-    { name: "Complex Machinery", qty: 80 },
-    { name: "Spice Melange", qty: 30 },
-    { name: "Cobalt Paste", qty: 100 },
-    { name: "Armor Plating", qty: 80 }
+    { name: "Plastanium Ingot", qty: 75 },
+    { name: "Silicone Block", qty: 90 },
+    { name: "Spice Melange", qty: 15 },
+    { name: "Complex Machinery", qty: 50 },
+    { name: "Cobalt Paste", qty: 75 },
+    { name: "Advanced Machinery", qty: 10 }
   ],
   "FuelPoweredGenerator_Patent": [
     { name: "Iron Ingot", qty: 50 },
@@ -251,6 +252,7 @@ export const RESOURCE_TEMPLATE_IDS: Record<string, string> = {
   "Concrete": "ScrapMetal",
   "Armor Plating": "T2HeavyComponent",
   "Duraluminum Ingot": "DuraluminumRod",
+  "Advanced Machinery": "T6Machinery",
 };
 
 export function resourceTemplateId(name: string): string {
