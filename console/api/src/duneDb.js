@@ -3888,11 +3888,27 @@ export async function addonOpsResourcesSummary(db) {
 
   const displayNames = await buildDisplayNameMap(db);
 
+  // Only include maps that have a running partition (server_id IS NOT NULL)
+  let activeMaps = new Set();
+  try {
+    const partitionResult = await db.query(
+      `SELECT DISTINCT map FROM dune.world_partition WHERE server_id IS NOT NULL`
+    );
+    for (const row of partitionResult.rows || []) {
+      for (const [backend, service] of Object.entries(BACKEND_TO_SERVICE)) {
+        if (row.map === service) activeMaps.add(backend);
+      }
+    }
+  } catch { }
+
   const result = await db.query(`
     select count(*)::int as total_fields,
            coalesce(sum(value_remaining), 0)::bigint as total_value
     from dune.resourcefield_state
-    where field_kind_id = 1`);
+    where field_kind_id = 1
+      ${activeMaps.size > 0 ? `and map = ANY($${1})` : ""}`,
+    activeMaps.size > 0 ? [[...activeMaps]] : []);
+
 
   const r = result.rows?.[0] || {};
 
@@ -3904,8 +3920,10 @@ export async function addonOpsResourcesSummary(db) {
                coalesce(sum(value_remaining), 0)::bigint as total_value
         from dune.resourcefield_state
         where field_kind_id = 1
+          ${activeMaps.size > 0 ? `and map = ANY($${1})` : ""}
         group by map
-        order by fields desc`);
+        order by fields desc`,
+        activeMaps.size > 0 ? [[...activeMaps]] : []);
     resourcesByMap = (mapResult.rows || []).map(row => ({
       ...row,
       map: displayNames[row.map] || mapDisplayName(row.map)
@@ -3929,10 +3947,12 @@ export async function addonOpsResourcesSummary(db) {
                 where rfs.map = sft.map_name and rfs.field_kind_id = 1) as active_fields
         from dune.spicefield_types sft
         where sft.is_spawning_active = true
+          ${activeMaps.size > 0 ? `and sft.map_name = ANY($${1})` : ""}
           and exists (select 1 from dune.resourcefield_state rfs2
                        where rfs2.map = sft.map_name and rfs2.field_kind_id = 1)
         group by sft.field_type, sft.map_name
-        order by sft.map_name, sft.field_type`);
+        order by sft.map_name, sft.field_type`,
+        activeMaps.size > 0 ? [[...activeMaps]] : []);
       spiceFieldsBySize = (spiceResult.rows || []).map(row => ({
         ...row,
         map: displayNames[row.map] || mapDisplayName(row.map)
