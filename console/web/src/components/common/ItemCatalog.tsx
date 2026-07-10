@@ -15,7 +15,7 @@ export type CatalogItem = {
 
 const CATALOG_CACHE: { items: CatalogItem[]; repoRoot: string } | null = null;
 
-export function ItemCatalogSelector({ label = "Select Item", selected, onSelect, placeholder = "Filter loaded item catalog" }: { label?: string; selected: CatalogItem | null; onSelect: (item: CatalogItem | null) => void; placeholder?: string }) {
+export function ItemCatalogSelector({ label = "Select Item", selected, onSelect, placeholder = "Filter loaded item catalog", excludeCategories }: { label?: string; selected: CatalogItem | null; onSelect: (item: CatalogItem | null) => void; placeholder?: string; excludeCategories?: string[] }) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,9 +39,10 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
 
   const categoryCounts = useMemo(() => items.reduce<Record<string, number>>((counts, item) => {
     const key = itemCategory(item);
+    if (excludeCategories?.includes(key)) return counts;
     counts[key] = (counts[key] || 0) + 1;
     return counts;
-  }, {}), [items]);
+  }, {}), [items, excludeCategories]);
   const categories = useMemo(() => ["all", ...Object.keys(categoryCounts).sort()], [categoryCounts]);
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
