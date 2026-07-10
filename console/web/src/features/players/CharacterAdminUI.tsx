@@ -172,12 +172,16 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
 
     if (!(await confirmAction(`Give ${totalQty} total resources (${resourceTypes} types) for ${playerAdmin_placeableSelection.name} to ${playerName}?`))) return;
 
+    if (!actionPlayerId || !playerAdmin_canRunLiveAction) {
+      playerAdmin_showResult("placeableGrant", "Resource grants require the player to be online.", "danger");
+      return;
+    }
     playerAdmin_showResult("placeableGrant", `Giving ${resourceTypes} resource types...`, "neutral", true);
     try {
       let granted = 0, failed = 0;
       for (const r of resources) {
         try {
-          await playersApi.giveItemId(playerAdmin_canRunLiveAction ? actionPlayerId : dbPlayerId, { itemId: resourceTemplateId(r.name), quantity: r.qty, quality: playerAdmin_canRunLiveAction ? 0 : 1 });
+          await playersApi.giveItemId(actionPlayerId, { itemId: resourceTemplateId(r.name), quantity: r.qty });
           granted++;
         } catch (e) { failed++; }
       }
