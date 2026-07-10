@@ -385,9 +385,8 @@ async function handleApi(req, res) {
 
       setSessionCookie(res, session, config);
       audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
-      // Serve auto-redirect HTML so the cookie is sent on the client-side navigation
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/"></head><body><p>Logged in as ${user.username}. Redirecting…</p></body></html>`);
+      return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dune Console — Logged In</title><script>setTimeout(function(){window.location.replace("/");},500);</script></head><body style="background:#0d0f12;color:#f3efe7;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><p>Logged in as ${user.username}. Redirecting…</p><p style="color:#888;font-size:13px;margin-top:4px">If you are not redirected, <a href="/" style="color:var(--accent,#c68b4a)">click here</a>.</p></body></html>`);
     } catch (error) {
       return json(res, 500, { ok: false, error: "Discord authentication failed." });
     }
