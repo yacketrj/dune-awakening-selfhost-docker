@@ -102,6 +102,7 @@ jobs:
           if-no-files-found: error
 
   image-build:
+    if: ${{ !startsWith(github.ref, 'refs/heads/feature/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
