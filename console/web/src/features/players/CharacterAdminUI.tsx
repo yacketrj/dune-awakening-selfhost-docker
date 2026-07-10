@@ -1292,7 +1292,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
         {playerAdmin_toggleBox("give_placeables", "Give Placeables", <div className="playerAdmin_section">
           <p className="action-help-note">Select a building to see its construction resources, then grant them to the player's inventory.</p>
           <PlayerCategoryIconRail
-            options={["Fabricators","Refineries","Utilities","Storage","Structures"]}
+            options={["Utilities","Fabricators","Refineries","Storage","Structures"]}
             value={playerAdmin_placeableCategory}
             onChange={playerAdmin_setPlaceableCategory}
             allLabel="All"
