@@ -3867,6 +3867,8 @@ export async function addonOpsResourcesSummary(db) {
                 where rfs.map = sft.map_name and rfs.field_kind_id = 1) as active_fields
         from dune.spicefield_types sft
         where sft.is_spawning_active = true
+          and exists (select 1 from dune.resourcefield_state rfs2
+                       where rfs2.map = sft.map_name and rfs2.field_kind_id = 1)
         group by sft.field_type, sft.map_name
         order by sft.map_name, sft.field_type`);
       spiceFieldsBySize = spiceResult.rows || [];
