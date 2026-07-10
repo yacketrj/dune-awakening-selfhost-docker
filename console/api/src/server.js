@@ -261,8 +261,6 @@ function auditWrite(req, action, targetType, targetId, detail = {}) {
   }).catch(() => {});
 }
 
-const oauthStates = new Map();
-
 function handleAPI(method, pathPattern, capability, handler) {
   const key = `${method}:${pathPattern}`;
   routeCapabilities.set(key, capability);
