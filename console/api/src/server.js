@@ -1987,7 +1987,7 @@ async function grantPlayerItem(playerId, item, target) {
   const hasExplicitGrade = item.quality !== undefined || item.grade !== undefined;
   const selectedGrade = hasExplicitGrade ? validateGrantGrade(item.quality ?? item.grade) : undefined;
   const usesDatabaseGrant = (selectedGrade !== undefined && selectedGrade > 0) || itemRequiresDatabaseGrant(resolved) || (item.augments && item.augments.length > 0);
-  const databaseGrade = hasExplicitGrade ? selectedGrade : 0;
+  const databaseGrade = hasExplicitGrade ? selectedGrade : (usesDatabaseGrant ? 1 : 0);
   const payload = {
     playerId: target.actionId || playerId,
     itemId: resolved.itemId,
