@@ -77,7 +77,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           return <tr className={active ? "active" : ""} key={`${item.id}-${item.name}-${item.source}`} title={fullName} onClick={() => onSelect(item)}>
             <td><CatalogItemThumb item={item} small /></td>
             <td className="catalog-item-name-cell">{fullName}</td>
-            <td>{item.id}</td>
+            <td>{friendlyCatalogName(item.id)}</td>
             <td>{item.category ? titleCase(item.category) : ""}</td>
             <td>{item.source || ""}</td>
           </tr>;
@@ -89,7 +89,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           <CatalogItemThumb item={item} />
           <span>
             <strong>{fullName}</strong>
-            <small>{item.id}{item.category ? ` - ${titleCase(item.category)}` : ""}</small>
+            <small>{friendlyCatalogName(item.id)}{item.category ? ` - ${titleCase(item.category)}` : ""}</small>
           </span>
         </button>;
       })}
