@@ -147,15 +147,17 @@ export function isMelee(name: string) {
   return /melee|[Ss]word|blade|knife|fremen|Dirk|Rapier|Kindjal|Minotaur|DualBlades|CHOAMSword|Crysknife|DewReaper|Ghola|ScrapMetalKnife|UniqueSword|UniqueDirk|UniqueRapier/i.test(name);
 }
 
-export function augmentLimit(itemName: string, category?: string) {
+export function augmentLimit(itemName: string, category?: string, itemId?: string) {
   const cat = (category || "").toLowerCase();
   const nameStr = String(itemName || "");
-  if (cat === "schematics" || /_schematic$/i.test(nameStr) || /_Augment_/i.test(nameStr)) return 0;
-  const isT6 = /_06(?=_|$)|T6_/i.test(nameStr) || (/Unique/i.test(nameStr) && !/_(0[1-5])(?=_|$)/.test(nameStr));
+  const idStr = String(itemId || "");
+  const combined = nameStr + " " + idStr;
+  if (cat === "schematics" || /_schematic$/i.test(combined) || /_Augment_/i.test(combined)) return 0;
+  const isT6 = /_06(?=_|$)|T6_/i.test(combined) || (/Unique/i.test(combined) && !/_(0[1-5])(?=_|$)/.test(combined));
   if (!isT6) return 0;
-  if (cat === "clothing" || isArmor(nameStr)) return MAX_ARMOR_AUGMENTS;
-  if (cat === "weapons" || isMelee(nameStr)) return MAX_MELEE_AUGMENTS;
-  if (isWeapon(nameStr)) return MAX_RANGED_AUGMENTS;
+  if (cat === "clothing" || isArmor(combined)) return MAX_ARMOR_AUGMENTS;
+  if (cat === "weapons" || isMelee(combined)) return MAX_MELEE_AUGMENTS;
+  if (isWeapon(combined)) return MAX_RANGED_AUGMENTS;
   return 0;
 }
 
