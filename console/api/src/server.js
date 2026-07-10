@@ -248,7 +248,18 @@ function parseCsv(value) { return String(value || "").split(",").map(s => s.trim
 // ── RBAC Route Registration ──
 
 const routeCapabilities = new Map();
-const oauthStates = new Map(); // short-lived OAuth2 state tokens
+const oauthStates = new Map();
+
+function auditWrite(req, action, targetType, targetId, detail = {}) {
+  const session = req.authSession;
+  if (!session) return;
+  const actorId = session.actorId || (session.authSource === "local" ? "local:admin" : "unknown");
+  const actorName = session.discordUsername || (session.authSource === "local" ? "Console Admin" : actorId);
+  duneDb.rbacAuditLog(db, {
+    actorId, actorName, action, targetType, targetId,
+    route: req.url || "unknown", result: "success", detail
+  }).catch(() => {});
+} // short-lived OAuth2 state tokens
 
 function handleAPI(method, pathPattern, capability, handler) {
   const key = `${method}:${pathPattern}`;
@@ -391,6 +402,7 @@ async function handleApi(req, res) {
       const session = auth.makeSession();
       session.actorId = `discord:${user.id}`;
       session.discordUsername = user.username;
+      session.avatar = user.avatar || "0";
       session.roleIds = roleIds;
       session.authSource = "discord";
       // Re-stamp capabilities based on Discord roles
@@ -704,6 +716,14 @@ async function handleApi(req, res) {
     const caps = Array.isArray(body.capabilities) ? body.capabilities : [];
     await duneDb.rbacSetRoleCapabilities(db, roleId, caps, "web:admin");
     return json(res, 200, { ok: true, roleId, capabilities: caps });
+  }
+
+  if (path === "/api/rbac/audit" && req.method === "GET") {
+    await duneDb.rbacTablesCreate(db);
+    const results = await db.query(
+      "select * from dune.rbac_audit_log order by timestamp desc limit 200"
+    );
+    return json(res, 200, { ok: true, rows: results.rows });
   }
 
   return json(res, 404, { error: "Not found" });
@@ -1823,6 +1843,7 @@ async function directDbMutation(req, res, action, phrase, fn, meta = {}) {
   try {
     const result = config.mockMode ? { ok: true, mock: true } : await fn(body);
     audit(config, req, action, { ...meta, supported: true, result });
+    auditWrite(req, action, meta.playerId ? "player" : meta.storageId ? "storage" : "config", meta.playerId || meta.storageId || meta.itemId || "", meta);
     return json(res, 200, { supported: true, backupCreated: false, result });
   } catch (error) {
     const status = error.unsupported ? 501 : 400;
