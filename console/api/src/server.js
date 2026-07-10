@@ -3,8 +3,9 @@ import { createServer as createNetServer } from "node:net";
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, chmodSync, mkdirSync, createReadStream, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
 import { loadConfig, publicConfig, parseAllowedIps } from "./config.js";
-import { createAuth, setCapabilityRegistry, setSessionCookie, clearSessionCookie, json, withSecurityHeaders, requireCapability } from "./auth.js";
+import { createAuth, setCapabilityRegistry, stampSessionCapabilities, setSessionCookie, clearSessionCookie, json, withSecurityHeaders, requireCapability } from "./auth.js";
 import { createLoginRateLimiter, createMutationRateLimiter } from "./rateLimit.js";
 import { createBridgeRateLimiter } from "./bridgeRateLimit.js";
 import { TaskManager, publicTask } from "./tasks.js";
@@ -234,6 +235,7 @@ function dockerPsNames() {
 // Admin password sessions get all capabilities (backward compatible).
 
 const routeCapabilities = new Map();
+const oauthStates = new Map(); // short-lived OAuth2 state tokens
 
 function handleAPI(method, pathPattern, capability, handler) {
   const key = `${method}:${pathPattern}`;
@@ -288,6 +290,89 @@ async function handleApi(req, res) {
     audit(config, req, "auth.logout");
     return json(res, 200, { ok: true });
   }
+
+  // ── Discord OAuth2 Login ──
+  if (path === "/api/auth/discord" && req.method === "GET") {
+    if (!config.discordOAuth?.clientId) {
+      return json(res, 400, { ok: false, error: "Discord OAuth2 is not configured." });
+    }
+    const state = randomBytes(16).toString("hex");
+    oauthStates.set(state, { expiresAt: Date.now() + 300_000 });
+    const params = new URLSearchParams({
+      client_id: config.discordOAuth.clientId,
+      redirect_uri: config.discordOAuth.redirectUri,
+      response_type: "code",
+      scope: "identify guilds",
+      state
+    });
+    res.writeHead(302, { Location: `https://discord.com/api/oauth2/authorize?${params}` });
+    return res.end();
+  }
+
+  if (path === "/api/auth/discord/callback" && req.method === "GET") {
+    if (!config.discordOAuth?.clientId) {
+      return json(res, 400, { ok: false, error: "Discord OAuth2 is not configured." });
+    }
+    const url = new URL(req.url, "http://localhost");
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (!code || !state || !oauthStates.has(state)) {
+      return json(res, 400, { ok: false, error: "Invalid or expired OAuth state." });
+    }
+    oauthStates.delete(state);
+
+    try {
+      // Exchange code for token
+      const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: config.discordOAuth.clientId,
+          client_secret: config.discordOAuth.clientSecret,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: config.discordOAuth.redirectUri
+        })
+      });
+      const tokenData = await tokenRes.json();
+      if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
+
+      // Fetch user info
+      const userRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      const user = await userRes.json();
+
+      // Fetch guild roles if guild ID is configured
+      let roleIds = [];
+      if (config.discordOAuth.guildId) {
+        const guildRes = await fetch(`https://discord.com/api/users/@me/guilds`, {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` }
+        });
+        const guilds = await guildRes.json();
+        if (Array.isArray(guilds)) {
+          const memberGuild = guilds.find(g => g.id === config.discordOAuth.guildId);
+          if (memberGuild?.roles) roleIds = memberGuild.roles;
+        }
+      }
+
+      const session = auth.makeSession();
+      session.actorId = `discord:${user.id}`;
+      session.discordUsername = user.username;
+      session.roleIds = roleIds;
+      session.authSource = "discord";
+      // Re-stamp capabilities based on Discord roles
+      stampSessionCapabilities(session);
+
+      setSessionCookie(res, session, config);
+      audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
+      res.writeHead(302, { Location: "/" });
+      return res.end();
+    } catch (error) {
+      return json(res, 500, { ok: false, error: "Discord authentication failed." });
+    }
+  }
+
   if (isDiscordAdapterRoute(path)) {
     return handleDiscordAdapterRoute({ req, res, path, config, readJson, json, db });
   }
@@ -564,6 +649,30 @@ async function handleApi(req, res) {
   if (path === "/api/deepdesert/update" && req.method === "POST") return deepDesertUpdateRoute(req, res);
   if (path === "/api/settings" && req.method === "POST") return writeConfig(req, res);
   if (path === "/api/settings") return json(res, 200, await setupState());
+
+  // ── RBAC Admin API ──
+  if (path === "/api/rbac/capabilities") {
+    const caps = await import("./integrations/discord/policy.js").then(p => ({
+      capabilities: Object.values(p.DISCORD_CAPABILITIES),
+      descriptions: p.CAPABILITY_DESCRIPTIONS
+    })).catch(() => ({ capabilities: [], descriptions: {} }));
+    return json(res, 200, { ok: true, ...caps });
+  }
+
+  if (path === "/api/rbac/roles" && req.method === "GET") {
+    await duneDb.rbacTablesCreate(db);
+    const result = await db.query("select role_id, capability from dune.rbac_role_capabilities order by role_id, capability");
+    return json(res, 200, { ok: true, rows: result.rows });
+  }
+
+  if (path.match(/^\/api\/rbac\/roles\/([^/]+)$/) && req.method === "PUT") {
+    const body = await readJson(req);
+    const roleId = decodeURIComponent(path.split("/")[4]);
+    if (!roleId) return json(res, 400, { error: "Role ID is required" });
+    const caps = Array.isArray(body.capabilities) ? body.capabilities : [];
+    await duneDb.rbacSetRoleCapabilities(db, roleId, caps, "web:admin");
+    return json(res, 200, { ok: true, roleId, capabilities: caps });
+  }
 
   return json(res, 404, { error: "Not found" });
 }

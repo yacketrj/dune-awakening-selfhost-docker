@@ -31,6 +31,20 @@ export function loadConfig() {
     adminPassword: process.env.ADMIN_PASSWORD || getOrCreateSecret(adminPasswordFile, 18),
     adminPasswordFile,
     adminPasswordEnvManaged,
+    // Discord OAuth2 for Web UI login (optional — falls back to ADMIN_PASSWORD if not set)
+    discordOAuth: {
+      clientId: process.env.DISCORD_OAUTH_CLIENT_ID || "",
+      clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET || "",
+      redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI || "",
+      guildId: process.env.DISCORD_GUILD_ID || ""
+    },
+    // RBAC role-to-capability mapping (shared with Discord bot)
+    rbac: {
+      observerRoleIds: process.env.DISCORD_OBSERVER_ROLE_IDS || "",
+      moderatorRoleIds: process.env.DISCORD_MODERATOR_ROLE_IDS || "",
+      adminRoleIds: process.env.DISCORD_ADMIN_ROLE_IDS || "",
+      ownerRoleIds: process.env.DISCORD_OWNER_ROLE_IDS || "",
+    },
     generatedDir,
     secretsDir,
     auditLog: resolve(generatedDir, "web-admin-audit.jsonl"),

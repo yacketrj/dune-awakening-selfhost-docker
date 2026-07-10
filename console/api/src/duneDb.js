@@ -3451,6 +3451,68 @@ export async function discordPlayerUnlink(db, discordUserId) {
   return Boolean(player);
 }
 
+// ── RBAC Tables ──
+
+export async function rbacTablesCreate(db) {
+  await db.query(`
+    create table if not exists dune.rbac_role_capabilities (
+      role_id    text not null,
+      capability text not null,
+      granted_by text,
+      granted_at timestamptz default now(),
+      primary key (role_id, capability)
+    )`);
+
+  await db.query(`
+    create table if not exists dune.rbac_audit_log (
+      id          serial primary key,
+      timestamp   timestamptz default now(),
+      actor_id    text not null,
+      actor_name  text,
+      action      text not null,
+      target_type text,
+      target_id   text,
+      route       text,
+      result      text not null,
+      detail      jsonb
+    )`);
+
+  try { await db.query("create index if not exists idx_rbac_audit_timestamp on dune.rbac_audit_log (timestamp desc)"); } catch {}
+  try { await db.query("create index if not exists idx_rbac_audit_actor on dune.rbac_audit_log (actor_id, timestamp desc)"); } catch {}
+}
+
+export async function rbacRoleCapabilities(db, roleId) {
+  const result = await db.query(
+    `select capability from dune.rbac_role_capabilities where role_id = $1 order by capability`,
+    [String(roleId)]
+  );
+  return result.rows.map(r => r.capability);
+}
+
+export async function rbacSetRoleCapabilities(db, roleId, capabilities, grantedBy = "system") {
+  await rbacTablesCreate(db);
+  await db.query("delete from dune.rbac_role_capabilities where role_id = $1", [String(roleId)]);
+  if (capabilities.length > 0) {
+    const values = capabilities.map((_, i) => `($1, $${i + 2}, $${capabilities.length + 2})`).join(", ");
+    await db.query(
+      `insert into dune.rbac_role_capabilities (role_id, capability, granted_by) values ${values}`,
+      [String(roleId), ...capabilities, String(grantedBy)]
+    );
+  }
+}
+
+export async function rbacAuditLog(db, { actorId, actorName, action, targetType, targetId, route, result, detail = {} }) {
+  if (!(await tableExists(db, "rbac_audit_log"))) return;
+  try {
+    await db.query(
+      `insert into dune.rbac_audit_log (actor_id, actor_name, action, target_type, target_id, route, result, detail)
+       values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+      [String(actorId), String(actorName || ""), String(action), String(targetType || ""),
+       String(targetId || ""), String(route || ""), String(result), JSON.stringify(detail)]
+    );
+  } catch { /* best effort */ }
+}
+
 export async function playerOwnedStorageQuery(db, playerControllerId) {
   const result = await db.query(`
     select p.id,
