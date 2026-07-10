@@ -5,7 +5,8 @@ import { playersApi } from "../../api/players";
 import type { Task } from "../../api/setup";
 import { compareTableValues, DataTable, useResizableColumns, useSortableRows, useSortState } from "../../components/common/DataTable";
 import { InlineActionResult } from "../../components/common/InlineActionResult";
-import { ItemCatalogSelector, ItemGradeSelect, MAX_ARMOR_AUGMENTS, PackageItemPreview, AugmentPicker, augmentLimit, catalogItemId, catalogItemName, grantItemDurability, itemGrade, normalizeItemGrade, type CatalogItem } from "../../components/common/ItemCatalog";
+import { ItemCatalogSelector, ItemGradeSelect, MAX_ARMOR_AUGMENTS, PackageItemPreview, AugmentPicker, augmentLimit, catalogItemId, catalogItemName, friendlyCatalogName, buildingSubCategory, CatalogItemThumb, grantItemDurability, itemGrade, normalizeItemGrade, type CatalogItem } from "../../components/common/ItemCatalog";
+import { PLACEABLE_RESOURCES, placeableRecipeKey } from "../../data/placeableResources";
 import { firstDefined, formatCell } from "../../lib/display";
 import { PlayerCategoryIconRail } from "./PlayerCategoryIconRail";
 import { PlayerDetailTab } from "./PlayerDetailTab";
@@ -139,6 +140,44 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   const playerAdmin_factionIds: Record<string, number> = { Atreides: 1, Harkonnen: 2, Smuggler: 4 };
   const XP_TABLE: Record<number, number> = {1:40,2:215,3:440,4:740,5:1240,6:1790,7:2390,8:2990,9:3590,10:4190,11:4790,12:5390,13:5990,14:6590,15:7190,16:7790,17:8390,18:8990,19:9590,20:10190,21:10790,22:11390,23:11990,24:12590,25:13190,26:13790,27:14390,28:14990,29:15590,30:16190,31:16790,32:17390,33:17990,34:18590,35:19190,36:19790,37:20390,38:20990,39:21590,40:22190,41:22790,42:23390,43:23990,44:24590,45:25190,46:25790,47:26390,48:26990,49:27590,50:28190,51:28790,52:29390,53:29990,54:30590,55:31190,56:31790,57:32390,58:32990,59:33590,60:34190,61:34790,62:35390,63:35990,64:36590,65:37190,66:37790,67:38390,68:38990,69:39590,70:40190,71:40790,72:41390,73:41990,74:42590,75:43190,76:43790,77:44390,78:44990,79:45590,80:46190,81:46790,82:47390,83:47990,84:48590,85:49190,86:49790,87:50390,88:50990,89:51590,90:52190,91:52790,92:53390,93:53990,94:54590,95:55190,96:55790,97:56390,98:56990,99:57590,100:58190,101:58840,102:59490,103:60140,104:60790,105:61440,106:62090,107:62740,108:63390,109:64040,110:64690,111:65340,112:65990,113:66640,114:67290,115:67940,116:68590,117:69240,118:69890,119:70540,120:71190,121:71840,122:72490,123:73140,124:73790,125:74440,126:75090,127:75740,128:76391,129:77044,130:77699,131:78357,132:79018,133:79682,134:80349,135:81019,136:81692,137:82368,138:83047,139:83729,140:84414,141:85102,142:85793,143:86487,144:87184,145:87884,146:88587,147:89293,148:90002,149:90714,150:91429,151:92147,152:92868,153:93592,154:94319,155:95049,156:95782,157:96518,158:97257,159:97999,160:98744,161:99492,162:100243,163:100997,164:101754,165:102514,166:103277,167:104043,168:104812,169:105584,170:106359,171:107137,172:107918,173:108702,174:109489,175:110279,176:111072,177:111868,178:112667,179:113469,180:114274,181:115082,182:115893,183:116707,184:117524,185:118344,186:119167,187:119993,188:120822,189:121654,190:122489,191:123327,192:124168,193:125012,194:125859,195:126709,196:127562,197:128418,198:129277,199:130139,200:131004};
   const playerAdmin_craftingCategories = ["Essentials", "Water Discipline", "Combat", "Construction", "Exploration", "Vehicles", "Augments"];
+  const [playerAdmin_placeableCategory, playerAdmin_setPlaceableCategory] = useState("");
+  const [playerAdmin_placeableItems, playerAdmin_setPlaceableItems] = useState<CatalogItem[]>([]);
+  const [playerAdmin_placeableSelection, playerAdmin_setPlaceableSelection] = useState<CatalogItem | null>(null);
+
+  // Load placeable building items from catalog
+  useEffect(() => {
+    adminApi.itemCatalog("", 10000).then((result) => {
+      const items = (result.rows || []).filter((item) => item.category === "buildings" || item.category === "placeables");
+      playerAdmin_setPlaceableItems(items.map((item) => ({ id: item.itemId || item.id, name: item.name, category: item.category, itemId: item.itemId || item.id, image: item.image })));
+    }).catch(() => {});
+  }, []);
+
+  const playerAdmin_filteredPlaceableItems = playerAdmin_placeableItems.filter((item) => {
+    if (!playerAdmin_placeableCategory) return true;
+    return buildingSubCategory(item.id, item.name) === playerAdmin_placeableCategory;
+  }).sort((a, b) => a.name.localeCompare(b.name));
+
+  const playerAdmin_placeableResources = (() => {
+    if (!playerAdmin_placeableSelection) return [];
+    const key = placeableRecipeKey(playerAdmin_placeableSelection.id);
+    if (!key) return [];
+    return PLACEABLE_RESOURCES[key] || [];
+  })();
+
+  async function playerAdmin_grantPlaceableResources() {
+    if (!playerAdmin_placeableSelection || !playerAdmin_placeableResources.length || !dbPlayerId) return;
+    const resources = playerAdmin_placeableResources;
+    if (!(await confirmAction(`Give ${resources.reduce((s, r) => s + r.qty, 0)} total resources for ${playerAdmin_placeableSelection.name} to ${playerName}?`))) return;
+    playerAdmin_showResult("placeableGrant", `Granting ${resources.length} resource types...`, "neutral", true);
+    try {
+      for (const r of resources) {
+        try { await playersApi.giveItemId(dbPlayerId, { itemId: r.name.replace(/\s+/g, ""), quantity: r.qty, durability: 1 }); } catch {}
+      }
+      playerAdmin_showResult("placeableGrant", `Resources for ${playerAdmin_placeableSelection.name} granted.`, "success");
+    } catch (error) {
+      playerAdmin_showResult("placeableGrant", "Some resources could not be granted.", "danger");
+    }
+  }
   const playerAdmin_isOnline = String(firstDefined(detail?.online_status, fallback.online_status) || "").toLowerCase() === "online";
   const playerAdmin_canRunLiveAction = Boolean(actionPlayerId) && playerAdmin_isOnline;
   const playerAdmin_selectedGrantItems = playerAdmin_multiList.length ? playerAdmin_multiList : playerAdmin_selectedItem ? [{
@@ -1250,6 +1289,41 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
             return <tr key={`${item.itemName || item.itemId}-${index}`}><td><PackageItemPreview item={item} /></td><td>{catalogItemName(item)}</td><td>{catalogItemId(item)}</td><td>{editing ? <input className="package-item-quantity-input" type="number" min="1" value={playerAdmin_itemEditDraft.quantity} onChange={(event) => playerAdmin_setItemEditDraft({ ...playerAdmin_itemEditDraft, quantity: event.target.value })} /> : item.quantity}</td><td>{editing ? <ItemGradeSelect value={playerAdmin_itemEditDraft.grade} onChange={(grade) => playerAdmin_setItemEditDraft({ ...playerAdmin_itemEditDraft, grade })} /> : itemGrade(item)}</td><td style={{ fontSize: "11px", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>{(item.augments && item.augments.length > 0) ? item.augments.map((augId) => { const found = playerAdmin_augmentCatalog.find((a) => a.id === augId); return found ? found.name : augId; }).join(", ") : "—"}</td><td className="package-actions-cell"><div className="service-actions">{editing ? <><button onClick={() => playerAdmin_saveQueuedItem(index)}>Save</button><button onClick={() => playerAdmin_setItemEditIndex(null)}>Cancel</button></> : <button onClick={() => playerAdmin_editQueuedItem(index)}>Edit</button>}<button className="danger" onClick={() => playerAdmin_setMultiList(playerAdmin_multiList.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div></td></tr>;
           })}</tbody></table></div> : null}
         </div></div>}</div>
+        {playerAdmin_toggleBox("give_placeables", "Give Placeables", <div className="playerAdmin_section">
+          <p className="action-help-note">Select a building to see its construction resources, then grant them to the player's inventory.</p>
+          <PlayerCategoryIconRail
+            options={["Fabricators","Refineries","Utilities","Storage","Structures"]}
+            value={playerAdmin_placeableCategory}
+            onChange={playerAdmin_setPlaceableCategory}
+            allLabel="All"
+          />
+          {playerAdmin_filteredPlaceableItems.length > 0 && <div style={{ marginTop: 10 }}>
+            <span className="playerAdmin_note">{playerAdmin_filteredPlaceableItems.length} placeable(s)</span>
+            <div className="catalog-item-picker grid-view" style={{ maxHeight: 260, marginTop: 6 }}>
+              {playerAdmin_filteredPlaceableItems.map((item) => {
+                const active = playerAdmin_placeableSelection?.id === item.id;
+                return <button key={item.id} className={`catalog-item-option ${active ? "active" : ""}`} onClick={() => playerAdmin_setPlaceableSelection(active ? null : item)}>
+                  <CatalogItemThumb item={item} />
+                  <span><strong>{item.name}</strong><small style={{ color: "#ad9f89" }}>{friendlyCatalogName(item.id)}</small></span>
+                </button>;
+              })}
+            </div>
+          </div>}
+          {playerAdmin_placeableSelection && <div style={{ marginTop: 12 }}>
+            <h4 style={{ color: "#ffd08a", margin: 0 }}>{playerAdmin_placeableSelection.name}</h4>
+            <h5 style={{ marginTop: 12, color: "#ad9f89" }}>Required Resources</h5>
+            {playerAdmin_placeableResources.length > 0 ? <>
+              <div className="table-wrap" style={{ maxHeight: 240, marginTop: 6 }}>
+                <table><thead><tr><th>Resource</th><th>Qty</th></tr></thead>
+                <tbody>{playerAdmin_placeableResources.map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.qty}</td></tr>)}</tbody></table>
+              </div>
+              <div className="playerAdmin_actionRow" style={{ marginTop: 8 }}>
+                <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => void playerAdmin_grantPlaceableResources()}>Give Resources</button>
+                <InlineActionResult result={playerAdmin_actionResult} resultKey="placeableGrant" />
+              </div>
+            </> : <p className="playerAdmin_note">Resource data for this building is not yet available.</p>}
+          </div>}
+        </div>)}
         {playerAdmin_toggleBox("character_inventory", `Inventory (${playerAdmin_filteredInventoryRows.length}${playerAdmin_inventoryFilterTerms.length ? `/${playerAdmin_inventoryAllRows.length}` : ""})`, <><div className="playerAdmin_boxHeaderLine playerAdmin_filterHeaderLine"><p>A relog is required to see the change.</p><div className="playerAdmin_filterToolsRow"><input className="playerAdmin_filterTextInput" value={playerAdmin_inventoryFilter} onChange={(event) => playerAdmin_setInventoryFilter(event.target.value)} placeholder="Filter by item ID or template" aria-label="Filter Inventory" />{playerAdmin_inventoryFilter && <button type="button" onClick={() => playerAdmin_setInventoryFilter("")}>Clear</button>}</div></div><PlayerDetailTab playerId={dbPlayerId} data={playerAdmin_inventoryData} rows={playerAdmin_filteredInventoryRows} emptyMessage={playerAdmin_inventoryFilterTerms.length ? "No inventory items match this filter." : "No inventory items were found."} onReload={() => void playerAdmin_loadInventoryRows()} onError={onError} confirmAction={confirmAction} formatMutationResult={formatMutationResult} onActionLog={(actionType, target, amount, notes) => playerAdmin_addLog(actionType, target, amount, notes)} /></>)}
         {playerAdmin_toggleBox("character_log", "Character Action Log", <div className="playerAdmin_logSection">{playerAdmin_characterLog.length > 0 && <div className="action-row admin-history-actions"><button onClick={() => playerAdmin_setCharacterLog([])}>Clear</button></div>}{playerAdmin_characterLog.length ? playerAdmin_table(["Date / Time", "Admin", "Action Type", "Target", "Amount", "Notes"], playerAdmin_characterLog) : <p>No character actions have been recorded in this layout yet.</p>}</div>)}
       </div>}

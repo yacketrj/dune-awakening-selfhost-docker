@@ -38,7 +38,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
   }, []);
 
   const categoryCounts = useMemo(() => items.reduce<Record<string, number>>((counts, item) => {
-    const key = item.category || "uncategorized";
+    const key = itemCategory(item);
     counts[key] = (counts[key] || 0) + 1;
     return counts;
   }, {}), [items]);
@@ -46,7 +46,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((item) => {
-      const matchesCategory = category === "all" || item.category === category;
+      const matchesCategory = category === "all" || itemCategory(item) === category;
       if (!matchesCategory) return false;
       if (!q) return true;
       return item.name.toLowerCase().includes(q) || item.id.toLowerCase().includes(q);
@@ -77,7 +77,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           return <tr className={active ? "active" : ""} key={`${item.id}-${item.name}-${item.source}`} title={fullName} onClick={() => onSelect(item)}>
             <td><CatalogItemThumb item={item} small /></td>
             <td className="catalog-item-name-cell">{fullName}</td>
-            <td>{item.category ? titleCase(item.category) : ""}</td>
+            <td>{titleCase(itemCategory(item) === item.category ? (item.category || "") : itemCategory(item))}</td>
             <td>{item.source || ""}</td>
           </tr>;
         })}</tbody>
@@ -88,7 +88,8 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           <CatalogItemThumb item={item} />
           <span>
             <strong>{fullName}</strong>
-            {item.category && <small>{titleCase(item.category)}</small>}
+            {itemCategory(item) !== item.category && <small>{titleCase(itemCategory(item))}</small>}
+            {item.category && itemCategory(item) === item.category && <small>{titleCase(item.category)}</small>}
           </span>
         </button>;
       })}
@@ -185,7 +186,23 @@ export function catalogItemId(item: { itemId?: string }) {
 }
 
 export function friendlyCatalogName(value: string) {
-  return value.replace(/^[-*]\s*/, "").replace(/^\/Game\/.*\//, "").replaceAll("_", " ").trim();
+  return value.replace(/^[-*]\s*/, "").replace(/^\/Game\/.*\//, "").replaceAll("_", " ").replace(/([a-z])([A-Z0-9])/g, "$1 $2").replace(/\s+/g, " ").trim();
+}
+
+export function buildingSubCategory(itemId: string, itemName: string): string {
+  const text = ((itemId || "") + " " + (itemName || "")).toLowerCase();
+  if (/fabricat/.test(text)) return "Fabricators";
+  if (/refin|deathstill|purif/.test(text)) return "Refineries";
+  if (/windtrap|generator|pentashield|console|augment.*station|recycler|repair.*station/.test(text)) return "Utilities";
+  if (/storage|chest|cistern|container/.test(text)) return "Storage";
+  return "Structures";
+}
+
+export function itemCategory(item: { category?: string; id: string; name: string }): string {
+  if (item.category === "buildings" || item.category === "placeables") {
+    return buildingSubCategory(item.id, item.name);
+  }
+  return item.category || "uncategorized";
 }
 
 // AugmentPicker — chip-based multi-select for augment schematics.
