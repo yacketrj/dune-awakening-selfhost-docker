@@ -807,6 +807,30 @@ async function addonBridgeRoute(req, res, path) {
     audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
     return json(res, 200, { ok: true, result });
   }
+  if (action === "ops.activity.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsActivitySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.resources.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsResourcesSummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.combat.deaths") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsCombatDeaths(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.economy.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsEconomySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
   if (action === "database.query" || action === "database.execute") {
     const query = String(body.query || "");
     const readOnly = isReadOnlySql(query);
