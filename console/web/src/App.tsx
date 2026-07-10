@@ -162,6 +162,8 @@ function LazyTabBoundary({ children, label = "Loading Section" }: { children: Re
 export function App() {
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState("");
+  const [oauthConfigured, setOauthConfigured] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ name: string; avatar: string | null; source: string; role: string } | null>(null);
   const [tab, setTab] = useState<Tab>("Home");
   const [pinnedAddons, setPinnedAddons] = useState<PinnedAddon[]>(() => loadPinnedAddons());
   const [selectedPinnedAddonId, setSelectedPinnedAddonId] = useState("");
@@ -204,9 +206,11 @@ export function App() {
   }, [pinnedAddons]);
 
   useEffect(() => {
-    api<{ authenticated: boolean; csrfToken: string | null }>("/api/auth/state").then((state) => {
+    api<{ authenticated: boolean; csrfToken: string | null; config?: { discordOAuthConfigured?: boolean }; user?: { name: string; avatar: string | null; source: string; role: string } }>("/api/auth/state").then((state) => {
       setAuth(state.authenticated);
       setCsrfToken(state.csrfToken);
+      if (state.config?.discordOAuthConfigured) setOauthConfigured(true);
+      if (state.user) setUserProfile(state.user);
     }).catch(() => undefined);
   }, []);
 
@@ -282,9 +286,10 @@ export function App() {
   }
 
   async function login() {
-    const result = await post<{ authenticated: boolean; csrfToken: string }>("/api/auth/login", { password });
+    const result = await post<{ authenticated: boolean; csrfToken: string; user?: { name: string; avatar: string | null; source: string; role: string } }>("/api/auth/login", { password });
     setCsrfToken(result.csrfToken);
     setAuth(result.authenticated);
+    if (result.user) setUserProfile(result.user);
   }
 
   async function logoutAfterPasswordChange() {
@@ -296,6 +301,14 @@ export function App() {
     setCsrfToken(null);
     setAuth(false);
     setPassword("");
+    setTab("Home");
+  }
+
+  async function logout() {
+    try { await post("/api/auth/logout"); } catch {}
+    setCsrfToken(null);
+    setAuth(false);
+    setUserProfile(null);
     setTab("Home");
   }
 
@@ -420,6 +433,12 @@ export function App() {
         <form className="login-panel" onSubmit={(event) => { event.preventDefault(); void safe(login); }}>
           <h1>Dune Docker Console</h1>
           <p>Spice Clearance Required</p>
+          {oauthConfigured && (
+            <a href="/api/auth/discord" className="oauth-discord-button">
+              <DiscordLogo size={20} /> Login with Discord
+            </a>
+          )}
+          <div className="login-separator"><span>or use password</span></div>
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Admin Password" />
           <button type="submit">Sign In</button>
           {error && <p className="error">{error}</p>}
@@ -453,7 +472,13 @@ export function App() {
               <span>Finish the first-time setup to unlock the console.</span>
             </div>
           </header>
-          {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner">{error}</div>}
+        {userProfile?.role === "public" && (
+          <div className="rbac-public-banner">
+            <Shield size={18} />
+            <span>Your Discord account has <strong>limited access</strong>. Contact your server admin to be added to observer, moderator, or admin roles.</span>
+          </div>
+        )}
           <SetupWizard
             initialStep={setupJump.step}
             jumpNonce={setupJump.nonce}
@@ -525,7 +550,15 @@ export function App() {
             <strong>{visibleTitle}</strong>
             <span>{visibleSubtitle}</span>
           </div>
-          <div className="topbar-links" aria-label="Community links">
+          <div className="topbar-links" aria-label="User actions">
+            {userProfile && (
+              <div className="user-profile">
+                {userProfile.avatar && <img className="user-avatar" src={userProfile.avatar} alt="" width={24} height={24} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                <span className="user-name">{userProfile.name}</span>
+                <span className={`user-role user-role-${userProfile.role}`}>{userProfile.role}</span>
+                <button className="profile-logout-button" onClick={() => { void safe(logout); }} title="Sign out">Sign out</button>
+              </div>
+            )}
             <a className="community-button discord" href={REDBLINK_DISCORD_URL} target="_blank" rel="noreferrer" title="Join Discord"><span>Join Discord</span><DiscordLogo size={19} /></a>
             <a className="community-button support" href={REDBLINK_KOFI_URL} target="_blank" rel="noreferrer" title="Support Project"><span>Support Project</span><KofiLogo size={19} /></a>
           </div>

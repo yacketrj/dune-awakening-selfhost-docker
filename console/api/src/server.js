@@ -264,7 +264,22 @@ async function handleApi(req, res) {
   if (path === "/api/health") return json(res, 200, { ok: true, app: config.appName });
   if (path === "/api/auth/state") {
     const session = auth.readSession(req);
-    return json(res, 200, { authenticated: Boolean(session), csrfToken: session?.csrf || null, config: publicConfig(config) });
+    const profile = session ? {
+      authenticated: true,
+      csrfToken: session.csrf || null,
+      config: publicConfig(config),
+      user: {
+        name: session.discordUsername || session.actorId || "Admin",
+        avatar: null,
+        source: session.authSource || "local",
+        role: "owner"
+      }
+    } : {
+      authenticated: false,
+      csrfToken: null,
+      config: publicConfig(config)
+    };
+    return json(res, 200, profile);
   }
   if (path === "/api/auth/login" && req.method === "POST") {
     const rateKey = loginRateLimitKey(req);
@@ -281,10 +296,14 @@ async function handleApi(req, res) {
     const session = auth.makeSession();
     setSessionCookie(res, session, config);
     audit(config, req, "auth.login");
-    return json(res, 200, { authenticated: true, csrfToken: session.csrf });
+    return json(res, 200, {
+      authenticated: true,
+      csrfToken: session.csrf,
+      user: { name: "Admin", avatar: null, source: "local", role: "owner" }
+    });
   }
   if (path === "/api/auth/logout" && req.method === "POST") {
-    const session = auth.requireAuth(req, res);
+    const authSession = auth.requireAuth(req, res);
     if (!session) return;
     clearSessionCookie(res, config);
     audit(config, req, "auth.logout");
@@ -377,9 +396,9 @@ async function handleApi(req, res) {
     return handleDiscordAdapterRoute({ req, res, path, config, readJson, json, db });
   }
 
-  const session = auth.requireAuth(req, res);
-  if (!session) return;
-  req.authSession = session;
+  const authSession = auth.requireAuth(req, res);
+  if (!authSession) return;
+  req.authSession = authSession;
 
   // RBAC capability check — gated routes register via handleAPI().
   // If a route is registered with a capability, enforce it here.
