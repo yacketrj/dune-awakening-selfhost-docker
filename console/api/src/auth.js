@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const sessions = new Map();
+const AUDIT_ENABLED = process.env.RBAC_AUDIT_ENABLED !== "0";
 
 export const SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",
@@ -23,6 +24,52 @@ export function parseCookies(header = "") {
   return cookies;
 }
 
+// ── RBAC Capability Session Stamping ──
+// Web UI sessions use admin password → owner tier → ALL capabilities.
+// When Discord OAuth2 is added (Phase 3), sessions will resolve capabilities
+// from the user's Discord roles + dune.rbac_role_capabilities table.
+
+let ALL_CAPABILITIES = null;
+
+export function setCapabilityRegistry(capabilities) {
+  ALL_CAPABILITIES = new Set(capabilities);
+}
+
+export function getAllCapabilities() {
+  return ALL_CAPABILITIES || new Set();
+}
+
+export function resolveSessionCapabilities(session) {
+  // Admin password sessions get owner tier → all capabilities
+  // When Phase 3 adds Discord OAuth2, this will resolve from role mapping
+  return ALL_CAPABILITIES ? new Set(ALL_CAPABILITIES) : new Set();
+}
+
+export function requireCapability(session, capability, route) {
+  if (!session) return false;
+  if (!session.capabilities) return false;
+  const hasCap = session.capabilities.has(capability);
+  if (!hasCap && AUDIT_ENABLED) {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      actor_id: session.actorId || "unknown",
+      action: capability,
+      route: route || "unknown",
+      result: "denied"
+    };
+    process.emit?.("rbac-audit", entry);
+  }
+  return hasCap;
+}
+
+export function stampSessionCapabilities(session) {
+  if (!session) return session;
+  session.capabilities = resolveSessionCapabilities(session);
+  return session;
+}
+
+// ── Auth Factory ──
+
 export function createAuth(config) {
   function sign(value) {
     return createHmac("sha256", config.sessionSecret).update(value).digest("base64url");
@@ -32,12 +79,18 @@ export function createAuth(config) {
     const id = randomBytes(32).toString("base64url");
     const csrf = randomBytes(24).toString("base64url");
     const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
-    sessions.set(id, { id, csrf, expiresAt });
-    return { id, csrf, expiresAt, cookie: `${id}.${sign(id)}` };
+    const session = { id, csrf, expiresAt, actorId: "local:admin" };
+    stampSessionCapabilities(session);
+    sessions.set(id, session);
+    return { ...session, cookie: `${id}.${sign(id)}` };
   }
 
   function readSession(req) {
-    if (config.authDisabled) return { id: "dev", csrf: "dev", expiresAt: Number.MAX_SAFE_INTEGER };
+    if (config.authDisabled) {
+      const s = { id: "dev", csrf: "dev", expiresAt: Number.MAX_SAFE_INTEGER, actorId: "local:dev" };
+      stampSessionCapabilities(s);
+      return s;
+    }
     const raw = parseCookies(req.headers.cookie || "").get("asc_session");
     if (!raw) return null;
     const [id, sig] = raw.split(".");
@@ -48,6 +101,7 @@ export function createAuth(config) {
       return null;
     }
     session.expiresAt = Date.now() + 12 * 60 * 60 * 1000;
+    if (!session.capabilities) stampSessionCapabilities(session);
     return session;
   }
 

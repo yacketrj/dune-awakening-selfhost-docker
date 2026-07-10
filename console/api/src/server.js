@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, chmodSync, mkdirSync, createReadStream, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { loadConfig, publicConfig, parseAllowedIps } from "./config.js";
-import { createAuth, setSessionCookie, clearSessionCookie, json, withSecurityHeaders } from "./auth.js";
+import { createAuth, setCapabilityRegistry, setSessionCookie, clearSessionCookie, json, withSecurityHeaders, requireCapability } from "./auth.js";
 import { createLoginRateLimiter, createMutationRateLimiter } from "./rateLimit.js";
 import { createBridgeRateLimiter } from "./bridgeRateLimit.js";
 import { TaskManager, publicTask } from "./tasks.js";
@@ -39,6 +39,13 @@ const config = loadConfig();
 const auth = createAuth(config);
 const loginRateLimiter = createLoginRateLimiter();
 const mutationRateLimiter = createMutationRateLimiter();
+
+// Initialize RBAC capability registry for session stamping.
+// All capabilities from the Discord adapter policy are available to Web UI sessions.
+// Admin password sessions get all capabilities. Discord OAuth2 (Phase 3) will resolve per-role.
+import("./integrations/discord/policy.js").then((policy) => {
+  setCapabilityRegistry(Object.values(policy.DISCORD_CAPABILITIES));
+}).catch(() => {});
 const bridgeRateLimiter = createBridgeRateLimiter();
 const tasks = new TaskManager(config);
 let db = createDb(config);
@@ -221,6 +228,33 @@ function dockerPsNames() {
   });
 }
 
+// ── RBAC Route Registration ──
+// Phase 2: Route-level capability enforcement for Web UI routes.
+// Routes declare their capability at registration time. Sessions are checked.
+// Admin password sessions get all capabilities (backward compatible).
+
+const routeCapabilities = new Map();
+
+function handleAPI(method, pathPattern, capability, handler) {
+  const key = `${method}:${pathPattern}`;
+  if (routeCapabilities.has(key)) {
+    console.warn(`handleAPI: route ${key} already registered with ${routeCapabilities.get(key)}, overwriting with ${capability}`);
+  }
+  routeCapabilities.set(key, capability);
+  return handler;
+}
+
+function requireRouteCapability(req, res, path) {
+  const session = req.authSession;
+  if (!session) return true; // auth handled upstream
+  const key = `${req.method}:${path}`;
+  const capability = routeCapabilities.get(key);
+  if (!capability) return true; // unregistered route — no enforcement yet (migration in progress)
+  if (requireCapability(session, capability, key)) return true;
+  json(res, 403, { ok: false, code: "not_authorized", error: `Not authorized. Required capability: ${capability}.` });
+  return false;
+}
+
 async function handleApi(req, res) {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
@@ -261,6 +295,11 @@ async function handleApi(req, res) {
   const session = auth.requireAuth(req, res);
   if (!session) return;
   req.authSession = session;
+
+  // RBAC capability check — gated routes register via handleAPI().
+  // If a route is registered with a capability, enforce it here.
+  // Unregistered routes pass through unchanged (migration in progress).
+  if (!requireRouteCapability(req, res, path)) return;
 
   if (path === "/api/setup/state") return json(res, 200, await setupState());
   if (path === "/api/setup/preflight" && req.method === "POST") return json(res, 200, await preflight(config));
