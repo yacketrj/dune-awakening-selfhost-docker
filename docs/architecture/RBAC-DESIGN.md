@@ -1,10 +1,10 @@
 # Dune Console RBAC — Design & Architecture
 
-**Version**: 1.0  
-**Date**: 2026-07-09  
-**Branch**: `integration/discord`  
-**Scope**: `dune-awakening-selfhost-docker` (Core Fork) + `dune-awakening-selfhost-discordbot` (Discord Bot)  
-**Upstream**: [Red-Blink/dune-awakening-selfhost-docker](https://github.com/Red-Blink/dune-awakening-selfhost-docker)  
+**Version**: 1.0
+**Date**: 2026-07-09
+**Branch**: `integration/discord`
+**Scope**: `dune-awakening-selfhost-docker` (Core Fork) + `dune-awakening-selfhost-discordbot` (Discord Bot)
+**Upstream**: [Red-Blink/dune-awakening-selfhost-docker](https://github.com/Red-Blink/dune-awakening-selfhost-docker)
 **Reference**: [Icehunter/dune-admin](https://github.com/Icehunter/dune-admin) (capability model design)
 
 ---
