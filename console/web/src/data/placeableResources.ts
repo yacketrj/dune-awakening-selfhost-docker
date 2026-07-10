@@ -32,14 +32,14 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
     { name: "Cobalt Paste", qty: 180 },
     { name: "Armor Plating", qty: 150 }
   ],
-  "Fabricator_Patent": [
+  "BasicFabricator_Patent": [
     { name: "Iron Ingot", qty: 60 },
     { name: "Silicone Block", qty: 50 },
     { name: "Basic Machinery", qty: 30 },
     { name: "Cobalt Paste", qty: 40 },
     { name: "Armor Plating", qty: 30 }
   ],
-  "GarmentFabricator_Patent": [
+  "WearablesFabricator_Patent": [
     { name: "Steel Ingot", qty: 80 },
     { name: "Silicone Block", qty: 80 },
     { name: "Basic Machinery", qty: 50 },
@@ -112,6 +112,13 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
     { name: "Plant Fiber", qty: 50 },
     { name: "Concrete", qty: 40 }
   ],
+  "BloodWaterExtractionAdvanced_Patent": [
+    { name: "Aluminum Ingot", qty: 100 },
+    { name: "Complex Machinery", qty: 50 },
+    { name: "Plant Fiber", qty: 60 },
+    { name: "Concrete", qty: 60 },
+    { name: "Spice Melange", qty: 15 }
+  ],
   "FremenDeathstill_Patent": [
     { name: "Aluminum Ingot", qty: 100 },
     { name: "Complex Machinery", qty: 50 },
@@ -132,7 +139,7 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
     { name: "Plant Fiber", qty: 30 },
     { name: "Armor Plating", qty: 20 }
   ],
-  "AugmentationStation_Patent": [
+  "AugmentStation_Patent": [
     { name: "Plastanium Ingot", qty: 120 },
     { name: "Complex Machinery", qty: 80 },
     { name: "Spice Melange", qty: 30 },
@@ -205,7 +212,7 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
     { name: "Plant Fiber", qty: 30 },
     { name: "Concrete", qty: 20 }
   ],
-  "Chest_Patent": [
+  "BasicContainer_Patent": [
     { name: "Iron Ingot", qty: 20 },
     { name: "Plant Fiber", qty: 20 },
     { name: "Concrete", qty: 10 }
