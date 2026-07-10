@@ -453,16 +453,16 @@ async function handleApi(req, res) {
 
       setSessionCookie(res, session, config);
       audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
-      // Serve SPA directly so Set-Cookie isn't lost in a redirect
-      const indexPath = join(config.staticDir || "", "index.html");
-      if (existsSync(indexPath)) {
-        res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
-        createReadStream(indexPath).pipe(res);
-      } else {
-        res.writeHead(302, { Location: "/" });
-        res.end();
-      }
-      return;
+      res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
+      return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dune Console</title><style>body{background:#0a0614;color:#e0dde8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px}a{color:#8b5cf6}</style></head><body><p>Logged in as <strong>${user.username}</strong>.</p><p id="status">Checking session...</p><a href="/" style="display:none" id="link">Continue to Console</a><script>
+var tries=0;
+function check(){tries++;fetch("/api/auth/state").then(function(r){return r.json()}).then(function(d){
+if(d.authenticated){document.getElementById("status").textContent="Session active — redirecting...";window.location.replace("/");}
+else if(tries<5){document.getElementById("status").textContent="Waiting for session... ("+tries+"/5)";setTimeout(check,800);}
+else{document.getElementById("status").textContent="Session not found. Please try again.";document.getElementById("link").style.display="inline-block";}
+}).catch(function(){if(tries<5){setTimeout(check,800);}});}
+setTimeout(check,600);
+</script></body></html>`);
     } catch (error) {
       return json(res, 500, { ok: false, error: "Discord authentication failed." });
     }
