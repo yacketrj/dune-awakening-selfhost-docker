@@ -1276,7 +1276,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
               options={playerAdmin_craftingCategories}
               value={playerAdmin_craftingCategory}
               onChange={playerAdmin_setCraftingCategory}
-              allLabel="All"
+              allLabel="All Categories"
             />
             {playerAdmin_craftingError ? <p className="playerAdmin_note danger">{playerAdmin_craftingError}</p> : playerAdmin_craftingTable}
           </section>
