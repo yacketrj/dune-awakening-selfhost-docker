@@ -250,7 +250,7 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
       const actor = validateDiscordActor(body.actor);
       requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.INVENTORY_READ);
       const linked = await requireLinkedPlayer(db, actor.userId);
-      return json(res, 200, await playerInventoryProvider(db, {
+      return json(res, 200, await playerInventoryProvider(config, db, {
         playerPawnId: linked.player_pawn_id,
         characterName: linked.character_name
       }));
@@ -295,7 +295,7 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
       const actor = validateDiscordActor(body.actor);
       requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.INVENTORY_READ);
       const linked = await requireLinkedPlayer(db, actor.userId);
-      return json(res, 200, await inventorySearchProvider(db, {
+      return json(res, 200, await inventorySearchProvider(config, db, {
         playerPawnId: linked.player_pawn_id,
         query: body.query
       }));

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   playerInventory,
   playerOwnedStorageQuery,
@@ -5,6 +7,27 @@ import {
   searchItemsInContainers,
   searchItemsInPlayerInventory
 } from "../../duneDb.js";
+
+let _itemCatalog = null;
+
+function loadItemCatalog(config) {
+  if (_itemCatalog) return _itemCatalog;
+  try {
+    const catalogPath = resolve(config.repoRoot || process.env.DUNE_DOCKER_DIR || process.cwd(), "runtime/data/admin-items.json");
+    const raw = readFileSync(catalogPath, "utf8");
+    const items = JSON.parse(raw);
+    _itemCatalog = new Map(items.map((item) => [item.id, item.name]));
+  } catch {
+    _itemCatalog = new Map();
+  }
+  return _itemCatalog;
+}
+
+function enrichItem(item, catalog) {
+  const name = catalog.get(item.template_id) || catalog.get(item.templateId) || null;
+  if (name) item.displayName = name;
+  return item;
+}
 
 export function groupByMap(items) {
   const map = new Map();
@@ -43,9 +66,10 @@ export function groupByContainer(items, containerField = "container_id") {
   return Array.from(map.values());
 }
 
-export async function playerInventoryProvider(db, { playerPawnId, characterName } = {}) {
+export async function playerInventoryProvider(config, db, { playerPawnId, characterName } = {}) {
+  const catalog = loadItemCatalog(config);
   const result = await playerInventory(db, playerPawnId);
-  const rows = result.rows || [];
+  const rows = (result.rows || []).map((item) => enrichItem(item, catalog));
   return {
     ok: true,
     characterName: characterName || `Player ${playerPawnId}`,
@@ -102,12 +126,13 @@ export async function itemSearchProvider(db, { playerControllerId, query, scope 
   };
 }
 
-export async function inventorySearchProvider(db, { playerPawnId, query }) {
+export async function inventorySearchProvider(config, db, { playerPawnId, query }) {
+  const catalog = loadItemCatalog(config);
   if (!query || !String(query).trim()) {
     throw new Error("Search query is required.");
   }
   const result = await searchItemsInPlayerInventory(db, playerPawnId, String(query).trim());
-  const rows = result.rows || [];
+  const rows = (result.rows || []).map((item) => enrichItem(item, catalog));
   return {
     ok: true,
     query,
