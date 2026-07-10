@@ -128,7 +128,7 @@ export const MAX_MELEE_AUGMENTS = 3;
 export const MAX_ARMOR_AUGMENTS = 2;
 
 export function isWeapon(name: string) {
-  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|UniqueAr|ChoamLg|ChoamSda|UniqueSda|UniqueFlameThrower|UniqueScattergun|melee|[Ss]word|blade|knife|fremen|Dirk|Rapier|Kindjal|Minotaur|DualBlades|CHOAMSword|Crysknife|DewReaper|Ghola|ScrapMetalKnife|UniqueSword|UniqueDirk|UniqueRapier/i.test(name);
+  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
 }
 
 export function isArmor(name: string) {
@@ -139,9 +139,10 @@ export function isMelee(name: string) {
   return /melee|[Ss]word|blade|knife|fremen|Dirk|Rapier|Kindjal|Minotaur|DualBlades|CHOAMSword|Crysknife|DewReaper|Ghola|ScrapMetalKnife|UniqueSword|UniqueDirk|UniqueRapier/i.test(name);
 }
 
-export function augmentLimit(itemName: string) {
-  if (isArmor(itemName)) return MAX_ARMOR_AUGMENTS;
-  if (isMelee(itemName)) return MAX_MELEE_AUGMENTS;
+export function augmentLimit(itemName: string, category?: string) {
+  const cat = (category || "").toLowerCase();
+  if (cat === "clothing" || isArmor(itemName)) return MAX_ARMOR_AUGMENTS;
+  if (cat === "weapons" || isMelee(itemName)) return MAX_MELEE_AUGMENTS;
   if (isWeapon(itemName)) return MAX_RANGED_AUGMENTS;
   return 0;
 }
