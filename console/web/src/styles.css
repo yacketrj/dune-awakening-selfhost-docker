@@ -1866,3 +1866,45 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
   color: #60a5fa;
   border: 1px solid rgba(37, 99, 235, .3);
 }
+
+/* ── Faction-Colored Rows ── */
+tr[data-faction="atreides"] td:first-child {
+  border-left: 3px solid #16a34a;
+  padding-left: 10px;
+}
+tr[data-faction="harkonnen"] td:first-child {
+  border-left: 3px solid #ef4444;
+  padding-left: 10px;
+}
+tr[data-faction="fremen"] td:first-child {
+  border-left: 3px solid #2563eb;
+  padding-left: 10px;
+}
+
+/* ── Faction-Colored Elements ── */
+[data-faction="atreides"] .faction-name,
+[data-faction="atreides"].faction-name {
+  color: #4ade80;
+  font-weight: 600;
+}
+[data-faction="harkonnen"] .faction-name,
+[data-faction="harkonnen"].faction-name {
+  color: #f87171;
+  font-weight: 600;
+}
+[data-faction="fremen"] .faction-name,
+[data-faction="fremen"].faction-name {
+  color: #60a5fa;
+  font-weight: 600;
+}
+
+/* ── Spice Colored Elements ── */
+[data-spice] .section-copy,
+[data-spice].section-copy {
+  color: var(--spice-text);
+}
+[data-spice] h2,
+[data-spice] h3,
+[data-spice].panel-title h2 {
+  color: var(--spice-text);
+}
