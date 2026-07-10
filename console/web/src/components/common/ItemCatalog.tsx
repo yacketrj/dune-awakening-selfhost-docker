@@ -149,7 +149,7 @@ export function augmentLimit(itemName: string, category?: string) {
   const cat = (category || "").toLowerCase();
   const nameStr = String(itemName || "");
   if (cat === "schematics" || /_schematic$/i.test(nameStr) || /_Augment_/i.test(nameStr)) return 0;
-  const isT6 = /_06\b|T6_|Unique/i.test(nameStr);
+  const isT6 = /_06(?=_|$)|T6_/i.test(nameStr) || (/Unique/i.test(nameStr) && !/_(0[1-5])(?=_|$)/.test(nameStr));
   if (!isT6) return 0;
   if (cat === "clothing" || isArmor(nameStr)) return MAX_ARMOR_AUGMENTS;
   if (cat === "weapons" || isMelee(nameStr)) return MAX_MELEE_AUGMENTS;
