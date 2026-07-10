@@ -138,7 +138,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   }, [playerAdmin_itemName, playerAdmin_itemId, playerAdmin_selectedItem?.category, playerAdmin_augmentCatalog]);
   const playerAdmin_factionIds: Record<string, number> = { Atreides: 1, Harkonnen: 2, Smuggler: 4 };
   const XP_TABLE: Record<number, number> = {1:40,2:215,3:440,4:740,5:1240,6:1790,7:2390,8:2990,9:3590,10:4190,11:4790,12:5390,13:5990,14:6590,15:7190,16:7790,17:8390,18:8990,19:9590,20:10190,21:10790,22:11390,23:11990,24:12590,25:13190,26:13790,27:14390,28:14990,29:15590,30:16190,31:16790,32:17390,33:17990,34:18590,35:19190,36:19790,37:20390,38:20990,39:21590,40:22190,41:22790,42:23390,43:23990,44:24590,45:25190,46:25790,47:26390,48:26990,49:27590,50:28190,51:28790,52:29390,53:29990,54:30590,55:31190,56:31790,57:32390,58:32990,59:33590,60:34190,61:34790,62:35390,63:35990,64:36590,65:37190,66:37790,67:38390,68:38990,69:39590,70:40190,71:40790,72:41390,73:41990,74:42590,75:43190,76:43790,77:44390,78:44990,79:45590,80:46190,81:46790,82:47390,83:47990,84:48590,85:49190,86:49790,87:50390,88:50990,89:51590,90:52190,91:52790,92:53390,93:53990,94:54590,95:55190,96:55790,97:56390,98:56990,99:57590,100:58190,101:58840,102:59490,103:60140,104:60790,105:61440,106:62090,107:62740,108:63390,109:64040,110:64690,111:65340,112:65990,113:66640,114:67290,115:67940,116:68590,117:69240,118:69890,119:70540,120:71190,121:71840,122:72490,123:73140,124:73790,125:74440,126:75090,127:75740,128:76391,129:77044,130:77699,131:78357,132:79018,133:79682,134:80349,135:81019,136:81692,137:82368,138:83047,139:83729,140:84414,141:85102,142:85793,143:86487,144:87184,145:87884,146:88587,147:89293,148:90002,149:90714,150:91429,151:92147,152:92868,153:93592,154:94319,155:95049,156:95782,157:96518,158:97257,159:97999,160:98744,161:99492,162:100243,163:100997,164:101754,165:102514,166:103277,167:104043,168:104812,169:105584,170:106359,171:107137,172:107918,173:108702,174:109489,175:110279,176:111072,177:111868,178:112667,179:113469,180:114274,181:115082,182:115893,183:116707,184:117524,185:118344,186:119167,187:119993,188:120822,189:121654,190:122489,191:123327,192:124168,193:125012,194:125859,195:126709,196:127562,197:128418,198:129277,199:130139,200:131004};
-  const playerAdmin_craftingCategories = ["Essentials", "Water Discipline", "Augments", "Combat", "Construction", "Exploration", "Vehicles"];
+  const playerAdmin_craftingCategories = ["Essentials", "Water Discipline", "Combat", "Construction", "Exploration", "Vehicles", "Augments"];
   const playerAdmin_isOnline = String(firstDefined(detail?.online_status, fallback.online_status) || "").toLowerCase() === "online";
   const playerAdmin_canRunLiveAction = Boolean(actionPlayerId) && playerAdmin_isOnline;
   const playerAdmin_selectedGrantItems = playerAdmin_multiList.length ? playerAdmin_multiList : playerAdmin_selectedItem ? [{
@@ -316,15 +316,16 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   async function playerAdmin_grantAllCrafting() {
     const items = playerAdmin_craftingRows;
     if (!items.length) { playerAdmin_showResult("craftingGrantAll", "No crafting recipes loaded. Click Reload first.", "danger"); return; }
+    if (playerAdmin_isOnline) { playerAdmin_showResult("craftingGrantAll", "The player must be offline for crafting unlocks.", "danger"); return; }
     if (!(await confirmAction(`Unlock ALL ${items.length} crafting recipes for ${playerName}? The player must be offline and should relog after.`))) return;
     playerAdmin_setBusyActionKey("craftingGrantAll");
     try {
-      let count = 0;
+      let count = 0, failed = 0;
       for (const row of items) {
         try { await playersApi.unlockCraftingRecipe(dbPlayerId, { recipeId: row.recipeId, confirmation: "UNLOCK CRAFTING RECIPE" }); count++; }
-        catch {}
+        catch { failed++; }
       }
-      playerAdmin_showResult("craftingGrantAll", `${count} of ${items.length} recipes unlocked. Reloading...`, "success");
+      playerAdmin_showResult("craftingGrantAll", `${count} unlocked, ${failed} failed. Reloading...`, failed > 0 ? "danger" : "success");
       await playerAdmin_loadCraftingRecipes();
     } catch (error) {
       playerAdmin_showResult("craftingGrantAll", friendlyInlineError(error), "danger");
@@ -335,15 +336,16 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   async function playerAdmin_grantCategoryCrafting(category: string) {
     const items = playerAdmin_craftingRows.filter((r) => r.category === category);
     if (!items.length) { playerAdmin_showResult("craftingGrantCat", `No crafting recipes in ${category}.`, "danger"); return; }
+    if (playerAdmin_isOnline) { playerAdmin_showResult("craftingGrantCat", "The player must be offline for crafting unlocks.", "danger"); return; }
     if (!(await confirmAction(`Unlock ${items.length} crafting recipes in ${category} for ${playerName}?`))) return;
     playerAdmin_setBusyActionKey("craftingGrantCat");
     try {
-      let count = 0;
+      let count = 0, failed = 0;
       for (const row of items) {
         try { await playersApi.unlockCraftingRecipe(dbPlayerId, { recipeId: row.recipeId, confirmation: "UNLOCK CRAFTING RECIPE" }); count++; }
-        catch {}
+        catch { failed++; }
       }
-      playerAdmin_showResult("craftingGrantCat", `${count} of ${items.length} ${category} recipes unlocked.`, "success");
+      playerAdmin_showResult("craftingGrantCat", `${count} unlocked, ${failed} failed.`, failed > 0 ? "danger" : "success");
       await playerAdmin_loadCraftingRecipes();
     } catch (error) {
       playerAdmin_showResult("craftingGrantCat", friendlyInlineError(error), "danger");
@@ -399,15 +401,16 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   async function playerAdmin_grantAllResearch() {
     const items = playerAdmin_researchRows;
     if (!items.length) { playerAdmin_showResult("researchGrantAll", "No research items loaded. Click Reload first.", "danger"); return; }
+    if (playerAdmin_isOnline) { playerAdmin_showResult("researchGrantAll", "The player must be offline for research unlocks.", "danger"); return; }
     if (!(await confirmAction(`Unlock ALL ${items.length} research items for ${playerName}? The player must be offline and should relog after.`))) return;
     playerAdmin_setBusyActionKey("researchGrantAll");
     try {
-      let count = 0;
+      let count = 0, failed = 0;
       for (const row of items) {
         try { await playersApi.unlockResearchItem(dbPlayerId, { itemKey: row.itemKey, confirmation: "UNLOCK RESEARCH ITEM" }); count++; }
-        catch {}
+        catch { failed++; }
       }
-      playerAdmin_showResult("researchGrantAll", `${count} of ${items.length} research items unlocked. Reloading...`, "success");
+      playerAdmin_showResult("researchGrantAll", `${count} unlocked, ${failed} failed. Reloading...`, failed > 0 ? "danger" : "success");
       await playerAdmin_loadResearchItems();
       await playerAdmin_loadCraftingRecipes();
     } catch (error) {
@@ -419,15 +422,16 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   async function playerAdmin_grantCategoryResearch(category: string) {
     const items = playerAdmin_researchRows.filter((r) => r.category === category);
     if (!items.length) { playerAdmin_showResult("researchGrantCat", `No research items in ${category}.`, "danger"); return; }
+    if (playerAdmin_isOnline) { playerAdmin_showResult("researchGrantCat", "The player must be offline for research unlocks.", "danger"); return; }
     if (!(await confirmAction(`Unlock ${items.length} research items in ${category} for ${playerName}?`))) return;
     playerAdmin_setBusyActionKey("researchGrantCat");
     try {
-      let count = 0;
+      let count = 0, failed = 0;
       for (const row of items) {
         try { await playersApi.unlockResearchItem(dbPlayerId, { itemKey: row.itemKey, confirmation: "UNLOCK RESEARCH ITEM" }); count++; }
-        catch {}
+        catch { failed++; }
       }
-      playerAdmin_showResult("researchGrantCat", `${count} of ${items.length} ${category} items unlocked.`, "success");
+      playerAdmin_showResult("researchGrantCat", `${count} unlocked, ${failed} failed.`, failed > 0 ? "danger" : "success");
       await playerAdmin_loadResearchItems();
       await playerAdmin_loadCraftingRecipes();
     } catch (error) {
