@@ -1,3 +1,4 @@
+/* ── Base Theme (Fremen — Gold / Sand) ── */
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -14,23 +15,83 @@
   --title: #ffd08a;
   --accent: #c68b4a;
   --accent-strong: #d49a5c;
+  --accent-bg: rgba(170, 111, 45, .18);
+  --accent-glow: rgba(170, 111, 45, .25);
   --success: #3d8b62;
   --success-text: #9be6bd;
   --danger: #a74949;
   --danger-strong: #8d3434;
   --danger-text: #ffb4a8;
   --warning: #a97932;
+  --faction-color: #f59e0b;
+  --faction-name: "Fremen";
   background: var(--bg);
   color: var(--text);
 }
 
+/* ── Atreides Theme (Blue / Silver) ── */
+:root[data-faction="atreides"] {
+  --bg: #0a0e14;
+  --panel: #111827;
+  --panel-soft: #0f1723;
+  --panel-muted: #0b1320;
+  --border: #1e3050;
+  --border-strong: #2d4a6e;
+  --text: #e2e8f0;
+  --text-strong: #dbeafe;
+  --muted: #8099b8;
+  --muted-warm: #93abcc;
+  --title: #93c5fd;
+  --accent: #3b82f6;
+  --accent-strong: #60a5fa;
+  --accent-bg: rgba(59, 130, 246, .15);
+  --accent-glow: rgba(59, 130, 246, .22);
+  --success: #2d7a52;
+  --success-text: #9be6bd;
+  --danger: #a74949;
+  --danger-strong: #8d3434;
+  --danger-text: #ffb4a8;
+  --warning: #8b7a2e;
+  --faction-color: #3b82f6;
+  --faction-name: "Atreides";
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, .12), transparent 38%), var(--bg);
+}
+
+/* ── Harkonnen Theme (Red / Black) ── */
+:root[data-faction="harkonnen"] {
+  --bg: #0c0808;
+  --panel: #1a1010;
+  --panel-soft: #160e0e;
+  --panel-muted: #120b0b;
+  --border: #3d1a1a;
+  --border-strong: #5c2828;
+  --text: #e8dfdf;
+  --text-strong: #fee2e2;
+  --muted: #b09a9a;
+  --muted-warm: #cc9e9e;
+  --title: #fca5a5;
+  --accent: #ef4444;
+  --accent-strong: #f87171;
+  --accent-bg: rgba(239, 68, 68, .15);
+  --accent-glow: rgba(239, 68, 68, .22);
+  --success: #2d7a52;
+  --success-text: #9be6bd;
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --danger-text: #fecaca;
+  --warning: #9e7a2a;
+  --faction-color: #ef4444;
+  --faction-name: "Harkonnen";
+  background: radial-gradient(circle at top left, rgba(239, 68, 68, .12), transparent 38%), var(--bg);
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, rgba(170, 111, 45, .18), transparent 38%), var(--bg); }
+body { margin: 0; min-height: 100vh; }
 button, input, select, textarea { font: inherit; }
 button, .button-link {
   border: 1px solid var(--border-strong);
-  background: #25201b;
-  color: #f7e7c7;
+  background: var(--panel-soft);
+  color: var(--text-strong);
   padding: 10px 14px;
   border-radius: 6px;
   cursor: pointer;
@@ -40,8 +101,8 @@ button, .button-link {
   justify-content: center;
   gap: 8px;
 }
-button:hover, .button-link:hover { border-color: var(--accent); }
-button.active { background: #9b5f2a; border-color: var(--accent-strong); }
+button:hover, .button-link:hover { border-color: var(--accent-strong); }
+button.active { background: var(--accent-bg); border-color: var(--accent-strong); color: var(--accent-strong); }
 button.danger { border-color: var(--danger-strong); color: #ffc9c9; }
 button.success { border-color: var(--success); color: #d8f0c8; }
 button.success:hover { border-color: #63b57f; }
@@ -1700,3 +1761,35 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
   color: var(--adm-text);
 }
 .rbac-public-banner strong { color: #3b82f6; }
+
+/* ── Faction Selector ── */
+.faction-selector {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 12px 0;
+}
+.faction-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 2px solid var(--border);
+  background: var(--panel-muted);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.faction-chip.active {
+  color: var(--text-strong);
+  background: var(--panel-soft);
+}
+.faction-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}

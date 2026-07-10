@@ -163,6 +163,7 @@ export function App() {
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState("");
   const [oauthConfigured, setOauthConfigured] = useState(false);
+  const [faction, setFaction] = useState<string>(() => localStorage.getItem("dune-faction") || "fremen");
   const [userProfile, setUserProfile] = useState<{ name: string; avatar: string | null; source: string; role: string } | null>(null);
   const [tab, setTab] = useState<Tab>("Home");
   const [pinnedAddons, setPinnedAddons] = useState<PinnedAddon[]>(() => loadPinnedAddons());
@@ -204,6 +205,10 @@ export function App() {
   useEffect(() => {
     savePinnedAddons(pinnedAddons);
   }, [pinnedAddons]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-faction", faction);
+  }, [faction]);
 
   useEffect(() => {
     api<{ authenticated: boolean; csrfToken: string | null; config?: { discordOAuthConfigured?: boolean }; user?: { name: string; avatar: string | null; source: string; role: string } }>("/api/auth/state").then((state) => {
@@ -433,6 +438,21 @@ export function App() {
         <form className="login-panel" onSubmit={(event) => { event.preventDefault(); void safe(login); }}>
           <h1>Dune Docker Console</h1>
           <p>Spice Clearance Required</p>
+          <div className="faction-selector">
+            {[
+              { id: "atreides", name: "Atreides", color: "#3b82f6" },
+              { id: "harkonnen", name: "Harkonnen", color: "#ef4444" },
+              { id: "fremen", name: "Fremen", color: "#f59e0b" }
+            ].map((f) => (
+              <button type="button" key={f.id}
+                className={`faction-chip ${faction === f.id ? "active" : ""}`}
+                style={{ borderColor: faction === f.id ? f.color : "var(--border)" }}
+                onClick={() => { setFaction(f.id); localStorage.setItem("dune-faction", f.id); }}>
+                <span className="faction-dot" style={{ background: f.color }} />
+                {f.name}
+              </button>
+            ))}
+          </div>
           {oauthConfigured && (
             <a href="/api/auth/discord" className="oauth-discord-button">
               <DiscordLogo size={20} /> Login with Discord
