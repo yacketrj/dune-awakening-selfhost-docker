@@ -97,7 +97,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
     </div>
     {selected && <div className="catalog-selected-item">
       <CatalogItemThumb item={selected} large />
-      <KeyValueGrid items={[["Item Name", selected.name], ["Item ID", selected.id], ["Category", selected.category ? titleCase(selected.category) : ""], ["Source", selected.source || ""]]} />
+      <KeyValueGrid items={[["Item Name", selected.name], ["Item ID", friendlyCatalogName(selected.id)], ["Category", selected.category ? titleCase(selected.category) : ""], ["Source", selected.source || ""]]} />
     </div>}
   </div>;
 }
