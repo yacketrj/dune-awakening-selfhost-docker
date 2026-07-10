@@ -141,9 +141,11 @@ export function isMelee(name: string) {
 
 export function augmentLimit(itemName: string, category?: string) {
   const cat = (category || "").toLowerCase();
-  if (cat === "clothing" || isArmor(itemName)) return MAX_ARMOR_AUGMENTS;
-  if (cat === "weapons" || isMelee(itemName)) return MAX_MELEE_AUGMENTS;
-  if (isWeapon(itemName)) return MAX_RANGED_AUGMENTS;
+  const nameStr = String(itemName || "");
+  if (cat === "schematics" || /_schematic$/i.test(nameStr) || /_Augment_/i.test(nameStr)) return 0;
+  if (cat === "clothing" || isArmor(nameStr)) return MAX_ARMOR_AUGMENTS;
+  if (cat === "weapons" || isMelee(nameStr)) return MAX_MELEE_AUGMENTS;
+  if (isWeapon(nameStr)) return MAX_RANGED_AUGMENTS;
   return 0;
 }
 

@@ -102,7 +102,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
     const cat = (playerAdmin_selectedItem?.category || "").toLowerCase();
     const src = (playerAdmin_selectedItem?.source || "").toLowerCase();
     const all = playerAdmin_augmentCatalog;
-    if (cat === "schematics" || src === "schematics" || /_schematic$/i.test(name)) {
+    if (cat === "schematics" || src === "schematics" || /_schematic$/i.test(name) || /_augment_/i.test(name)) {
       playerAdmin_setFilteredAugments([]);
       return;
     }
