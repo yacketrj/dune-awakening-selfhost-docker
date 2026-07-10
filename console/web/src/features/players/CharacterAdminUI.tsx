@@ -177,7 +177,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
       let granted = 0, failed = 0;
       for (const r of resources) {
         try {
-          await playersApi.giveItemId(dbPlayerId, { itemId: resourceTemplateId(r.name), quantity: r.qty, quality: 1 });
+          await playersApi.giveItemId(playerAdmin_canRunLiveAction ? actionPlayerId : dbPlayerId, { itemId: resourceTemplateId(r.name), quantity: r.qty, quality: playerAdmin_canRunLiveAction ? 0 : 1 });
           granted++;
         } catch (e) { failed++; }
       }
