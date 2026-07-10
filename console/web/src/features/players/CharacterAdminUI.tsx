@@ -43,7 +43,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   const [playerAdmin_openToggles, playerAdmin_setOpenToggles] = useState<Record<string, boolean>>({});
   const [playerAdmin_inventoryData, playerAdmin_setInventoryData] = useState<Record<string, unknown> | null>(null);
   const [playerAdmin_inventoryFilter, playerAdmin_setInventoryFilter] = useState("");
-  const [playerAdmin_craftingCategory, playerAdmin_setCraftingCategory] = useState("Essentials");
+  const [playerAdmin_craftingCategory, playerAdmin_setCraftingCategory] = useState("");
   const [playerAdmin_craftingFilter, playerAdmin_setCraftingFilter] = useState("");
   const [playerAdmin_researchCategory, playerAdmin_setResearchCategory] = useState("");
   const [playerAdmin_productGroup, playerAdmin_setProductGroup] = useState("");
@@ -1263,7 +1263,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
                 <span className="playerAdmin_note">{playerAdmin_craftingFilterTerms.length ? `${playerAdmin_filteredCraftingRows.length} of ${playerAdmin_craftingCategoryFilteredRows.length}` : playerAdmin_craftingCategoryFilteredRows.length} Schematic{(playerAdmin_craftingFilterTerms.length ? playerAdmin_filteredCraftingRows.length : playerAdmin_craftingCategoryFilteredRows.length) === 1 ? "" : "s"} Detected</span>
               </div>
               <div className="playerAdmin_filterActionsRight">
-                <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllCrafting()}>Grant All Crafting</button>
+                {!playerAdmin_craftingCategory && <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllCrafting()}>Grant All Crafting</button>}
                 {playerAdmin_craftingCategory && <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantCategoryCrafting(playerAdmin_craftingCategory)}>Grant {playerAdmin_craftingCategory}</button>}
                 <button disabled={!dbPlayerId || playerAdmin_craftingLoading} onClick={() => playerAdmin_loadCraftingRecipes()}>{playerAdmin_craftingLoading ? "Loading..." : "Reload"}</button>
               </div>
@@ -1272,7 +1272,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
               options={playerAdmin_craftingCategories}
               value={playerAdmin_craftingCategory}
               onChange={playerAdmin_setCraftingCategory}
-              includeAll={false}
+              allLabel="All"
             />
             {playerAdmin_craftingError ? <p className="playerAdmin_note danger">{playerAdmin_craftingError}</p> : playerAdmin_craftingTable}
           </section>
@@ -1293,7 +1293,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
               </div>
               <div className="playerAdmin_filterActionsRight">
                 {playerAdmin_researchCategory && <select value={playerAdmin_productGroup} onChange={(playerAdmin_event) => playerAdmin_setProductGroup(playerAdmin_event.target.value)}><option value="">All Product Groups</option>{playerAdmin_researchGroups[playerAdmin_researchCategory].map((playerAdmin_option) => <option key={playerAdmin_option}>{playerAdmin_option}</option>)}</select>}
-                <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllResearch()}>Grant All Research</button>
+                {!playerAdmin_researchCategory && <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllResearch()}>Grant All Research</button>}
                 {playerAdmin_researchCategory && <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantCategoryResearch(playerAdmin_researchCategory)}>Grant {playerAdmin_researchCategory}</button>}
                 <button disabled={!dbPlayerId || playerAdmin_researchLoading} onClick={() => playerAdmin_loadResearchItems()}>{playerAdmin_researchLoading ? "Loading..." : "Reload"}</button>
               </div>
