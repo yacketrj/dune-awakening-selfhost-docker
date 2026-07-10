@@ -5,7 +5,6 @@ const AUDIT_ENABLED = process.env.RBAC_AUDIT_ENABLED !== "0";
 
 export const SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",
-  "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
   "permissions-policy": "geolocation=(), microphone=(), camera=()"
 };
