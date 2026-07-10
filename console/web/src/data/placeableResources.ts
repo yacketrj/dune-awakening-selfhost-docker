@@ -282,8 +282,6 @@ export function totalPlaceableVolume(resources: { name: string; qty: number }[])
 export function resourceTemplateId(name: string): string {
   return RESOURCE_TEMPLATE_IDS[name] || name.replace(/\s+/g, "");
 }
-  return RESOURCE_TEMPLATE_IDS[name] || name.replace(/\s+/g, "");
-}
 
 // Map admin-items.json building IDs to placeable resource keys
 export function placeableRecipeKey(itemId: string): string | null {
