@@ -393,6 +393,16 @@ async function handleApi(req, res) {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     if (!code || !state || !oauthStates.has(state)) {
+      // If the user already has a valid session, just serve the SPA
+      const existingSession = auth.readSession(req);
+      if (existingSession) {
+        const indexPath = join(config.staticDir || "", "index.html");
+        if (existsSync(indexPath)) {
+          res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
+          createReadStream(indexPath).pipe(res);
+          return;
+        }
+      }
       return json(res, 400, { ok: false, error: "Invalid or expired OAuth state." });
     }
     oauthStates.delete(state);
