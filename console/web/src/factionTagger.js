@@ -14,7 +14,15 @@
   }
 
   function scan() {
-    document.querySelectorAll("tr, td, th, .metric-card, .card, article, .section-heading, h2, h3, span, p, strong, li").forEach(tag);
+    // Only scan data-display elements — skip forms, inputs, buttons, labels
+    document.querySelectorAll("table td, table th, .metric-card, .card, .section-heading h2, .section-heading h3, .panel-title h2, .DataTable td, .guilds-table td, .players-table td").forEach(tag);
+    document.querySelectorAll("tr").forEach(function(row) {
+      if (row.hasAttribute("data-tagged-faction") || row.hasAttribute("data-tagged-spice")) return;
+      // Only tag rows inside data tables, not form rows
+      if (row.closest("table") && row.closest("table").classList.contains("guilds-table") || row.closest("table.players-table")) {
+        tag(row);
+      }
+    });
   }
 
   scan();
