@@ -4,8 +4,8 @@ import { playersApi } from "../../api/players";
 import { adminApi } from "../../api/admin";
 import { DataTable, useSortableRows } from "../../components/common/DataTable";
 import { TechnicalDetails } from "../../components/common/DisplayPrimitives";
-import { augmentLimit, AugmentPicker } from "../../components/common/ItemCatalog";
-import { formatUiSentence, friendlyColumnName } from "../../lib/display";
+import { augmentLimit, AugmentPicker, friendlyCatalogName } from "../../components/common/ItemCatalog";
+import { formatUiSentence, formatCell, friendlyColumnName } from "../../lib/display";
 import { serializeEditableDbValue, parseEditableDbValue } from "../../lib/dbValues";
 
 const EDITABLE_INVENTORY_COLUMNS = ["stack_size", "quality_level", "position_index", "current_durability", "max_durability"];
@@ -227,6 +227,7 @@ export function PlayerDetailTab({
       rows={inventorySort.sortedRows}
       emptyMessage={emptyMessage}
       actionClassName="actions-column"
+      renderCell={(row, col) => col === "template_id" ? friendlyCatalogName(String(row.template_id || "")) : formatCell(row[col])}
       action={(row) => <span className="icon-toggle-group">
         <button className="icon-toggle-button success" title="Edit item" aria-label="Edit item" onClick={(event) => { event.stopPropagation(); startEditItem(row); }}><Circle size={16} /></button>
         <button className="icon-toggle-button accent" title="Apply Augments" aria-label="Apply Augments" onClick={(event) => { event.stopPropagation(); setAugmentTargetRow(row); setAugmentSelected([]); }}>+A</button>
