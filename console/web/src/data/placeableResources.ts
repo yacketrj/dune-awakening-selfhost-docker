@@ -227,13 +227,11 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
 // Map admin-items.json building IDs to placeable resource keys
 export function placeableRecipeKey(itemId: string): string | null {
   const id = String(itemId || "");
-  // Direct matches
   if (PLACEABLE_RESOURCES[id]) return id;
-  // Try without suffix variations
-  const base = id.replace(/_Patent$/i, "").replace(/_Placeable$/i, "");
+  const lower = id.toLowerCase().replace(/_patent$|_placeable$/, "");
   for (const key of Object.keys(PLACEABLE_RESOURCES)) {
-    const keyBase = key.replace(/_Patent$/i, "").replace(/_Placeable$/i, "");
-    if (keyBase === base || keyBase === id || key === id + "_Patent" || key === id + "_Placeable") return key;
+    const keyLower = key.toLowerCase().replace(/_patent$|_placeable$/, "");
+    if (keyLower === lower || keyLower.includes(lower) || lower.includes(keyLower)) return key;
   }
   return null;
 }
