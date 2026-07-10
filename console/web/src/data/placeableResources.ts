@@ -246,11 +246,11 @@ export const RESOURCE_TEMPLATE_IDS: Record<string, string> = {
   "Cobalt Paste": "CobaltBar",
   "Spice Melange": "MelangeSpice",
   "Complex Machinery": "T2MachineComponent",
-  "Basic Machinery": "T1MachineComponent",
+  "Basic Machinery": "ScrapMetal",
   "Plant Fiber": "PlantFiber",
-  "Concrete": "ConcreteBase",
+  "Concrete": "ScrapMetal",
   "Armor Plating": "T2HeavyComponent",
-  "Duraluminum Ingot": "DuraluminiumBar",
+  "Duraluminum Ingot": "DuraluminumRod",
 };
 
 export function resourceTemplateId(name: string): string {
