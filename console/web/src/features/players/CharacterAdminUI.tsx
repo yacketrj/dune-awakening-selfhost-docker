@@ -174,13 +174,12 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
 
     playerAdmin_showResult("placeableGrant", `Giving ${resourceTypes} resource types...`, "neutral", true);
     try {
-      const items = resources.map((r) => ({ itemId: resourceTemplateId(r.name), itemName: r.name, quantity: r.qty, quality: 1 }));
-      const result = await playersApi.giveItems(dbPlayerId, items);
       let granted = 0, failed = 0;
-      if (result.ok && result.results) {
-        for (const r of result.results || []) {
-          if (r && (r as any).ok !== false) granted++; else failed++;
-        }
+      for (const r of resources) {
+        try {
+          await playersApi.giveItemId(dbPlayerId, { itemId: resourceTemplateId(r.name), quantity: r.qty, quality: 1 });
+          granted++;
+        } catch (e) { failed++; }
       }
       const msg = granted > 0 ? `${granted} resource type(s) granted` + (failed > 0 ? `, ${failed} failed.` : `.`) : "Grant failed — player may be offline or inventory full.";
       playerAdmin_showResult("placeableGrant", msg, failed > 0 ? "danger" : "success");
