@@ -174,3 +174,33 @@ export function catalogItemId(item: { itemId?: string }) {
 export function friendlyCatalogName(value: string) {
   return value.replace(/^[-*]\s*/, "").replace(/^\/Game\/.*\//, "").replaceAll("_", " ").trim();
 }
+
+// AugmentPicker — chip-based multi-select for augment schematics.
+// Click an augment to add it as a chip; click the chip X to remove.
+// Respects max limit and shows available count.
+export function AugmentPicker({ augments, selected, onChange, limit, disabled }: {
+  augments: { id: string; name: string }[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  limit: number;
+  disabled?: boolean;
+}) {
+  const available = augments.filter((a) => !selected.includes(a.id));
+  const selectedItems = augments.filter((a) => selected.includes(a.id));
+  const longestName = Math.max(...augments.map((a) => a.name.length), 0);
+  const pickerWidth = Math.max(280, longestName * 9 + 40);
+
+  return <div style={{ userSelect: "none" }}>
+    {selectedItems.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "6px" }}>
+      {selectedItems.map((aug) => <span key={aug.id} className="augment-chip" onClick={() => onChange(selected.filter((id) => id !== aug.id))} title={`Remove ${aug.name}`}>
+        {aug.name} <span className="augment-chip-x">&times;</span>
+      </span>)}
+    </div>}
+    {!disabled && selected.length < limit && available.length > 0 && <div className="augment-list" style={{ width: pickerWidth, maxHeight: "180px", overflowY: "auto" }}>
+      {available.map((aug) => <div key={aug.id} className="augment-option" onClick={() => onChange([...selected, aug.id])}>
+        {aug.name}
+      </div>)}
+    </div>}
+    {selected.length >= limit && limit > 0 && <p className="playerAdmin_note" style={{ margin: 0, color: "#9ca3af" }}>{limit === 1 ? "1 augment maximum." : `Maximum ${limit} augments selected.`}</p>}
+  </div>;
+}
