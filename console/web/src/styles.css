@@ -1908,3 +1908,50 @@ tr[data-faction="fremen"] td:first-child {
 [data-spice].panel-title h2 {
   color: var(--spice-text);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   AUTOMATIC FACTION COLORING SYSTEM
+   Any element tagged with data-faction or data-spice by the
+   factionTagger.js gets themed automatically.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Atreides (Green) ── */
+[data-faction="atreides"],
+[data-faction="atreides"] td,
+[data-faction="atreides"] span { color: #4ade80 !important; }
+[data-faction="atreides"] tr td:first-child,
+[data-faction="atreides"].metric-card,
+[data-faction="atreides"].card { border-left: 3px solid #16a34a !important; padding-left: 10px; }
+[data-faction="atreides"] strong,
+[data-faction="atreides"] .metric-label { color: #4ade80; }
+[data-faction="atreides"] h2,
+[data-faction="atreides"] h3 { color: #4ade80; }
+
+/* ── Harkonnen (Red) ── */
+[data-faction="harkonnen"],
+[data-faction="harkonnen"] td,
+[data-faction="harkonnen"] span { color: #f87171 !important; }
+[data-faction="harkonnen"] tr td:first-child,
+[data-faction="harkonnen"].metric-card,
+[data-faction="harkonnen"].card { border-left: 3px solid #ef4444 !important; padding-left: 10px; }
+[data-faction="harkonnen"] strong,
+[data-faction="harkonnen"] .metric-label { color: #f87171; }
+[data-faction="harkonnen"] h2,
+[data-faction="harkonnen"] h3 { color: #f87171; }
+
+/* ── Spice (Violet) ── */
+[data-spice],
+[data-spice] td,
+[data-spice] span { color: #c4b5fd !important; }
+[data-spice] tr td:first-child,
+[data-spice].metric-card,
+[data-spice].card { border-left: 3px solid #7c3aed !important; padding-left: 10px; }
+[data-spice] strong,
+[data-spice] .metric-label { color: #c4b5fd; }
+[data-spice] h2,
+[data-spice] h3 { color: #c4b5fd; }
+[data-spice] .section-copy { color: #c4b5fd; }
+
+/* ── Spice inventory items ── */
+.inventory-item[data-spice] { background: rgba(124,58,237,0.08); border-radius: 4px; padding: 2px 6px; }
+.storage-item[data-spice] { background: rgba(124,58,237,0.08); border-radius: 4px; padding: 2px 6px; }

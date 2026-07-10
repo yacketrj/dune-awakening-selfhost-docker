@@ -443,8 +443,16 @@ async function handleApi(req, res) {
 
       setSessionCookie(res, session, config);
       audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
-      res.writeHead(302, { Location: "/" });
-      return res.end();
+      // Serve SPA directly so Set-Cookie isn't lost in a redirect
+      const indexPath = join(config.staticDir || "", "index.html");
+      if (existsSync(indexPath)) {
+        res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
+        createReadStream(indexPath).pipe(res);
+      } else {
+        res.writeHead(302, { Location: "/" });
+        res.end();
+      }
+      return;
     } catch (error) {
       return json(res, 500, { ok: false, error: "Discord authentication failed." });
     }
