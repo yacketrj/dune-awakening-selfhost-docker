@@ -1867,91 +1867,43 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
   border: 1px solid rgba(37, 99, 235, .3);
 }
 
-/* ── Faction-Colored Rows ── */
-tr[data-faction="atreides"] td:first-child {
-  border-left: 3px solid #16a34a;
-  padding-left: 10px;
-}
-tr[data-faction="harkonnen"] td:first-child {
-  border-left: 3px solid #ef4444;
-  padding-left: 10px;
-}
-tr[data-faction="fremen"] td:first-child {
-  border-left: 3px solid #2563eb;
-  padding-left: 10px;
-}
-
-/* ── Faction-Colored Elements ── */
-[data-faction="atreides"] .faction-name,
-[data-faction="atreides"].faction-name {
-  color: #4ade80;
-  font-weight: 600;
-}
-[data-faction="harkonnen"] .faction-name,
-[data-faction="harkonnen"].faction-name {
-  color: #f87171;
-  font-weight: 600;
-}
-[data-faction="fremen"] .faction-name,
-[data-faction="fremen"].faction-name {
-  color: #60a5fa;
-  font-weight: 600;
-}
-
-/* ── Spice Colored Elements ── */
-[data-spice] .section-copy,
-[data-spice].section-copy {
-  color: var(--spice-text);
-}
-[data-spice] h2,
-[data-spice] h3,
-[data-spice].panel-title h2 {
-  color: var(--spice-text);
-}
-
 /* ══════════════════════════════════════════════════════════════
    AUTOMATIC FACTION COLORING SYSTEM
-   Any element tagged with data-faction or data-spice by the
-   factionTagger.js gets themed automatically.
+   faction-tagger.js tags elements → CSS colors them
    ══════════════════════════════════════════════════════════════ */
 
-/* ── Atreides (Green) ── */
+/* Atreides (Green) */
 [data-faction="atreides"],
+[data-faction="atreides"] *,
 [data-faction="atreides"] td,
-[data-faction="atreides"] span { color: #4ade80 !important; }
-[data-faction="atreides"] tr td:first-child,
-[data-faction="atreides"].metric-card,
-[data-faction="atreides"].card { border-left: 3px solid #16a34a !important; padding-left: 10px; }
+[data-faction="atreides"] th,
+[data-faction="atreides"] span,
+[data-faction="atreides"] p,
 [data-faction="atreides"] strong,
-[data-faction="atreides"] .metric-label { color: #4ade80; }
 [data-faction="atreides"] h2,
 [data-faction="atreides"] h3 { color: #4ade80; }
+[data-faction="atreides"] { border-left: 3px solid #16a34a; padding-left: 10px; }
 
-/* ── Harkonnen (Red) ── */
+/* Harkonnen (Red) */
 [data-faction="harkonnen"],
+[data-faction="harkonnen"] *,
 [data-faction="harkonnen"] td,
-[data-faction="harkonnen"] span { color: #f87171 !important; }
-[data-faction="harkonnen"] tr td:first-child,
-[data-faction="harkonnen"].metric-card,
-[data-faction="harkonnen"].card { border-left: 3px solid #ef4444 !important; padding-left: 10px; }
+[data-faction="harkonnen"] th,
+[data-faction="harkonnen"] span,
+[data-faction="harkonnen"] p,
 [data-faction="harkonnen"] strong,
-[data-faction="harkonnen"] .metric-label { color: #f87171; }
 [data-faction="harkonnen"] h2,
 [data-faction="harkonnen"] h3 { color: #f87171; }
+[data-faction="harkonnen"] { border-left: 3px solid #ef4444; padding-left: 10px; }
 
-/* ── Spice (Violet) ── */
+/* Spice (Violet) */
 [data-spice],
+[data-spice] *,
 [data-spice] td,
-[data-spice] span { color: #c4b5fd !important; }
-[data-spice] tr td:first-child,
-[data-spice].metric-card,
-[data-spice].card { border-left: 3px solid #7c3aed !important; padding-left: 10px; }
+[data-spice] th,
+[data-spice] span,
+[data-spice] p,
 [data-spice] strong,
-[data-spice] .metric-label { color: #c4b5fd; }
 [data-spice] h2,
 [data-spice] h3 { color: #c4b5fd; }
-[data-spice] .section-copy { color: #c4b5fd; }
-
-/* ── Spice inventory items ── */
-.inventory-item[data-spice] { background: rgba(124,58,237,0.08); border-radius: 4px; padding: 2px 6px; }
-.storage-item[data-spice] { background: rgba(124,58,237,0.08); border-radius: 4px; padding: 2px 6px; }
+[data-spice] { border-left: 3px solid #7c3aed; padding-left: 10px; }
