@@ -2628,7 +2628,12 @@ function isArmorTemplate(name) {
 }
 
 function buildItemStats({ augments = [], durability = {} } = {}) {
-  const customizationEntries = augments.length > 0 ? [augments] : [[]];
+  const customizationEntries = augments.length > 0
+    ? [augments.map((id) => ({
+        AugmentTemplateId: id,
+        FAugmentItemStats: { StatRolls: [0.3, 0.2, 0.1, 0.05, 0.0, 0.0, 0.0] }
+      }))]
+    : [[]];
   const durabilityObj = durability.max !== undefined
     ? { CurrentDurability: Number(durability.current ?? durability.max), MaxDurability: Number(durability.max), DecayedMaxDurability: Number(durability.max), DecayedDurability: Number(durability.current ?? durability.max) }
     : {};
