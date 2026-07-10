@@ -1303,7 +1303,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
               {playerAdmin_filteredPlaceableItems.map((item) => {
                 const active = playerAdmin_placeableSelection?.id === item.id;
                 return <button key={item.id} className={`catalog-item-option ${active ? "active" : ""}`} onClick={() => playerAdmin_setPlaceableSelection(active ? null : item)}>
-                  <CatalogItemThumb item={item} />
+                  <CatalogItemThumb item={item} small />
                   <span><strong>{item.name}</strong><small style={{ color: "#ad9f89" }}>{friendlyCatalogName(item.id)}</small></span>
                 </button>;
               })}
