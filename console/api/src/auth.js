@@ -79,7 +79,7 @@ export function createAuth(config) {
     const id = randomBytes(32).toString("base64url");
     const csrf = randomBytes(24).toString("base64url");
     const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
-    const session = { id, csrf, expiresAt, actorId: "local:admin" };
+    const session = { id, csrf, expiresAt, actorId: "local:admin", authSource: "local" };
     stampSessionCapabilities(session);
     sessions.set(id, session);
     return { ...session, cookie: `${id}.${sign(id)}` };
@@ -87,7 +87,7 @@ export function createAuth(config) {
 
   function readSession(req) {
     if (config.authDisabled) {
-      const s = { id: "dev", csrf: "dev", expiresAt: Number.MAX_SAFE_INTEGER, actorId: "local:dev" };
+      const s = { id: "dev", csrf: "dev", expiresAt: Number.MAX_SAFE_INTEGER, actorId: "local:dev", authSource: "local" };
       stampSessionCapabilities(s);
       return s;
     }
