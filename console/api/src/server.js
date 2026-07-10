@@ -846,7 +846,7 @@ function addonContentRoute(req, res, path) {
   if (!existsSync(target)) return json(res, 404, { error: "Addon content file not found." });
   res.writeHead(200, withSecurityHeaders({
     "content-type": contentTypeForPath(target),
-    "x-frame-options": "SAMEORIGIN"
+    "cache-control": "no-cache, no-store, must-revalidate"
   }));
   createReadStream(target).pipe(res);
 }
