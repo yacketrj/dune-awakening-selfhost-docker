@@ -3826,6 +3826,17 @@ function emptyActivitySummary() {
   };
 }
 
+function mapDisplayName(backendName) {
+  const mapping = {
+    HaggaBasin: "Survival_1",
+    DeepDesert: "DeepDesert_1",
+    Overland: "Overmap",
+    Arrakeen: "SH_Arrakeen",
+    HarkoVillage: "SH_HarkoVillage"
+  };
+  return mapping[backendName] || backendName;
+}
+
 export async function addonOpsResourcesSummary(db) {
   if (!(await tableExists(db, "resourcefield_state"))) return emptyResourcesSummary();
 
@@ -3847,7 +3858,7 @@ export async function addonOpsResourcesSummary(db) {
         where field_kind_id = 1
         group by map
         order by fields desc`);
-    resourcesByMap = mapResult.rows || [];
+    resourcesByMap = (mapResult.rows || []).map(row => ({ ...row, map: mapDisplayName(row.map) }));
   } catch { }
 
   let spiceFieldsBySize = [];
@@ -3871,7 +3882,7 @@ export async function addonOpsResourcesSummary(db) {
                        where rfs2.map = sft.map_name and rfs2.field_kind_id = 1)
         group by sft.field_type, sft.map_name
         order by sft.map_name, sft.field_type`);
-      spiceFieldsBySize = spiceResult.rows || [];
+      spiceFieldsBySize = (spiceResult.rows || []).map(row => ({ ...row, map: mapDisplayName(row.map) }));
     }
   } catch { }
 
