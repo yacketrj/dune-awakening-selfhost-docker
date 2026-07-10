@@ -147,7 +147,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   // Load placeable building items from catalog
   useEffect(() => {
     adminApi.itemCatalog("", 10000).then((result) => {
-      const items = (result.rows || []).filter((item) => item.category === "buildings" || item.category === "placeables");
+      const items = (result.rows || []).filter((item) => item.category === "buildings");
       playerAdmin_setPlaceableItems(items.map((item) => ({ id: item.itemId || item.id, name: item.name, category: item.category, itemId: item.itemId || item.id, image: item.image })));
     }).catch(() => {});
   }, []);
