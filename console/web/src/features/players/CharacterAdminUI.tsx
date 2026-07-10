@@ -50,6 +50,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   const [playerAdmin_researchFilter, playerAdmin_setResearchFilter] = useState("");
   const [playerAdmin_skillSchool, playerAdmin_setSkillSchool] = useState("Trooper");
   const [playerAdmin_xpAmount, playerAdmin_setXpAmount] = useState("1000");
+  const [playerAdmin_levelAmount, playerAdmin_setLevelAmount] = useState("10");
   const [playerAdmin_currencyType, playerAdmin_setCurrencyType] = useState("Solari Credit");
   const [playerAdmin_currencyAmount, playerAdmin_setCurrencyAmount] = useState("100");
   const [playerAdmin_intelAmount, playerAdmin_setIntelAmount] = useState("100");
@@ -136,6 +137,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
     }));
   }, [playerAdmin_itemName, playerAdmin_itemId, playerAdmin_selectedItem?.category, playerAdmin_augmentCatalog]);
   const playerAdmin_factionIds: Record<string, number> = { Atreides: 1, Harkonnen: 2, Smuggler: 4 };
+  const XP_TABLE: Record<number, number> = {1:40,2:215,3:440,4:740,5:1240,6:1790,7:2390,8:2990,9:3590,10:4190,11:4790,12:5390,13:5990,14:6590,15:7190,16:7790,17:8390,18:8990,19:9590,20:10190,21:10790,22:11390,23:11990,24:12590,25:13190,26:13790,27:14390,28:14990,29:15590,30:16190,31:16790,32:17390,33:17990,34:18590,35:19190,36:19790,37:20390,38:20990,39:21590,40:22190,41:22790,42:23390,43:23990,44:24590,45:25190,46:25790,47:26390,48:26990,49:27590,50:28190,51:28790,52:29390,53:29990,54:30590,55:31190,56:31790,57:32390,58:32990,59:33590,60:34190,61:34790,62:35390,63:35990,64:36590,65:37190,66:37790,67:38390,68:38990,69:39590,70:40190,71:40790,72:41390,73:41990,74:42590,75:43190,76:43790,77:44390,78:44990,79:45590,80:46190,81:46790,82:47390,83:47990,84:48590,85:49190,86:49790,87:50390,88:50990,89:51590,90:52190,91:52790,92:53390,93:53990,94:54590,95:55190,96:55790,97:56390,98:56990,99:57590,100:58190,101:58840,102:59490,103:60140,104:60790,105:61440,106:62090,107:62740,108:63390,109:64040,110:64690,111:65340,112:65990,113:66640,114:67290,115:67940,116:68590,117:69240,118:69890,119:70540,120:71190,121:71840,122:72490,123:73140,124:73790,125:74440,126:75090,127:75740,128:76391,129:77044,130:77699,131:78357,132:79018,133:79682,134:80349,135:81019,136:81692,137:82368,138:83047,139:83729,140:84414,141:85102,142:85793,143:86487,144:87184,145:87884,146:88587,147:89293,148:90002,149:90714,150:91429,151:92147,152:92868,153:93592,154:94319,155:95049,156:95782,157:96518,158:97257,159:97999,160:98744,161:99492,162:100243,163:100997,164:101754,165:102514,166:103277,167:104043,168:104812,169:105584,170:106359,171:107137,172:107918,173:108702,174:109489,175:110279,176:111072,177:111868,178:112667,179:113469,180:114274,181:115082,182:115893,183:116707,184:117524,185:118344,186:119167,187:119993,188:120822,189:121654,190:122489,191:123327,192:124168,193:125012,194:125859,195:126709,196:127562,197:128418,198:129277,199:130139,200:131004};
   const playerAdmin_craftingCategories = ["Essentials", "Water Discipline", "Combat", "Construction", "Exploration", "Vehicles"];
   const playerAdmin_isOnline = String(firstDefined(detail?.online_status, fallback.online_status) || "").toLowerCase() === "online";
   const playerAdmin_canRunLiveAction = Boolean(actionPlayerId) && playerAdmin_isOnline;
@@ -356,6 +358,46 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
       playerAdmin_setBusyActionKey("");
     }
   }
+  async function playerAdmin_grantAllResearch() {
+    const items = playerAdmin_researchRows;
+    if (!items.length) { playerAdmin_showResult("researchGrantAll", "No research items loaded. Click Reload first.", "danger"); return; }
+    if (!(await confirmAction(`Unlock ALL ${items.length} research items for ${playerName}? The player must be offline and should relog after.`))) return;
+    playerAdmin_setBusyActionKey("researchGrantAll");
+    try {
+      let count = 0;
+      for (const row of items) {
+        try { await playersApi.unlockResearchItem(dbPlayerId, { itemKey: row.itemKey, confirmation: "UNLOCK RESEARCH ITEM" }); count++; }
+        catch {}
+      }
+      playerAdmin_showResult("researchGrantAll", `${count} of ${items.length} research items unlocked. Reloading...`, "success");
+      await playerAdmin_loadResearchItems();
+      await playerAdmin_loadCraftingRecipes();
+    } catch (error) {
+      playerAdmin_showResult("researchGrantAll", friendlyInlineError(error), "danger");
+    } finally {
+      playerAdmin_setBusyActionKey("");
+    }
+  }
+  async function playerAdmin_grantCategoryResearch(category: string) {
+    const items = playerAdmin_researchRows.filter((r) => r.category === category);
+    if (!items.length) { playerAdmin_showResult("researchGrantCat", `No research items in ${category}.`, "danger"); return; }
+    if (!(await confirmAction(`Unlock ${items.length} research items in ${category} for ${playerName}?`))) return;
+    playerAdmin_setBusyActionKey("researchGrantCat");
+    try {
+      let count = 0;
+      for (const row of items) {
+        try { await playersApi.unlockResearchItem(dbPlayerId, { itemKey: row.itemKey, confirmation: "UNLOCK RESEARCH ITEM" }); count++; }
+        catch {}
+      }
+      playerAdmin_showResult("researchGrantCat", `${count} of ${items.length} ${category} items unlocked.`, "success");
+      await playerAdmin_loadResearchItems();
+      await playerAdmin_loadCraftingRecipes();
+    } catch (error) {
+      playerAdmin_showResult("researchGrantCat", friendlyInlineError(error), "danger");
+    } finally {
+      playerAdmin_setBusyActionKey("");
+    }
+  }
   async function playerAdmin_loadSkillCatalog() {
     playerAdmin_setSkillCatalogLoading(true);
     playerAdmin_setSkillCatalogError("");
@@ -537,6 +579,40 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   function playerAdmin_discardSkillChanges() {
     playerAdmin_setSkillChanges({});
     playerAdmin_showResult("skillSave", "Skill changes were discarded.", "neutral");
+  }
+  async function playerAdmin_grantAllSkills() {
+    const modules = playerAdmin_skillCatalog;
+    if (!modules.length) { playerAdmin_showResult("skillGrantAll", "No skill modules loaded. Click Reload first.", "danger"); return; }
+    if (!(await confirmAction(`Set ALL ${modules.length} skill modules to max level for ${playerName}?`))) return;
+    playerAdmin_showResult("skillGrantAll", `Granting ${modules.length} skills...`, "neutral", true);
+    try {
+      let count = 0;
+      for (const mod of modules) {
+        try { await playerAdmin_runTask(() => playersApi.setSkillModule(actionPlayerId, { module: mod.skillModule, level: mod.maxLevel })); count++; }
+        catch {}
+      }
+      playerAdmin_showResult("skillGrantAll", `${count} of ${modules.length} skills granted.`, "success");
+      playerAdmin_addLog("Grant All Skills", playerName, String(count), "Succeeded");
+    } catch (error) {
+      playerAdmin_showResult("skillGrantAll", friendlyInlineError(error), "danger");
+    }
+  }
+  async function playerAdmin_grantSchoolSkills(school: string) {
+    const modules = playerAdmin_skillCatalog.filter((m) => m.category === school);
+    if (!modules.length) { playerAdmin_showResult("skillGrantSchool", `No skill modules found for ${school}.`, "danger"); return; }
+    if (!(await confirmAction(`Set ${modules.length} skill modules in ${school} to max level for ${playerName}?`))) return;
+    playerAdmin_showResult("skillGrantSchool", `Granting ${modules.length} ${school} skills...`, "neutral", true);
+    try {
+      let count = 0;
+      for (const mod of modules) {
+        try { await playerAdmin_runTask(() => playersApi.setSkillModule(actionPlayerId, { module: mod.skillModule, level: mod.maxLevel })); count++; }
+        catch {}
+      }
+      playerAdmin_showResult("skillGrantSchool", `${count} of ${modules.length} ${school} skills granted.`, "success");
+      playerAdmin_addLog("Grant Skills", school, String(count), "Succeeded");
+    } catch (error) {
+      playerAdmin_showResult("skillGrantSchool", friendlyInlineError(error), "danger");
+    }
   }
   function playerAdmin_mapJourneyRows(rows: unknown) {
     const raw = rows && typeof rows === "object" ? rows as Record<string, unknown> : {};
@@ -1116,6 +1192,11 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
                   : playerAdmin_actionResultOrNote("water", "The player must be online.")}
               </div>
           </div>
+          {playerAdmin_actionRow("level", "Give Level", <input type="number" min="1" max="200" value={playerAdmin_levelAmount} onChange={(event) => playerAdmin_setLevelAmount(event.target.value)} />, "Level Up", () => {
+            const targetLevel = Number(playerAdmin_levelAmount) || 10;
+            const xpNeeded = XP_TABLE[targetLevel] || 0;
+            playerAdmin_runAction("level", `Setting ${playerName} to Level ${targetLevel}`, () => playerAdmin_runTask(() => playersApi.addXp(actionPlayerId, xpNeeded)), `${playerName} was set to Level ${targetLevel} (${xpNeeded} XP).`, { actionType: "Give Level", target: playerName, amount: String(targetLevel) });
+          }, !playerAdmin_canRunLiveAction, "The player must be online.")}
           {playerAdmin_actionRow("xp", "Give XP", <input type="number" min="1" value={playerAdmin_xpAmount} onChange={(event) => playerAdmin_setXpAmount(event.target.value)} />, "Give", () => playerAdmin_runAction("xp", `Giving ${Number(playerAdmin_xpAmount) || 0} XP to ${playerName}`, () => playerAdmin_runTask(() => playersApi.addXp(actionPlayerId, Number(playerAdmin_xpAmount) || 0)), `${playerName} received ${Number(playerAdmin_xpAmount) || 0} XP.`, { actionType: "Give XP", target: playerName, amount: String(Number(playerAdmin_xpAmount) || 0) }), !playerAdmin_canRunLiveAction, "The player must be online.")}
           {playerAdmin_actionRow("currency", "Give Currency", <><select value={playerAdmin_currencyType} onChange={(event) => playerAdmin_setCurrencyType(event.target.value)}><option>Solari Credit</option><option>Scrip</option></select><input type="number" min="1" value={playerAdmin_currencyAmount} onChange={(event) => playerAdmin_setCurrencyAmount(event.target.value)} /></>, "Give", () => playerAdmin_runAction("currency", `Giving ${Number(playerAdmin_currencyAmount) || 0} ${playerAdmin_currencyType} to ${playerName}`, () => playersApi.addCurrency(dbPlayerId, { currencyId: playerAdmin_currencyType === "Scrip" ? 1 : 0, amount: Number(playerAdmin_currencyAmount) || 0, confirmation: "ADD CURRENCY" }), `${playerName}'s ${playerAdmin_currencyType} was updated. Relog required.`, { actionType: `Give ${playerAdmin_currencyType}`, target: playerName, amount: String(Number(playerAdmin_currencyAmount) || 0) }), !dbPlayerId, "A relog is required to see the change.")}
           {playerAdmin_actionRow("intel", "Give Intel", <input type="number" min="1" value={playerAdmin_intelAmount} onChange={(event) => playerAdmin_setIntelAmount(event.target.value)} />, "Give", () => playerAdmin_runAction("intel", `Giving ${Number(playerAdmin_intelAmount) || 0} Intel to ${playerName}`, () => playersApi.addIntel(dbPlayerId, { amount: Number(playerAdmin_intelAmount) || 0, confirmation: "ADD INTEL" }), `${playerName}'s Intel was updated and will load on next join.`, { actionType: "Give Intel", target: playerName, amount: String(Number(playerAdmin_intelAmount) || 0) }), !dbPlayerId || playerAdmin_isOnline, playerAdmin_isOnline ? "The player must be offline." : "The player must be offline for this database edit.")}
@@ -1172,6 +1253,8 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
               </div>
               <div className="playerAdmin_filterActionsRight">
                 {playerAdmin_researchCategory && <select value={playerAdmin_productGroup} onChange={(playerAdmin_event) => playerAdmin_setProductGroup(playerAdmin_event.target.value)}><option value="">All Product Groups</option>{playerAdmin_researchGroups[playerAdmin_researchCategory].map((playerAdmin_option) => <option key={playerAdmin_option}>{playerAdmin_option}</option>)}</select>}
+                <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllResearch()}>Grant All Research</button>
+                {playerAdmin_researchCategory && <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantCategoryResearch(playerAdmin_researchCategory)}>Grant {playerAdmin_researchCategory}</button>}
                 <button disabled={!dbPlayerId || playerAdmin_researchLoading} onClick={() => playerAdmin_loadResearchItems()}>{playerAdmin_researchLoading ? "Loading..." : "Reload"}</button>
               </div>
             </div>
@@ -1200,6 +1283,8 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
               <p>Use Restore Starter Skills after a progression reset leaves the starting tree locked.</p>
               <div className="playerAdmin_filterRow playerAdmin_filterRowRight">
                 <span className="playerAdmin_note">{playerAdmin_skillChangeCount} Unsaved Change{playerAdmin_skillChangeCount === 1 ? "" : "s"}</span>
+                <button disabled={!playerAdmin_canRunLiveAction || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllSkills()}>Grant All Skills</button>
+                {playerAdmin_skillSchool && <button disabled={!playerAdmin_canRunLiveAction || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantSchoolSkills(playerAdmin_skillSchool)}>Grant {playerAdmin_skillSchool} Skills</button>}
                 <button disabled={!playerAdmin_canRunLiveAction || !playerAdmin_starterSkillPreset || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_restoreStarterSkills()}>Restore Starter Skills</button>
                 <button disabled={playerAdmin_skillCatalogLoading || playerAdmin_specializationLoading} onClick={() => playerAdmin_reloadSkills()}>{playerAdmin_skillCatalogLoading || playerAdmin_specializationLoading ? "Loading..." : "Reload"}</button>
                 <InlineActionResult result={playerAdmin_actionResult} resultKey="starterSkills" />
