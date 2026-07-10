@@ -256,6 +256,9 @@ export const RESOURCE_TEMPLATE_IDS: Record<string, string> = {
 export function resourceTemplateId(name: string): string {
   return RESOURCE_TEMPLATE_IDS[name] || name.replace(/\s+/g, "");
 }
+
+// Map admin-items.json building IDs to placeable resource keys
+export function placeableRecipeKey(itemId: string): string | null {
   const id = String(itemId || "");
   if (PLACEABLE_RESOURCES[id]) return id;
   const lower = id.toLowerCase().replace(/_patent$|_placeable$/, "");
