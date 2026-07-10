@@ -1,20 +1,20 @@
-// Auto-tags DOM elements with data-faction or data-spice based on text content.
-// Runs once on import, then watches for mutations.
+// Auto-tags DOM elements with data-tagged-faction or data-tagged-spice
+// based on text content. Separate from data-faction (used for CSS theme).
 (function init() {
   const FACTION_RE = { atreides: /atreides/i, harkonnen: /harkonnen/i };
   const SPICE_RE = /spice|melange/i;
 
   function tag(el) {
-    if (!el?.textContent || el.hasAttribute("data-faction") || el.hasAttribute("data-spice")) return;
+    if (!el?.textContent || el.hasAttribute("data-tagged-faction") || el.hasAttribute("data-tagged-spice")) return;
     const t = el.textContent.slice(0, 100).toLowerCase();
     for (const [f, re] of Object.entries(FACTION_RE)) {
-      if (re.test(t)) { el.setAttribute("data-faction", f); return; }
+      if (re.test(t)) { el.setAttribute("data-tagged-faction", f); return; }
     }
-    if (SPICE_RE.test(t)) el.setAttribute("data-spice", "");
+    if (SPICE_RE.test(t)) el.setAttribute("data-tagged-spice", "");
   }
 
   function scan() {
-    document.querySelectorAll("tr, td, th, .metric-card, .card, article, .section-heading, h2, h3, span, .inventory-item, .storage-item").forEach(tag);
+    document.querySelectorAll("tr, td, th, .metric-card, .card, article, .section-heading, h2, h3, span, p, strong, li").forEach(tag);
   }
 
   scan();

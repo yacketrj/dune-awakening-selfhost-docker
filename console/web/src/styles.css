@@ -1870,40 +1870,29 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
 /* ══════════════════════════════════════════════════════════════
    AUTOMATIC FACTION COLORING SYSTEM
    faction-tagger.js tags elements → CSS colors them
+   Uses data-tagged-* to avoid conflict with :root theme data-faction
    ══════════════════════════════════════════════════════════════ */
 
 /* Atreides (Green) */
-[data-faction="atreides"],
-[data-faction="atreides"] *,
-[data-faction="atreides"] td,
-[data-faction="atreides"] th,
-[data-faction="atreides"] span,
-[data-faction="atreides"] p,
-[data-faction="atreides"] strong,
-[data-faction="atreides"] h2,
-[data-faction="atreides"] h3 { color: #4ade80; }
-[data-faction="atreides"] { border-left: 3px solid #16a34a; padding-left: 10px; }
+[data-tagged-faction="atreides"],
+[data-tagged-faction="atreides"] td,
+[data-tagged-faction="atreides"] th,
+[data-tagged-faction="atreides"] span,
+[data-tagged-faction="atreides"] strong { color: #4ade80; }
+[data-tagged-faction="atreides"] { border-left: 3px solid #16a34a; padding-left: 10px; }
 
 /* Harkonnen (Red) */
-[data-faction="harkonnen"],
-[data-faction="harkonnen"] *,
-[data-faction="harkonnen"] td,
-[data-faction="harkonnen"] th,
-[data-faction="harkonnen"] span,
-[data-faction="harkonnen"] p,
-[data-faction="harkonnen"] strong,
-[data-faction="harkonnen"] h2,
-[data-faction="harkonnen"] h3 { color: #f87171; }
-[data-faction="harkonnen"] { border-left: 3px solid #ef4444; padding-left: 10px; }
+[data-tagged-faction="harkonnen"],
+[data-tagged-faction="harkonnen"] td,
+[data-tagged-faction="harkonnen"] th,
+[data-tagged-faction="harkonnen"] span,
+[data-tagged-faction="harkonnen"] strong { color: #f87171; }
+[data-tagged-faction="harkonnen"] { border-left: 3px solid #ef4444; padding-left: 10px; }
 
 /* Spice (Violet) */
-[data-spice],
-[data-spice] *,
-[data-spice] td,
-[data-spice] th,
-[data-spice] span,
-[data-spice] p,
-[data-spice] strong,
-[data-spice] h2,
-[data-spice] h3 { color: #c4b5fd; }
-[data-spice] { border-left: 3px solid #7c3aed; padding-left: 10px; }
+[data-tagged-spice],
+[data-tagged-spice] td,
+[data-tagged-spice] th,
+[data-tagged-spice] span,
+[data-tagged-spice] strong { color: #c4b5fd; }
+[data-tagged-spice] { border-left: 3px solid #7c3aed; padding-left: 10px; }
