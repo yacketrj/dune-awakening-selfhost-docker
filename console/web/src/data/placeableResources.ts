@@ -171,9 +171,18 @@ export const PLACEABLE_RESOURCES: Record<string, { name: string; qty: number }[]
     { name: "Concrete", qty: 60 }
   ],
   "MediumStorageContainer_Patent": [
-    { name: "Iron Ingot", qty: 40 },
-    { name: "Plant Fiber", qty: 30 },
-    { name: "Concrete", qty: 20 }
+    { name: "Plastanium Ingot", qty: 70 },
+    { name: "Silicone Block", qty: 14 },
+    { name: "Spice Melange", qty: 4 }
+  ],
+  "StorageContainer_Patent": [
+    { name: "Aluminum Ingot", qty: 45 },
+    { name: "Silicone Block", qty: 8 }
+  ],
+  "Developer_Storage_Container_Patent": [
+    { name: "Plastanium Ingot", qty: 100 },
+    { name: "Silicone Block", qty: 20 },
+    { name: "Spice Melange", qty: 8 }
   ],
   "MediumWaterCistern_Patent": [
     { name: "Iron Ingot", qty: 50 },
