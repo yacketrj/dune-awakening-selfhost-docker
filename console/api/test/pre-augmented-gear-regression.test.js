@@ -78,7 +78,7 @@ test("augment regression: grant pipeline composes valid JSONB", async () => {
     assert.equal(result.inserted.template_id, WEAPON_SWORD);
     const insert = calls.find((c) => c.text.includes("insert into dune.items"));
     const stats = JSON.parse(insert.values[5]);
-    assert.deepEqual(stats.FCustomizationStats[0], [AUGMENT_MELEE_DAMAGE, AUGMENT_MELEE_GRIP]);
+  assert.deepEqual(stats.FCustomizationStats[0], [{ AugmentTemplateId: AUGMENT_MELEE_DAMAGE, FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] } }, { AugmentTemplateId: AUGMENT_MELEE_GRIP, FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] } }]);
     assert.equal(stats.FItemStackAndDurabilityStats[1].CurrentDurability, 100);
     assert.equal(stats.FItemStackAndDurabilityStats[1].MaxDurability, 100);
   } finally {
@@ -100,7 +100,7 @@ test("augment regression: grant grade 5 item with augments", async () => {
     assert.equal(result.inserted.quality_level, 5);
     const insert = calls.find((c) => c.text.includes("insert into dune.items"));
     const stats = JSON.parse(insert.values[5]);
-    assert.deepEqual(stats.FCustomizationStats[0], [AUGMENT_MELEE_DAMAGE]);
+    assert.deepEqual(stats.FCustomizationStats[0], [{ AugmentTemplateId: AUGMENT_MELEE_DAMAGE, FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] } }]);
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
   }
@@ -117,7 +117,7 @@ test("augment regression: storage grant with augments", async () => {
   });
   assert.deepEqual(result.augments, [AUGMENT_MELEE_DAMAGE]);
   const stats = JSON.parse(calls.find((c) => c.text.includes("insert")).values[5]);
-  assert.deepEqual(stats.FCustomizationStats[0], [AUGMENT_MELEE_DAMAGE]);
+  assert.deepEqual(stats.FCustomizationStats[0], [{ AugmentTemplateId: AUGMENT_MELEE_DAMAGE, FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] } }]);
   assert.deepEqual(stats.FItemStackAndDurabilityStats[1], {});
 });
 

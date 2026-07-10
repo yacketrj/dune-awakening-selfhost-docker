@@ -1146,7 +1146,9 @@ test("player give-item with augments populates FCustomizationStats", async () =>
   const insert = calls.find((call) => call.text.includes("insert into dune.items"));
   assert.ok(insert);
   const stats = JSON.parse(insert.values[5]);
-  assert.deepEqual(stats.FCustomizationStats, [["T6_Augment_Melee1", "T6_Augment_Melee4"], {}]);
+  const expected = ["T6_Augment_Melee1", "T6_Augment_Melee4"].map((id) => ({ AugmentTemplateId: id, FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] } }));
+  assert.deepEqual(stats.FCustomizationStats[0], expected);
+  assert.deepEqual(stats.FCustomizationStats[1], {});
 });
 
 test("player give-item with augments forces DB path with durability on grade 0 items", async () => {
@@ -1176,7 +1178,7 @@ test("storage give-item with augments populates FCustomizationStats", async () =
   const insert = calls.find((call) => call.text.includes("insert into dune.items"));
   assert.ok(insert);
   const stats = JSON.parse(insert.values[5]);
-  assert.deepEqual(stats.FCustomizationStats, [["T6_Augment_Melee1"], {}]);
+  const expected1 = ["T6_Augment_Melee1"].map(id => ({ AugmentTemplateId: id, FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] } })); assert.deepEqual(stats.FCustomizationStats[0], expected1); assert.deepEqual(stats.FCustomizationStats[1], {});
 });
 
 test("augment inventory item applies augment IDs to existing item FCustomizationStats", async () => {
