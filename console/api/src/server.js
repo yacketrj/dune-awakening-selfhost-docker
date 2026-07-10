@@ -230,9 +230,22 @@ function dockerPsNames() {
 }
 
 // ── RBAC Route Registration ──
-// Phase 2: Route-level capability enforcement for Web UI routes.
-// Routes declare their capability at registration time. Sessions are checked.
-// Admin password sessions get all capabilities (backward compatible).
+
+function resolveRoleDisplay(roleIds) {
+  const owners = parseCsv(process.env.DISCORD_OWNER_ROLE_IDS);
+  const admins = parseCsv(process.env.DISCORD_ADMIN_ROLE_IDS);
+  const mods = parseCsv(process.env.DISCORD_MODERATOR_ROLE_IDS);
+  const obs = parseCsv(process.env.DISCORD_OBSERVER_ROLE_IDS);
+  if (roleIds.some(r => owners.includes(r))) return "owner";
+  if (roleIds.some(r => admins.includes(r))) return "admin";
+  if (roleIds.some(r => mods.includes(r))) return "moderator";
+  if (roleIds.some(r => obs.includes(r))) return "observer";
+  return "public";
+}
+
+function parseCsv(value) { return String(value || "").split(",").map(s => s.trim()).filter(Boolean); }
+
+// ── RBAC Route Registration ──
 
 const routeCapabilities = new Map();
 const oauthStates = new Map(); // short-lived OAuth2 state tokens
@@ -269,10 +282,10 @@ async function handleApi(req, res) {
       csrfToken: session.csrf || null,
       config: publicConfig(config),
       user: {
-        name: session.discordUsername || session.actorId || "Admin",
-        avatar: null,
+        name: session.discordUsername || (session.authSource === "local" ? "Console Admin" : session.actorId || "Unknown"),
+        avatar: session.discordUsername ? `https://cdn.discordapp.com/avatars/${session.actorId?.replace("discord:", "")}/${session.avatar || "0"}.png` : null,
         source: session.authSource || "local",
-        role: "owner"
+        role: session.roleIds?.length > 0 ? resolveRoleDisplay(session.roleIds) : (session.authSource === "local" ? "owner" : "public")
       }
     } : {
       authenticated: false,
@@ -299,7 +312,7 @@ async function handleApi(req, res) {
     return json(res, 200, {
       authenticated: true,
       csrfToken: session.csrf,
-      user: { name: "Admin", avatar: null, source: "local", role: "owner" }
+      user: { name: "Console Admin", avatar: null, source: "local", role: "owner" }
     });
   }
   if (path === "/api/auth/logout" && req.method === "POST") {
