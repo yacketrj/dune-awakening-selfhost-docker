@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Grid2X2, List } from "lucide-react";
 import { adminApi } from "../../api/admin";
 import { titleCase } from "../../lib/display";
@@ -13,6 +13,8 @@ export type CatalogItem = {
   image?: string;
 };
 
+const CATALOG_CACHE: { items: CatalogItem[]; repoRoot: string } | null = null;
+
 export function ItemCatalogSelector({ label = "Select Item", selected, onSelect, placeholder = "Filter loaded item catalog" }: { label?: string; selected: CatalogItem | null; onSelect: (item: CatalogItem | null) => void; placeholder?: string }) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -21,6 +23,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   async function load() {
+    if (items.length > 0) return;
     setLoading(true);
     try {
       const result = await adminApi.itemCatalog("", 10000);
@@ -34,17 +37,21 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
     void load();
   }, []);
 
-  const categoryCounts = items.reduce<Record<string, number>>((counts, item) => {
+  const categoryCounts = useMemo(() => items.reduce<Record<string, number>>((counts, item) => {
     const key = item.category || "uncategorized";
     counts[key] = (counts[key] || 0) + 1;
     return counts;
-  }, {});
-  const categories = ["all", ...Object.keys(categoryCounts).sort()];
-  const filteredItems = items.filter((item) => {
-    const matchesCategory = category === "all" || item.category === category;
-    const haystack = `${item.name} ${item.id} ${item.category || ""} ${item.source || ""}`.toLowerCase();
-    return matchesCategory && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
-  }).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id, undefined, { sensitivity: "base" }));
+  }, {}), [items]);
+  const categories = useMemo(() => ["all", ...Object.keys(categoryCounts).sort()], [categoryCounts]);
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((item) => {
+      const matchesCategory = category === "all" || item.category === category;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+      return item.name.toLowerCase().includes(q) || item.id.toLowerCase().includes(q);
+    }).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id, undefined, { sensitivity: "base" }));
+  }, [items, category, query]);
 
   return <div className="catalog-selector">
     <div className="catalog-filter-row">
