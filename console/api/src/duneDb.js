@@ -1569,7 +1569,7 @@ export async function playerInventory(db, id) {
            i.stats
     from dune.items i
     join dune.inventories inv on i.inventory_id = inv.id
-    where inv.actor_id = $1
+    where inv.actor_id = $1 and inv.inventory_type in (0, 1, 15)
     order by i.template_id`, [intParam(id, "player id", 1)]);
   return { capabilities: { inventory: true }, rows: result.rows };
 }
@@ -3587,7 +3587,7 @@ export async function searchItemsInPlayerInventory(db, playerPawnId, query) {
            ) as max_durability
     from dune.items i
     join dune.inventories inv on i.inventory_id = inv.id
-    where inv.actor_id = $1
+    where inv.actor_id = $1 and inv.inventory_type in (0, 1, 15)
       and i.template_id ilike $2
     order by i.template_id
     limit 200`, [intParam(playerPawnId, "player pawn id", 1), searchTerm]);
