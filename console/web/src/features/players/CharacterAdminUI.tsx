@@ -112,7 +112,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
     }
     const isArmor = /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name) || cat === "clothing";
     const rangedGeneric = new Set(["Damage","Acuracy","Shielddamage","Range","Recoil","ReloadSpeed","Rateoffire","Magazinecapacity","Headshotdamage"]); const commonGeneric = new Set(["DeathDurability","Ch5"]);
-    const wp = (id: string) => { const m = id.match(/^T6_Augment_(.+?)\d+$/); return m ? m[1] : ""; };
+    const wp = (id: string) => { const trimmed = id.replace(/_Schematic$/i, ""); const m = trimmed.match(/^T\d+_Augment_(.+?)\d+$/); return m ? m[1] : ""; };
     const weaponMap: [RegExp, Set<string>][] = [
       [/lasgun|ChoamLg/i, new Set(["Lasgun"])], [/spitdart|jabal|LongRifle|LogRifle|SmugDmr|Rifle_Long/i, new Set(["Spitdartrifle","SpitdartRifle"])],
       [/disruptor| smg|SMG|AtreSmg|UniqueSmg/i, new Set(["smg","Smg"])], [/karpov|battle.?rifle|\bBR\b|HarkAr|UniqueAr|AtreBR/i, new Set(["BR"])],
@@ -174,8 +174,7 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
   useEffect(() => {
     adminApi.itemCatalog("", 10000).then((result) => {
       const augs = (result.rows || []).filter((item) =>
-        (item.category || "").toLowerCase().includes("augment") ||
-        (item.source || "").toLowerCase() === "augments"
+        /T\d+_Augment/i.test(item.id || "") && ((item.category || "").toLowerCase() || "").includes("schematics")
       ).map((item) => ({ id: item.itemId || item.id, name: item.name }));
       playerAdmin_setAugmentCatalog(augs);
     }).catch(() => playerAdmin_setAugmentCatalog([]));
