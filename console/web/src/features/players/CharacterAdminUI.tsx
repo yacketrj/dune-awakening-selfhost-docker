@@ -6,7 +6,7 @@ import type { Task } from "../../api/setup";
 import { compareTableValues, DataTable, useResizableColumns, useSortableRows, useSortState } from "../../components/common/DataTable";
 import { InlineActionResult } from "../../components/common/InlineActionResult";
 import { ItemCatalogSelector, ItemGradeSelect, MAX_ARMOR_AUGMENTS, PackageItemPreview, AugmentPicker, augmentLimit, catalogItemId, catalogItemName, friendlyCatalogName, buildingSubCategory, CatalogItemThumb, grantItemDurability, itemGrade, normalizeItemGrade, type CatalogItem } from "../../components/common/ItemCatalog";
-import { PLACEABLE_RESOURCES, placeableRecipeKey, resourceTemplateId } from "../../data/placeableResources";
+import { PLACEABLE_RESOURCES, placeableRecipeKey, resourceTemplateId, totalPlaceableVolume, RESOURCE_VOLUME } from "../../data/placeableResources";
 import { firstDefined, formatCell } from "../../lib/display";
 import { PlayerCategoryIconRail } from "./PlayerCategoryIconRail";
 import { PlayerDetailTab } from "./PlayerDetailTab";
@@ -1328,11 +1328,15 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
             <h5 style={{ marginTop: 12, color: "#ad9f89" }}>Required Resources</h5>
             {playerAdmin_placeableResources.length > 0 ? <>
               <div className="table-wrap" style={{ maxHeight: 240, marginTop: 6 }}>
-                <table><thead><tr><th>Resource</th><th>Qty</th></tr></thead>
-                <tbody>{playerAdmin_placeableResources.map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.qty}</td></tr>)}</tbody></table>
+                <table><thead><tr><th>Resource</th><th>Qty</th><th>Each</th><th>Total Vol</th></tr></thead>
+                <tbody>{playerAdmin_placeableResources.map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.qty}</td><td>{RESOURCE_VOLUME[r.name] ? RESOURCE_VOLUME[r.name] + "V" : "?"}</td><td>{RESOURCE_VOLUME[r.name] ? (RESOURCE_VOLUME[r.name] * r.qty).toFixed(1) + "V" : "?"}</td></tr>)}</tbody></table>
               </div>
+              <p className="playerAdmin_note" style={{ marginTop: 4 }}>
+                {playerAdmin_placeableResources.length} resource types · {(playerAdmin_placeableResources.reduce((s, r) => s + r.qty, 0))} total items · ~{totalPlaceableVolume(playerAdmin_placeableResources).toFixed(1)}V total
+                {!playerAdmin_canRunLiveAction ? " · Player must be online" : ""}
+              </p>
               <div className="playerAdmin_actionRow" style={{ marginTop: 8 }}>
-                <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => void playerAdmin_grantPlaceableResources()}>Give Resources</button>
+                <button disabled={!actionPlayerId || !playerAdmin_canRunLiveAction || playerAdmin_actionResult?.pending} onClick={() => void playerAdmin_grantPlaceableResources()}>Give Resources</button>
                 <InlineActionResult result={playerAdmin_actionResult} resultKey="placeableGrant" />
               </div>
             </> : <p className="playerAdmin_note">Resource data for this building is not yet available.</p>}

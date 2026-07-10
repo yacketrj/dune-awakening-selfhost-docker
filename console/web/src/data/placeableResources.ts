@@ -255,7 +255,33 @@ export const RESOURCE_TEMPLATE_IDS: Record<string, string> = {
   "Advanced Machinery": "T6Machinery",
 };
 
+// Resource item volumes per unit (from https://dune.gaming.tools)
+export const RESOURCE_VOLUME: Record<string, number> = {
+  "Plastanium Ingot": 1.2,
+  "Silicone Block": 0.3,
+  "Aluminum Ingot": 0.9,
+  "Iron Ingot": 0.3,
+  "Steel Ingot": 0.6,
+  "Copper Bar": 0.3,
+  "Cobalt Paste": 0.6,
+  "Spice Melange": 0.1,
+  "Complex Machinery": 1.5,
+  "Basic Machinery": 0.8,
+  "Plant Fiber": 0.1,
+  "Concrete": 0.5,
+  "Armor Plating": 1.0,
+  "Duraluminum Ingot": 0.9,
+  "Advanced Machinery": 2.0,
+  "ScrapMetal": 0.1,
+};
+
+export function totalPlaceableVolume(resources: { name: string; qty: number }[]): number {
+  return resources.reduce((sum, r) => sum + (RESOURCE_VOLUME[r.name] || 0.5) * r.qty, 0);
+}
+
 export function resourceTemplateId(name: string): string {
+  return RESOURCE_TEMPLATE_IDS[name] || name.replace(/\s+/g, "");
+}
   return RESOURCE_TEMPLATE_IDS[name] || name.replace(/\s+/g, "");
 }
 
