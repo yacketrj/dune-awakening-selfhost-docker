@@ -70,14 +70,13 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
     </div>
     <div className={`catalog-item-picker ${viewMode === "list" ? "list-view" : "grid-view"}`} aria-label={label}>
       {loading ? <div className="catalog-loading">Loading Items...</div> : viewMode === "list" ? <table className="catalog-item-table">
-        <thead><tr><th>Preview</th><th>Item Name</th><th>Item ID</th><th>Category</th><th>Source</th></tr></thead>
+        <thead><tr><th>Preview</th><th>Item Name</th><th>Category</th><th>Source</th></tr></thead>
         <tbody>{filteredItems.map((item) => {
           const active = selected?.id === item.id && selected?.name === item.name;
           const fullName = catalogItemName(item);
           return <tr className={active ? "active" : ""} key={`${item.id}-${item.name}-${item.source}`} title={fullName} onClick={() => onSelect(item)}>
             <td><CatalogItemThumb item={item} small /></td>
             <td className="catalog-item-name-cell">{fullName}</td>
-            <td>{item.name}</td>
             <td>{item.category ? titleCase(item.category) : ""}</td>
             <td>{item.source || ""}</td>
           </tr>;
@@ -89,7 +88,7 @@ export function ItemCatalogSelector({ label = "Select Item", selected, onSelect,
           <CatalogItemThumb item={item} />
           <span>
             <strong>{fullName}</strong>
-            <small>{item.name}{item.category ? ` - ${titleCase(item.category)}` : ""}</small>
+            {item.category && <small>{titleCase(item.category)}</small>}
           </span>
         </button>;
       })}
