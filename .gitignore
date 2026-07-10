@@ -38,3 +38,4 @@ console/api/coverage/
 
 # SBOM artifacts
 dist/
+docs/architecture/RBAC-DESIGN.pdf

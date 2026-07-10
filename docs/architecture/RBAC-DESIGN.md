@@ -293,9 +293,9 @@ User visits http://console:8088
   │    id: crypto.randomBytes(32),                │
   │    csrf: crypto.randomBytes(24),              │
   │    authSource: "discord" | "local",           │
-  │    discordUserId: "143064109775060993",       │
+  │    discordUserId: "EXAMPLE_DISCORD_ID_PLACEHOLDER",       │
   │    discordUsername: "DarkDante",              │
-  │    roleIds: ["1203226789569101894"],           │
+  │    roleIds: ["EXAMPLE_DISCORD_ID_PLACEHOLDER"],           │
   │    capabilities: Set(20),                     │
   │    expiresAt: Date.now() + 12h                │
   │  }                                            │
@@ -309,15 +309,15 @@ User visits http://console:8088
 
 ```bash
 # New env vars for Discord OAuth2 (Web UI login)
-DISCORD_OAUTH_CLIENT_ID=1516816812006969494
+DISCORD_OAUTH_CLIENT_ID=EXAMPLE_DISCORD_ID_PLACEHOLDER
 DISCORD_OAUTH_CLIENT_SECRET=<discord-app-client-secret>
 DISCORD_OAUTH_REDIRECT_URI=http://50.123.64.61:8088/api/auth/discord/callback
 
 # Role-to-tier mapping (shared with Discord bot)
-DISCORD_OWNER_ROLE_IDS=1203226789569101894
-DISCORD_ADMIN_ROLE_IDS=1203226789569101894
-DISCORD_MODERATOR_ROLE_IDS=1207762798705123398
-DISCORD_OBSERVER_ROLE_IDS=1203226789569101894,1207762798705123398
+DISCORD_OWNER_ROLE_IDS=EXAMPLE_DISCORD_ID_PLACEHOLDER
+DISCORD_ADMIN_ROLE_IDS=EXAMPLE_DISCORD_ID_PLACEHOLDER
+DISCORD_MODERATOR_ROLE_IDS=EXAMPLE_MODERATOR_ROLE_ID
+DISCORD_OBSERVER_ROLE_IDS=EXAMPLE_DISCORD_ID_PLACEHOLDER,EXAMPLE_MODERATOR_ROLE_ID
 ```
 
 ### 5.3 Discord API Calls
@@ -399,9 +399,9 @@ CREATE TABLE IF NOT EXISTS dune.rbac_role_capabilities (
 ```
 role_id                  | capability        | granted_by | granted_at
 -------------------------|-------------------|------------|---------------------------
-1207762798705123398      | players:write     | system     | 2026-07-09 20:00:00+00
-1207762798705123398      | broadcast:send    | system     | 2026-07-09 20:00:00+00
-1203226789569101894      | server:control    | system     | 2026-07-09 20:00:00+00
+EXAMPLE_MODERATOR_ROLE_ID      | players:write     | system     | 2026-07-09 20:00:00+00
+EXAMPLE_MODERATOR_ROLE_ID      | broadcast:send    | system     | 2026-07-09 20:00:00+00
+EXAMPLE_DISCORD_ID_PLACEHOLDER      | server:control    | system     | 2026-07-09 20:00:00+00
 ```
 
 **Behavior**: A role with rows in this table gets exactly the capabilities listed. A role without rows falls back to its tier defaults. Admin and owner roles always get ALL capabilities regardless of this table.
@@ -414,7 +414,7 @@ Records every capability-gated action with full actor identity and result. Used 
 CREATE TABLE IF NOT EXISTS dune.rbac_audit_log (
   id          SERIAL PRIMARY KEY,
   timestamp   TIMESTAMPTZ DEFAULT now(),
-  actor_id    TEXT NOT NULL,       -- "discord:143064109775060993" or "local:admin"
+  actor_id    TEXT NOT NULL,       -- "discord:EXAMPLE_DISCORD_ID_PLACEHOLDER" or "local:admin"
   actor_name  TEXT,                -- "DarkDante" for readability
   action      TEXT NOT NULL,       -- capability string: "players:write"
   target_type TEXT,                -- "player", "server", "backup", "config", "guild"
@@ -757,13 +757,13 @@ The `isCommandAllowed` function consults the capability mapping, resolves the us
 
 ```bash
 # Discord Role Mapping (shared with bot)
-DISCORD_OWNER_ROLE_IDS=1203226789569101894
-DISCORD_ADMIN_ROLE_IDS=1203226789569101894
-DISCORD_MODERATOR_ROLE_IDS=1207762798705123398
-DISCORD_OBSERVER_ROLE_IDS=1203226789569101894,1207762798705123398
+DISCORD_OWNER_ROLE_IDS=EXAMPLE_DISCORD_ID_PLACEHOLDER
+DISCORD_ADMIN_ROLE_IDS=EXAMPLE_DISCORD_ID_PLACEHOLDER
+DISCORD_MODERATOR_ROLE_IDS=EXAMPLE_MODERATOR_ROLE_ID
+DISCORD_OBSERVER_ROLE_IDS=EXAMPLE_DISCORD_ID_PLACEHOLDER,EXAMPLE_MODERATOR_ROLE_ID
 
 # Discord OAuth2 (Web UI login)
-DISCORD_OAUTH_CLIENT_ID=1516816812006969494
+DISCORD_OAUTH_CLIENT_ID=EXAMPLE_DISCORD_ID_PLACEHOLDER
 DISCORD_OAUTH_CLIENT_SECRET=<from-discord-developer-portal>
 DISCORD_OAUTH_REDIRECT_URI=http://50.123.64.61:8088/api/auth/discord/callback
 
