@@ -81,8 +81,9 @@ export function createAuth(config) {
     const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
     const session = { id, csrf, expiresAt, actorId: "local:admin", authSource: "local" };
     stampSessionCapabilities(session);
+    session.cookie = `${id}.${sign(id)}`;
     sessions.set(id, session);
-    return { ...session, cookie: `${id}.${sign(id)}` };
+    return session;
   }
 
   function readSession(req) {
