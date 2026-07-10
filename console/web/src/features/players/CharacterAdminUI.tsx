@@ -313,6 +313,44 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
       playerAdmin_setBusyActionKey("");
     }
   }
+  async function playerAdmin_grantAllCrafting() {
+    const items = playerAdmin_craftingRows;
+    if (!items.length) { playerAdmin_showResult("craftingGrantAll", "No crafting recipes loaded. Click Reload first.", "danger"); return; }
+    if (!(await confirmAction(`Unlock ALL ${items.length} crafting recipes for ${playerName}? The player must be offline and should relog after.`))) return;
+    playerAdmin_setBusyActionKey("craftingGrantAll");
+    try {
+      let count = 0;
+      for (const row of items) {
+        try { await playersApi.unlockCraftingRecipe(dbPlayerId, { recipeId: row.recipeId, confirmation: "UNLOCK CRAFTING RECIPE" }); count++; }
+        catch {}
+      }
+      playerAdmin_showResult("craftingGrantAll", `${count} of ${items.length} recipes unlocked. Reloading...`, "success");
+      await playerAdmin_loadCraftingRecipes();
+    } catch (error) {
+      playerAdmin_showResult("craftingGrantAll", friendlyInlineError(error), "danger");
+    } finally {
+      playerAdmin_setBusyActionKey("");
+    }
+  }
+  async function playerAdmin_grantCategoryCrafting(category: string) {
+    const items = playerAdmin_craftingRows.filter((r) => r.category === category);
+    if (!items.length) { playerAdmin_showResult("craftingGrantCat", `No crafting recipes in ${category}.`, "danger"); return; }
+    if (!(await confirmAction(`Unlock ${items.length} crafting recipes in ${category} for ${playerName}?`))) return;
+    playerAdmin_setBusyActionKey("craftingGrantCat");
+    try {
+      let count = 0;
+      for (const row of items) {
+        try { await playersApi.unlockCraftingRecipe(dbPlayerId, { recipeId: row.recipeId, confirmation: "UNLOCK CRAFTING RECIPE" }); count++; }
+        catch {}
+      }
+      playerAdmin_showResult("craftingGrantCat", `${count} of ${items.length} ${category} recipes unlocked.`, "success");
+      await playerAdmin_loadCraftingRecipes();
+    } catch (error) {
+      playerAdmin_showResult("craftingGrantCat", friendlyInlineError(error), "danger");
+    } finally {
+      playerAdmin_setBusyActionKey("");
+    }
+  }
   async function playerAdmin_loadResearchItems() {
     if (!dbPlayerId) {
       playerAdmin_setResearchRows([]);
@@ -1225,6 +1263,8 @@ export function CharacterAdminUI({ detail, fallback, dbPlayerId, actionPlayerId,
                 <span className="playerAdmin_note">{playerAdmin_craftingFilterTerms.length ? `${playerAdmin_filteredCraftingRows.length} of ${playerAdmin_craftingCategoryFilteredRows.length}` : playerAdmin_craftingCategoryFilteredRows.length} Schematic{(playerAdmin_craftingFilterTerms.length ? playerAdmin_filteredCraftingRows.length : playerAdmin_craftingCategoryFilteredRows.length) === 1 ? "" : "s"} Detected</span>
               </div>
               <div className="playerAdmin_filterActionsRight">
+                <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantAllCrafting()}>Grant All Crafting</button>
+                {playerAdmin_craftingCategory && <button disabled={!dbPlayerId || playerAdmin_actionResult?.pending} onClick={() => playerAdmin_grantCategoryCrafting(playerAdmin_craftingCategory)}>Grant {playerAdmin_craftingCategory}</button>}
                 <button disabled={!dbPlayerId || playerAdmin_craftingLoading} onClick={() => playerAdmin_loadCraftingRecipes()}>{playerAdmin_craftingLoading ? "Loading..." : "Reload"}</button>
               </div>
             </div>
