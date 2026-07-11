@@ -96,7 +96,7 @@ export const EXPERIMENTAL_READ_ONLY_CAPABILITIES = Object.freeze(
 // Owners and admins are exempt — they always get ALL capabilities.
 // These assignments are the fallback when dune.rbac_role_capabilities has no rows.
 
-const CAPABILITY_BY_TIER = Object.freeze({
+export const CAPABILITY_BY_TIER = Object.freeze({
   public: new Set([
     DISCORD_CAPABILITIES.STATUS_READ
   ]),
