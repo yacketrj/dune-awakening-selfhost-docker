@@ -2615,19 +2615,20 @@ function validateAugmentIds(augments) {
 }
 
 function buildItemStats({ augments = [], durability = {} } = {}) {
-  const augmentEntries = augments.length > 0
-    ? augments.map((id) => ({
-        AugmentTemplateId: String(id).replace(/_Schematic$/i, ""),
-        FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] }
-      }))
-    : [];
-  const customizationEntries = augmentEntries.length > 0 ? [augmentEntries] : [[]];
+  const augmentIds = augments.map((id) => String(id).replace(/_Schematic$/i, ""));
   const durabilityObj = durability.max !== undefined
-    ? { CurrentDurability: Number(durability.current ?? durability.max), MaxDurability: Number(durability.max), DecayedMaxDurability: Number(durability.max), DecayedDurability: Number(durability.current ?? durability.max) }
+    ? { CurrentDurability: Number(durability.current ?? durability.max), DecayedMaxDurability: Number(durability.max) }
     : {};
   return {
-    FCustomizationStats: [customizationEntries[0], {}],
-    FAugmentItemStats: [augmentEntries.map((e) => e.FAugmentItemStats), {}],
+    FAugmentedItemStats: [
+      [],
+      augmentIds.length > 0 ? {
+        AppliedAugments: augmentIds.map((id) => ({ Name: id })),
+        AppliedAugmentRollData: augmentIds.map(() => ({ StatRolls: [1.0], AppliedEffectIndices: [] })),
+        AppliedAugmentQualities: augmentIds.map(() => 5)
+      } : {}
+    ],
+    FCustomizationStats: [[], {}],
     FItemStackAndDurabilityStats: [[], durabilityObj]
   };
 }
@@ -2662,12 +2663,26 @@ export async function augmentInventoryItem(db, playerId, itemId, { augments = []
     const templateId = String(owned.rows[0].template_id || "");
     if (!isTemplateAugmentable(templateId)) throw new Error("Augments can only be applied to weapons and armor. This item type is not augmentable.");
     const existing = owned.rows[0].stats || {};
-    const existingCustomization = Array.isArray(existing.FCustomizationStats) ? existing.FCustomizationStats : [[], {}];
-    const existingAugments = Array.isArray(existingCustomization[0]) ? existingCustomization[0] : [];
-    const merged = [...new Set([...existingAugments, ...augmentIds])].slice(0, 20);
-    const nextStats = { ...existing, FCustomizationStats: [merged, existingCustomization[1] || {}] };
+    const augData = existing.FAugmentedItemStats || [[], {}];
+    const currentAugments = augData[1]?.AppliedAugments || [];
+    const currentNames = new Set(currentAugments.map((a) => a.Name));
+    const newAugs = augmentIds.map((id) => String(id).replace(/_Schematic$/i, "")).filter((id) => !currentNames.has(id)).map((id) => ({ Name: id }));
+    const currentQualities = augData[1]?.AppliedAugmentQualities || [];
+    const currentRolls = augData[1]?.AppliedAugmentRollData || [];
+    const allAugments = [...currentAugments, ...newAugs];
+    const allQualities = [...currentQualities, ...newAugs.map(() => 5)];
+    const allRolls = [...currentRolls, ...newAugs.map(() => ({ StatRolls: [1.0], AppliedEffectIndices: [] }))];
+    const mergedNames = allAugments.map((a) => a.Name);
+    const nextStats = {
+      ...existing,
+      FAugmentedItemStats: [[], {
+        AppliedAugments: allAugments,
+        AppliedAugmentRollData: allRolls,
+        AppliedAugmentQualities: allQualities
+      }]
+    };
     await tx.query("update dune.items set stats = $1::jsonb where id = $2", [JSON.stringify(nextStats), safeItemId]);
-    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, augments: merged, previous: existingAugments };
+    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, augments: mergedNames, previous: currentNames }; 
   });
 }
 
