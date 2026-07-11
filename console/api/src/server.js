@@ -445,20 +445,18 @@ async function handleApi(req, res) {
       });
       const user = await userRes.json();
 
-      // Fetch guild roles if guild ID is configured
+      // Fetch guild roles via user's guild member endpoint
       let roleIds = [];
       if (config.discordOAuth.guildId) {
-        const guildRes = await fetch(`https://discord.com/api/users/@me/guilds`, {
-          headers: { Authorization: `Bearer ${tokenData.access_token}` }
-        });
-        const guilds = await guildRes.json();
-        console.log("[Discord OAuth] Guilds response:", JSON.stringify(guilds).slice(0, 200));
-        if (Array.isArray(guilds)) {
-          const memberGuild = guilds.find(g => g.id === config.discordOAuth.guildId);
-          console.log("[Discord OAuth] Looking for guild", config.discordOAuth.guildId, "found:", Boolean(memberGuild), "roles:", memberGuild?.roles);
-          if (memberGuild?.roles) roleIds = memberGuild.roles;
-        } else {
-          console.log("[Discord OAuth] Guilds response is not an array:", typeof guilds, guilds);
+        try {
+          const memberRes = await fetch(`https://discord.com/api/users/@me/guilds/${config.discordOAuth.guildId}/member`, {
+            headers: { Authorization: `Bearer ${tokenData.access_token}` }
+          });
+          const member = await memberRes.json();
+          console.log("[Discord OAuth] Guild member response for", config.discordOAuth.guildId, ":", JSON.stringify(member).slice(0, 300));
+          if (member?.roles) roleIds = member.roles;
+        } catch (err) {
+          console.log("[Discord OAuth] Guild member fetch failed:", err.message);
         }
       }
 
