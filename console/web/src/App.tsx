@@ -575,8 +575,8 @@ export function App() {
                 <div className="user-profile-info">
                   <span className="user-name">{userProfile.name}</span>
                   <span className={`user-role user-role-${userProfile.role}`}>{userProfile.role}</span>
+                  <button className="profile-logout-button" onClick={() => { void safe(logout); }} title="Sign out">Sign out</button>
                 </div>
-                <button className="profile-logout-button" onClick={() => { void safe(logout); }} title="Sign out">Sign out</button>
               </div>
             )}
             <a className="community-button discord" href={REDBLINK_DISCORD_URL} target="_blank" rel="noreferrer" title="Join Discord"><span>Join Discord</span><DiscordLogo size={19} /></a>
