@@ -10,6 +10,8 @@ import { TechnicalDetails } from "../../components/common/DisplayPrimitives";
 import {
   ItemCatalogSelector,
   ItemGradeSelect,
+  AugmentPicker,
+  augmentLimit,
   PackageItemPreview,
   catalogItemId,
   catalogItemName,
@@ -76,8 +78,8 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
   useEffect(() => {
     adminApi.itemCatalog("", 10000).then((result) => {
       const augs = (result.rows || []).filter((item) =>
-        (item.category || "").toLowerCase().includes("augment") ||
-        (item.source || "").toLowerCase() === "augments"
+        /T\d+_Augment/i.test(item.id || "") && ((item.category || "").toLowerCase() || "").includes("schematics") ||
+        false
       ).map((item) => ({ id: item.itemId || item.id, name: item.name }));
       setAugmentCatalog(augs);
     }).catch(() => setAugmentCatalog([]));
@@ -90,8 +92,8 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
     const isArmor = /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name) || cat === "clothing";
     const isMelee = /melee|sword|blade|knife|fremen/i.test(name);
     const isWeapon = cat === "weapons" || isMelee || /lasgun|spitdart|jabal|disruptor|smg|karpov|rifle|drillshot|shotgun|grda|scattergun|vulcan|lmg|pyrocket|fireball|flamethrower|rocket|missile|pistol|snubnose|rafiq|maula/i.test(name);
-    const rangedGeneric = new Set(["Damage","Acuracy","Shielddamage","Range","Recoil","ReloadSpeed","Rateoffire","Magazinecapacity","Headshotdamage"]); const commonGeneric = new Set(["DeathDurability","Ch5"]);
-    const wp = (id: string) => { const trimmed = id.replace(/_Schematic$/i, ""); const m = trimmed.match(/^T\d+_Augment_(.+?)\d+$/); return m ? m[1].replace(/^Ch5_/, "") : ""; };
+    const rangedGeneric = new Set(["Damage","Acuracy","Shielddamage","Range","Recoil","ReloadSpeed","Rateoffire","Magazinecapacity","Headshotdamage"]); const commonGeneric = new Set(["deathdurability","ch5"]);
+    const wp = (id: string) => { const trimmed = id.replace(/_Schematic$/i, ""); const m = trimmed.match(/^T\d+_Augment_(.+?)\d+$/); return m ? m[1].replace(/^Ch5_/, "").toLowerCase() : ""; };
     const weaponMap: [RegExp, Set<string>][] = [
       [/lasgun/i, new Set(["Lasgun"])], [/spitdart|jabal/i, new Set(["Spitdartrifle","SpitdartRifle"])],
       [/disruptor| smg/i, new Set(["smg","Smg"])], [/karpov|battle.?rifle/i, new Set(["BR"])],
@@ -102,8 +104,8 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
     ];
     return all.filter((aug) => {
       const p = wp(aug.id);
-      if (isArmor) return /^Armor/i.test(p);
-      if (isMelee) return p === "Melee" || commonGeneric.has(p);
+      if (isArmor) return p.startsWith("armor");
+      if (isMelee) return p === "melee" || commonGeneric.has(p);
       if (isWeapon) {
         if (rangedGeneric.has(p) || commonGeneric.has(p)) return true;
         for (const [rx, set] of weaponMap) { if (rx.test(name) && set.has(p)) return true; }
@@ -402,7 +404,7 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
               <label>Grade<ItemGradeSelect value={packageDraft.grade} onChange={(grade) => setPackageDraft({ ...packageDraft, grade })} /></label>
               {(() => {
                 const filteredAugs = carePkgFilterAugments(packageDraft.itemName, packageDraft.itemId, selectedPackageItem?.category || "", augmentCatalog);
-                return filteredAugs.length === 0 ? null : <label>Augments<select className="augment-picker" multiple value={packageDraft.augments} onChange={(event) => { const selected = Array.from(event.target.selectedOptions, (opt) => opt.value).slice(0, /chest|armor|guard|garment/i.test(packageDraft.itemName) ? 2 : 3); setPackageDraft({ ...packageDraft, augments: selected }); }} style={{ minWidth: 320, maxWidth: 420, height: 60 }}>{filteredAugs.map((aug) => <option key={aug.id} value={aug.id}>{aug.name}</option>)}</select></label>;
+                return filteredAugs.length === 0 ? null : <label>Augments ({packageDraft.augments.length}/{augmentLimit(packageDraft.itemName, selectedPackageItem?.category)})<AugmentPicker augments={[...filteredAugs].sort((a: any, b: any) => a.name.localeCompare(b.name))} selected={packageDraft.augments} onChange={(selected) => setPackageDraft({ ...packageDraft, augments: selected })} limit={augmentLimit(packageDraft.itemName, selectedPackageItem?.category)} /></label>;
               })()}
               <button disabled={!selectedPackageItem} onClick={addPackageItem}>Add Item</button>
             </div>
