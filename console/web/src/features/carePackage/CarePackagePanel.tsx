@@ -92,15 +92,15 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
     const isArmor = /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name) || cat === "clothing";
     const isMelee = /melee|sword|blade|knife|fremen/i.test(name);
     const isWeapon = cat === "weapons" || isMelee || /lasgun|spitdart|jabal|disruptor|smg|karpov|rifle|drillshot|shotgun|grda|scattergun|vulcan|lmg|pyrocket|fireball|flamethrower|rocket|missile|pistol|snubnose|rafiq|maula/i.test(name);
-    const rangedGeneric = new Set(["Damage","Acuracy","Shielddamage","Range","Recoil","ReloadSpeed","Rateoffire","Magazinecapacity","Headshotdamage"]); const commonGeneric = new Set(["deathdurability","ch5"]);
-    const wp = (id: string) => { const trimmed = id.replace(/_Schematic$/i, ""); const m = trimmed.match(/^T\d+_Augment_(.+?)\d+$/); return m ? m[1].replace(/^Ch5_/, "").toLowerCase() : ""; };
+    const rangedGeneric = new Set(["damage","acuracy","shielddamage","range","recoil","reloadspeed","rateoffire","magazinecapacity","headshotdamage"]); const commonGeneric = new Set(["deathdurability","ch5"]);
+    const wp = (id: string) => { const trimmed = id.replace(/_Schematic$/i, ""); const m = trimmed.match(/^T\d+_Augment_(.+?)(\d+|Off)$/); return m ? m[1].replace(/^Ch5_/, "").toLowerCase() : ""; };
     const weaponMap: [RegExp, Set<string>][] = [
-      [/lasgun/i, new Set(["Lasgun"])], [/spitdart|jabal/i, new Set(["Spitdartrifle","SpitdartRifle"])],
-      [/disruptor| smg/i, new Set(["smg","Smg"])], [/karpov|battle.?rifle/i, new Set(["BR"])],
-      [/drillshot|shotgun/i, new Set(["Shotgun"])], [/grda|scattergun/i, new Set(["Scattergun"])],
-      [/vulcan|lmg/i, new Set(["Lmg"])], [/pyrocket|fireball/i, new Set(["Fireballer"])],
-      [/flamethrower/i, new Set(["Flamethrower"])], [/rocket|missile/i, new Set(["RocketLauncher"])],
-      [/maula|pistol|snubnose|rafiq/i, new Set(["HeavyPistol","MaulaPistol"])],
+      [/lasgun/i, new Set(["lasgun"])], [/spitdart|jabal/i, new Set(["spitdartrifle","spitdartrifle"])],
+      [/disruptor| smg/i, new Set(["smg","smg"])], [/karpov|battle.?rifle/i, new Set(["br"])],
+      [/drillshot|shotgun/i, new Set(["shotgun"])], [/grda|scattergun/i, new Set(["scattergun"])],
+      [/vulcan|lmg/i, new Set(["lmg"])], [/pyrocket|fireball/i, new Set(["fireballer"])],
+      [/flamethrower/i, new Set(["flamethrower"])], [/rocket|missile/i, new Set(["rocketlauncher"])],
+      [/maula|pistol|snubnose|rafiq/i, new Set(["heavypistol","maulapistol"])],
     ];
     return all.filter((aug) => {
       const p = wp(aug.id);
