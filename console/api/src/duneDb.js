@@ -2614,7 +2614,31 @@ function validateAugmentIds(augments) {
   return ids;
 }
 
-function buildItemStats({ augments = [], durability = {} } = {}) {
+function augmentRollCount(augmentId) {
+  const id = String(augmentId || "").replace(/_Schematic$/i, "");
+  const m = id.match(/^T\d+_Augment_(.+?)(\d+|Off)$/);
+  const type = m ? m[1].replace(/^Ch5_/, "").toLowerCase() : "";
+  const num = m?.[2] || "";
+  const key = num ? type + num : type;
+  // Roll counts from https://dune.gaming.tools per augment
+  const KNOWN: Record<string, number> = {
+    "melee8": 3,             // Blade Optimizer: Damage, Atk Stam, Block Stam
+    "melee4": 2,             // Aggressive Grip Adjuster
+    "melee1": 2,             // Blade Sharpener (assumed 2)
+    "melee6": 1,             // Blade Blood Grooves  
+    "ch5melee1": 2,         // Heavy Metal Blade Coating
+    "spitdartrifle7": 8,     // Unique: 5 fixed + 3 random
+    "spitdartrifle5": 2,
+    "spitdartrifle2": 1,
+    "spitdartrifle1": 2,
+    "damage1": 1,            // Heavy Caliber Upgrade
+    "damage2": 1,            // House Heavy Caliber Upgrade
+    "deathdurabilityoff": 1, // Protective Coating
+  };
+  if (KNOWN[key]) return KNOWN[key];
+  if (type === "melee" || type.startsWith("ch5melee")) return 2;
+  return 1;
+}
   const augmentIds = augments.map((id) => String(id).replace(/_Schematic$/i, ""));
   const durabilityObj = durability.max !== undefined
     ? { CurrentDurability: Number(durability.current ?? durability.max), DecayedMaxDurability: Number(durability.max) }
