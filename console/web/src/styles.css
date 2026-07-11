@@ -1748,11 +1748,14 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
 /* ── User Profile (topbar) ── */
 .user-profile {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
   border-radius: 8px;
   background: rgba(255,255,255,0.04);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .user-avatar {
   border-radius: 50%;
