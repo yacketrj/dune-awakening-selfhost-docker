@@ -738,10 +738,11 @@ The `isCommandAllowed` function consults the capability mapping, resolves the us
 
 | Variable | Required | Default | Description |
 |----------|:--------:|---------|-------------|
-| `DISCORD_OWNER_ROLE_IDS` | Yes | — | Comma-separated owner-tier Discord role snowflake IDs |
-| `DISCORD_ADMIN_ROLE_IDS` | Yes | — | Comma-separated admin-tier Discord role snowflake IDs |
-| `DISCORD_MODERATOR_ROLE_IDS` | Yes | — | Comma-separated moderator-tier Discord role snowflake IDs |
-| `DISCORD_OBSERVER_ROLE_IDS` | Yes | — | Comma-separated observer-tier Discord role snowflake IDs |
+| `DISCORD_GUILD_ID` | For role-based | — | Discord guild (server) ID used for role lookup |
+| `DISCORD_OWNER_ROLE_IDS` | For role-based | — | Comma-separated owner-tier Discord role snowflake IDs |
+| `DISCORD_ADMIN_ROLE_IDS` | For role-based | — | Comma-separated admin-tier Discord role snowflake IDs |
+| `DISCORD_MODERATOR_ROLE_IDS` | For role-based | — | Comma-separated moderator-tier Discord role snowflake IDs |
+| `DISCORD_OBSERVER_ROLE_IDS` | For role-based | — | Comma-separated observer-tier Discord role snowflake IDs |
 
 ### 13.2 Optional Environment Variables
 
@@ -750,10 +751,23 @@ The `isCommandAllowed` function consults the capability mapping, resolves the us
 | `DISCORD_OAUTH_CLIENT_ID` | For Web UI OAuth2 | — | Discord application client ID. If not set, Web UI uses local password only. |
 | `DISCORD_OAUTH_CLIENT_SECRET` | For Web UI OAuth2 | — | Discord application client secret |
 | `DISCORD_OAUTH_REDIRECT_URI` | For Web UI OAuth2 | — | OAuth2 callback URL (must match Discord app config) |
+| `DISCORD_OWNER_USER_IDS` | Fallback | — | Comma-separated Discord user snowflake IDs to directly map to owner. Used as fallback when `guilds.members.read` scope is not granted. |
 | `ADMIN_PASSWORD` | For local fallback | Auto-generated file | Local admin password. Used when Discord OAuth2 is unavailable or the user chooses local login. |
 | `ADMIN_AUTH_DISABLED` | No | `0` | Set to `1` to skip all authentication (development only) |
 
-### 13.3 Example `.env`
+### 13.3 Discord OAuth2 Scopes
+
+The OAuth2 flow requests three scopes:
+
+| Scope | Required | Purpose |
+|-------|:--------:|---------|
+| `identify` | Yes | Fetch user profile (`/users/@me`) |
+| `guilds` | Yes | Verify guild membership |
+| `guilds.members.read` | Highly recommended | Fetch user's guild roles via `/users/@me/guilds/{id}/member` |
+
+**If `guilds.members.read` is not granted** by the Discord application, the server falls back to `DISCORD_OWNER_USER_IDS` for owner identification. Without this scope, guild role IDs cannot be resolved and role-based tiering (admin, moderator, observer) is unavailable via OAuth2 login. Use `DISCORD_OWNER_USER_IDS` to grant owner access to specific Discord user accounts as a stopgap.
+
+### 13.4 Example `.env`
 
 ```bash
 # Discord Role Mapping (shared with bot)

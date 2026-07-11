@@ -33,10 +33,10 @@ export function loadConfig() {
     adminPasswordEnvManaged,
     // Discord OAuth2 for Web UI login (optional — falls back to ADMIN_PASSWORD if not set)
     discordOAuth: {
-      clientId: process.env.DISCORD_OAUTH_CLIENT_ID || "",
-      clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET || "",
-      redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI || "",
-      guildId: process.env.DISCORD_GUILD_ID || ""
+      clientId: process.env.DISCORD_OAUTH_CLIENT_ID || readSecret(resolve(secretsDir, "discord-oauth-client-id.txt")),
+      clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET || readSecret(resolve(secretsDir, "discord-oauth-client-secret.txt")),
+      redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI || readSecret(resolve(secretsDir, "discord-oauth-redirect-uri.txt")),
+      guildId: process.env.DISCORD_GUILD_ID || readSecret(resolve(secretsDir, "discord-guild-id.txt"))
     },
     // RBAC role-to-capability mapping (shared with Discord bot)
     rbac: {
@@ -184,6 +184,12 @@ function isPrivateIpv4(value) {
   if (parts[0] === 192 && parts[1] === 168) return true;
   if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
   return false;
+}
+
+function readSecret(path) {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch { return ""; }
 }
 
 function getOrCreateSecret(path, bytes) {

@@ -236,7 +236,6 @@ function resolveRoleDisplay(roleIds) {
   const admins = parseCsv(process.env.DISCORD_ADMIN_ROLE_IDS);
   const mods = parseCsv(process.env.DISCORD_MODERATOR_ROLE_IDS);
   const obs = parseCsv(process.env.DISCORD_OBSERVER_ROLE_IDS);
-  if (roleIds.includes("__owner__")) return "owner";
   if (roleIds.some(r => owners.includes(r))) return "owner";
   if (roleIds.some(r => admins.includes(r))) return "admin";
   if (roleIds.some(r => mods.includes(r))) return "moderator";
@@ -343,9 +342,7 @@ async function handleApi(req, res) {
         name: session.discordUsername || (session.authSource === "local" ? "Console Admin" : session.actorId || "Unknown"),
         avatar: session.discordUsername ? `https://cdn.discordapp.com/avatars/${session.actorId?.replace("discord:", "")}/${session.avatar || "0"}.png` : null,
         source: session.authSource || "local",
-        role: session.roleIds?.length > 0 ? resolveRoleDisplay(session.roleIds) : (session.authSource === "local" ? "owner" : "public"),
-        _debugRoleIds: session.roleIds || [],
-        _debugSource: session.authSource || "local"
+        role: session.roleIds?.length > 0 ? resolveRoleDisplay(session.roleIds) : (session.authSource === "local" ? "owner" : "public")
       }
     } : {
       authenticated: false,
@@ -446,25 +443,22 @@ async function handleApi(req, res) {
         headers: { Authorization: `Bearer ${tokenData.access_token}` }
       });
       const user = await userRes.json();
-      console.log("[Discord OAuth] User:", user.id, user.username, "avatar:", Boolean(user.avatar));
 
-      // Resolve role: check direct user-ID mappings first, then guild roles
+      // Resolve Discord roles — try guild member API first, then direct user-ID mapping
       let roleIds = [];
-      const ownerUserIds = parseCsv(process.env.DISCORD_OWNER_USER_IDS);
-      if (ownerUserIds.includes(user.id)) {
-        // Direct owner mapping — assign a synthetic roleId to trigger owner resolution
-        roleIds = ["__owner__"];
-        console.log("[Discord OAuth] User", user.id, "matched DISCORD_OWNER_USER_IDS");
-      } else if (config.discordOAuth.guildId) {
+      if (config.discordOAuth.guildId) {
         try {
           const memberRes = await fetch(`https://discord.com/api/users/@me/guilds/${config.discordOAuth.guildId}/member`, {
             headers: { Authorization: `Bearer ${tokenData.access_token}` }
           });
           const member = await memberRes.json();
-          console.log("[Discord OAuth] Guild member response for", config.discordOAuth.guildId, ":", JSON.stringify(member).slice(0, 300));
           if (member?.roles) roleIds = member.roles;
-        } catch (err) {
-          console.log("[Discord OAuth] Guild member fetch failed:", err.message);
+        } catch { /* guild member fetch optional */ }
+      }
+      if (!roleIds.length) {
+        const ownerUserIds = parseCsv(process.env.DISCORD_OWNER_USER_IDS);
+        if (ownerUserIds.includes(user.id)) {
+          roleIds = parseCsv(process.env.DISCORD_OWNER_ROLE_IDS);
         }
       }
 
