@@ -2615,14 +2615,34 @@ function validateAugmentIds(augments) {
 }
 
 function buildItemStats({ augments = [], durability = {} } = {}) {
-  const customizationEntries = augments.length > 0 ? [augments] : [[]];
+  const augmentIds = augments.map((id) => String(id).replace(/_Schematic$/i, ""));
   const durabilityObj = durability.max !== undefined
-    ? { CurrentDurability: Number(durability.current ?? durability.max), MaxDurability: Number(durability.max), DecayedMaxDurability: Number(durability.max), DecayedDurability: Number(durability.current ?? durability.max) }
+    ? { CurrentDurability: Number(durability.current ?? durability.max), DecayedMaxDurability: Number(durability.max) }
     : {};
   return {
-    FCustomizationStats: [customizationEntries[0], {}],
+    FAugmentedItemStats: [
+      [],
+      augmentIds.length > 0 ? {
+        AppliedAugments: augmentIds.map((id) => ({ Name: id })),
+        AppliedAugmentRollData: augmentIds.map(() => ({ StatRolls: [1.0], AppliedEffectIndices: [] })),
+        AppliedAugmentQualities: augmentIds.map(() => 5)
+      } : {}
+    ],
+    FCustomizationStats: [[], {}],
     FItemStackAndDurabilityStats: [[], durabilityObj]
-  };
+  };}
+
+function isTemplateAugmentable(templateId) {
+  const name = String(templateId || "");
+  return isWeaponTemplate(name) || isArmorTemplate(name);
+}
+
+function isWeaponTemplate(name) {
+  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
+}
+
+function isArmorTemplate(name) {
+  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
 }
 
 export async function augmentInventoryItem(db, playerId, itemId, { augments = [] } = {}) {
@@ -2640,12 +2660,26 @@ export async function augmentInventoryItem(db, playerId, itemId, { augments = []
       for update`, [safeItemId, player.actorId]);
     if (!owned.rows[0]) throw new Error("Inventory item was not found in the selected player's directly-owned inventory");
     const existing = owned.rows[0].stats || {};
-    const existingCustomization = Array.isArray(existing.FCustomizationStats) ? existing.FCustomizationStats : [[], {}];
-    const existingAugments = Array.isArray(existingCustomization[0]) ? existingCustomization[0] : [];
-    const merged = [...new Set([...existingAugments, ...augmentIds])].slice(0, 20);
-    const nextStats = { ...existing, FCustomizationStats: [merged, existingCustomization[1] || {}] };
+    const augData = existing.FAugmentedItemStats || [[], {}];
+    const currentAugments = augData[1]?.AppliedAugments || [];
+    const currentNames = new Set(currentAugments.map((a) => a.Name));
+    const newAugs = augmentIds.map((id) => String(id).replace(/_Schematic$/i, "")).filter((id) => !currentNames.has(id)).map((id) => ({ Name: id }));
+    const currentQualities = augData[1]?.AppliedAugmentQualities || [];
+    const currentRolls = augData[1]?.AppliedAugmentRollData || [];
+    const allAugments = [...currentAugments, ...newAugs];
+    const allQualities = [...currentQualities, ...newAugs.map(() => 5)];
+    const allRolls = [...currentRolls, ...newAugs.map(() => ({ StatRolls: [1.0], AppliedEffectIndices: [] }))];
+    const mergedNames = allAugments.map((a) => a.Name);
+    const nextStats = {
+      ...existing,
+      FAugmentedItemStats: [[], {
+        AppliedAugments: allAugments,
+        AppliedAugmentRollData: allRolls,
+        AppliedAugmentQualities: allQualities
+      }]
+    };
     await tx.query("update dune.items set stats = $1::jsonb where id = $2", [JSON.stringify(nextStats), safeItemId]);
-    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, augments: merged, previous: existingAugments };
+    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, augments: mergedNames, previous: currentNames };
   });
 }
 
@@ -2656,6 +2690,9 @@ export async function giveItemToStorage(db, storageId, { itemName = "", itemId =
   const stackSize = intParam(quantity, "quantity", 1, 1000000);
   const qualityLevel = intParam(quality, "quality", 0, 1000000);
   const augmentIds = validateAugmentIds(augments);
+  if (augmentIds.length > 0 && !isTemplateAugmentable(resolvedTemplate)) {
+    throw new Error("Augments can only be applied to weapons and armor. This item type is not augmentable.");
+  }
   return db.transaction(async (tx) => {
     const storage = await tx.query(`
       select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
@@ -2693,6 +2730,9 @@ export async function giveItemToPlayer(db, playerId, { itemName = "", itemId = "
   const stackSize = intParam(quantity, "quantity", 1, 1000000);
   const qualityLevel = intParam(quality, "grade", 0, 5);
   const augmentIds = validateAugmentIds(augments);
+  if (augmentIds.length > 0 && !isTemplateAugmentable(resolvedTemplate)) {
+    throw new Error("Augments can only be applied to weapons and armor. This item type is not augmentable.");
+  }
   return db.transaction(async (tx) => {
     const inventory = await tx.query(`
       select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
