@@ -173,7 +173,8 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
     };
 
     if (OPS_PATHS.includes(path) && req.method === "POST") {
-      const body = await readJson(req);
+      const actor = validateDiscordActor(body);
+      requireDiscordCapability(actor, "ops:read", path);
       const provider = OPS_PROVIDERS[path];
       if (provider) {
         return json(res, 200, await provider(config, db));
