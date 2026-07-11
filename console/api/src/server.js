@@ -255,9 +255,23 @@ function auditWrite(req, action, targetType, targetId, detail = {}) {
   if (!session) return;
   const actorId = session.actorId || (session.authSource === "local" ? "local:admin" : "unknown");
   const actorName = session.discordUsername || (session.authSource === "local" ? "Console Admin" : actorId);
+  // Dual-write: upstream file audit + RBAC database audit
+  audit(config, req, action, { source: session.authSource, targetType, targetId, ...detail });
   duneDb.rbacAuditLog(db, {
     actorId, actorName, action, targetType, targetId,
     route: req.url || "unknown", result: "success", detail
+  }).catch(() => {});
+}
+
+function auditFailure(req, action, reason, detail = {}) {
+  const session = req.authSession;
+  const actorId = session?.actorId || "unknown";
+  const actorName = session?.discordUsername || "Console Admin";
+  audit(config, req, action, { reason, ...detail });
+  duneDb.rbacAuditLog(db, {
+    actorId, actorName, action,
+    targetType: "auth", targetId: req.url || "unknown",
+    route: req.url || "unknown", result: "failure", detail: { reason, ...detail }
   }).catch(() => {});
 }
 
@@ -323,6 +337,7 @@ function requireRouteCapability(req, res, path) {
   const capability = matchRouteCapability(req.method, path);
   if (!capability) return true; // unregistered routes — allow pass-through (migration in progress)
   if (requireCapability(session, capability, `${req.method}:${path}`)) return true;
+  auditFailure(req, "auth.capability.denied", `Missing capability: ${capability} for ${req.method}:${path}`, { capability, route: path });
   json(res, 403, { ok: false, code: "not_authorized", error: `Not authorized. Required capability: ${capability}.` });
   return false;
 }
@@ -472,6 +487,10 @@ async function handleApi(req, res) {
       stampSessionCapabilities(session);
 
       setSessionCookie(res, session, config);
+      req.authSession = session;
+      auditWrite(req, "auth.login.discord", "session", user.id, { username: user.username, role: resolveRoleDisplay(roleIds) });
+      // Persist Discord user profile for future linking
+      duneDb.upsertDiscordUserProfile(db, { userId: user.id, username: user.username, avatarHash: user.avatar }).catch(() => {});
       audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
       res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
       return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dune Console</title><style>body{background:#0a0614;color:#e0dde8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px}a{color:#8b5cf6}</style></head><body><p>Logged in as <strong>${user.username}</strong>.</p><p id="status">Checking session...</p><a href="/" style="display:none" id="link">Continue to Console</a><script>
@@ -786,6 +805,7 @@ setTimeout(check,600);
     if (!roleId) return json(res, 400, { error: "Role ID is required" });
     const caps = Array.isArray(body.capabilities) ? body.capabilities : [];
     await duneDb.rbacSetRoleCapabilities(db, roleId, caps, "web:admin");
+    auditWrite(req, "rbac.role.update", "role", roleId, { capabilities: caps });
     return json(res, 200, { ok: true, roleId, capabilities: caps });
   }
 

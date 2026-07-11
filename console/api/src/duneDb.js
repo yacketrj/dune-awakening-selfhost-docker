@@ -3413,6 +3413,30 @@ export async function discordPlayerLinksTableCreate(db) {
   try { await db.query("alter table dune.discord_player_links add column if not exists faction text default 'fremen'"); } catch {}
 }
 
+export async function discordUserProfilesTableCreate(db) {
+  await db.query(`
+    create table if not exists dune.discord_user_profiles (
+      discord_user_id text primary key,
+      username text not null,
+      avatar_hash text,
+      auth_source text default 'discord',
+      last_login_at timestamp with time zone default now()
+    )`);
+}
+
+export async function upsertDiscordUserProfile(db, { userId, username, avatarHash }) {
+  await discordUserProfilesTableCreate(db);
+  await db.query(`
+    insert into dune.discord_user_profiles (discord_user_id, username, avatar_hash, last_login_at)
+    values ($1, $2, $3, now())
+    on conflict (discord_user_id) do update
+      set username = excluded.username,
+          avatar_hash = excluded.avatar_hash,
+          last_login_at = now()`,
+    [String(userId), String(username), avatarHash || null]
+  );
+}
+
 export async function setPlayerFaction(db, discordUserId, faction) {
   await discordPlayerLinksTableCreate(db);
   await db.query(
