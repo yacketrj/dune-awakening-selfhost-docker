@@ -571,9 +571,11 @@ export function App() {
           <div className="topbar-links" aria-label="User actions">
             {userProfile && (
               <div className="user-profile">
-                {userProfile.avatar && <img className="user-avatar" src={userProfile.avatar} alt="" width={24} height={24} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />}
-                <span className="user-name">{userProfile.name}</span>
-                <span className={`user-role user-role-${userProfile.role}`}>{userProfile.role}</span>
+                {userProfile.avatar && <img className="user-avatar" src={userProfile.avatar} alt="" width={32} height={32} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                <div className="user-profile-info">
+                  <span className="user-name">{userProfile.name}</span>
+                  <span className={`user-role user-role-${userProfile.role}`}>{userProfile.role}</span>
+                </div>
                 <button className="profile-logout-button" onClick={() => { void safe(logout); }} title="Sign out">Sign out</button>
               </div>
             )}

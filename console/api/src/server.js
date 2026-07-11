@@ -393,9 +393,10 @@ async function handleApi(req, res) {
       client_id: config.discordOAuth.clientId,
       redirect_uri: config.discordOAuth.redirectUri,
       response_type: "code",
-      scope: "identify guilds",
       state
     });
+    params.append("scope", "identify");
+    params.append("scope", "guilds");
     res.writeHead(302, { Location: `https://discord.com/api/oauth2/authorize?${params}` });
     return res.end();
   }
@@ -451,9 +452,13 @@ async function handleApi(req, res) {
           headers: { Authorization: `Bearer ${tokenData.access_token}` }
         });
         const guilds = await guildRes.json();
+        console.log("[Discord OAuth] Guilds response:", JSON.stringify(guilds).slice(0, 200));
         if (Array.isArray(guilds)) {
           const memberGuild = guilds.find(g => g.id === config.discordOAuth.guildId);
+          console.log("[Discord OAuth] Looking for guild", config.discordOAuth.guildId, "found:", Boolean(memberGuild), "roles:", memberGuild?.roles);
           if (memberGuild?.roles) roleIds = memberGuild.roles;
+        } else {
+          console.log("[Discord OAuth] Guilds response is not an array:", typeof guilds, guilds);
         }
       }
 
