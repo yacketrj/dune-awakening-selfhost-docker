@@ -303,13 +303,26 @@ registerRoute("POST", "/api/settings", "server:control");
 // RBAC Admin
 registerRoute("PUT", "/api/rbac/roles/:id", "auth:manage");
 
+function matchRouteCapability(method, path) {
+  const key = `${method}:${path}`;
+  // Direct match first
+  if (routeCapabilities.has(key)) return routeCapabilities.get(key);
+  // Pattern match — convert :param patterns to regex
+  for (const [pattern, capability] of routeCapabilities.entries()) {
+    const [pMethod, pPath] = pattern.split(":");
+    if (pMethod !== method) continue;
+    const regex = new RegExp("^" + pPath.replace(/:(\w+)/g, "([^/]+)") + "$");
+    if (regex.test(path)) return capability;
+  }
+  return null;
+}
+
 function requireRouteCapability(req, res, path) {
   const session = req.authSession;
   if (!session) return true; // auth handled upstream
-  const key = `${req.method}:${path}`;
-  const capability = routeCapabilities.get(key);
-  if (!capability) return true; // unregistered route — no enforcement yet (migration in progress)
-  if (requireCapability(session, capability, key)) return true;
+  const capability = matchRouteCapability(req.method, path);
+  if (!capability) return false; // unregistered mutation routes — DENY by default
+  if (requireCapability(session, capability, `${req.method}:${path}`)) return true;
   json(res, 403, { ok: false, code: "not_authorized", error: `Not authorized. Required capability: ${capability}.` });
   return false;
 }

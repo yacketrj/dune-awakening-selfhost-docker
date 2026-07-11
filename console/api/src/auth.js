@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { discordActorTier, CAPABILITY_BY_TIER } from "./integrations/discord/policy.js";
 
 const sessions = new Map();
 const AUDIT_ENABLED = process.env.RBAC_AUDIT_ENABLED !== "0";
@@ -38,10 +39,18 @@ export function getAllCapabilities() {
   return ALL_CAPABILITIES || new Set();
 }
 
-export function resolveSessionCapabilities(session) {
-  // Admin password sessions get owner tier → all capabilities
-  // When Phase 3 adds Discord OAuth2, this will resolve from role mapping
-  return ALL_CAPABILITIES ? new Set(ALL_CAPABILITIES) : new Set();
+export function resolveSessionCapabilities(session, rbacConfig = {}) {
+  if (!session) return new Set();
+  // Local admin password → full owner tier
+  if (session.authSource === "local") return ALL_CAPABILITIES ? new Set(ALL_CAPABILITIES) : new Set();
+  // Discord OAuth2 → resolve from role mapping
+  if (session.authSource === "discord" && session.roleIds?.length > 0) {
+    const mapping = rbacConfig.rbacRoleMapping || {};
+    const tier = discordActorTier({ roleIds: session.roleIds }, mapping);
+    return CAPABILITY_BY_TIER[tier] || CAPABILITY_BY_TIER.public || new Set();
+  }
+  // Unknown source → public tier only
+  return new Set();
 }
 
 export function requireCapability(session, capability, route) {
