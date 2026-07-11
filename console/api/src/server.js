@@ -3,8 +3,9 @@ import { createServer as createNetServer } from "node:net";
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync, chmodSync, mkdirSync, createReadStream, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
 import { loadConfig, publicConfig, parseAllowedIps } from "./config.js";
-import { createAuth, setSessionCookie, clearSessionCookie, json, withSecurityHeaders } from "./auth.js";
+import { createAuth, setCapabilityRegistry, stampSessionCapabilities, setSessionCookie, clearSessionCookie, json, withSecurityHeaders, requireCapability } from "./auth.js";
 import { createLoginRateLimiter, createMutationRateLimiter } from "./rateLimit.js";
 import { createBridgeRateLimiter } from "./bridgeRateLimit.js";
 import { TaskManager, publicTask } from "./tasks.js";
@@ -25,7 +26,6 @@ import { serveStatic, contentTypeForPath } from "./http/staticFiles.js";
 import { discoverServices } from "./services/serviceDiscovery.js";
 import { createBackupDownloadArchive, enrichBackupRows, nextImportedBackupName, normalizeImportedBackupMetadata, validBackupDownloadName } from "./services/backups.js";
 import { createMemoryBalancer } from "./services/memoryBalancer.js";
-import { createDeathPoller } from "./deathPoller.js";
 import { updateEnvFileValue as updateEnvValue } from "./services/envFile.js";
 import { funcomAuthMismatchDetected, matchingFuncomAuthLines, saveFuncomTokenValue as writeFuncomToken, validDockerSince } from "./services/funcomAuth.js";
 import { readCharacterTransferSettings, saveCharacterTransferSettings } from "./services/characterTransferSettings.js";
@@ -40,6 +40,13 @@ const config = loadConfig();
 const auth = createAuth(config);
 const loginRateLimiter = createLoginRateLimiter();
 const mutationRateLimiter = createMutationRateLimiter();
+
+// Initialize RBAC capability registry for session stamping.
+// All capabilities from the Discord adapter policy are available to Web UI sessions.
+// Admin password sessions get all capabilities. Discord OAuth2 (Phase 3) will resolve per-role.
+import("./integrations/discord/policy.js").then((policy) => {
+  setCapabilityRegistry(Object.values(policy.DISCORD_CAPABILITIES));
+}).catch(() => {});
 const bridgeRateLimiter = createBridgeRateLimiter();
 const tasks = new TaskManager(config);
 let db = createDb(config);
@@ -54,7 +61,6 @@ let playerAnnouncementsAutoLastRun = 0;
 let playerAnnouncementsAutoNextAllowedRun = 0;
 const journeyTagsData = loadJourneyTagsData();
 const memoryBalancer = createMemoryBalancer(config);
-const deathPoller = createDeathPoller(config);
 const POSTGRES_UNAVAILABLE_MESSAGE = "Postgres is not running or is restarting. Wait for the database service to come back online, then refresh.";
 const DEFAULT_ALWAYS_ON_STARTUP_PARALLELISM = 1;
 const MAX_ALWAYS_ON_STARTUP_PARALLELISM = 16;
@@ -105,12 +111,6 @@ setInterval(() => {
   if (!memoryBalancer.publicState().enabled) return;
   runBackgroundTick("Memory balancer", () => memoryBalancer.tick());
 }, memoryBalancer.intervalMs).unref?.();
-
-setInterval(() => {
-  if (deathPoller.enabled && deathPoller.tick) runBackgroundTick("Death poller", () => deathPoller.tick());
-}, deathPoller.intervalMs).unref?.();
-
-if (deathPoller.enabled) deathPoller.init(db, config.repoRoot).catch(() => {});
 
 function runBackgroundTick(label, fn) {
   Promise.resolve()
@@ -229,6 +229,91 @@ function dockerPsNames() {
   });
 }
 
+// ── RBAC Route Registration ──
+
+function resolveRoleDisplay(roleIds) {
+  const owners = parseCsv(process.env.DISCORD_OWNER_ROLE_IDS);
+  const admins = parseCsv(process.env.DISCORD_ADMIN_ROLE_IDS);
+  const mods = parseCsv(process.env.DISCORD_MODERATOR_ROLE_IDS);
+  const obs = parseCsv(process.env.DISCORD_OBSERVER_ROLE_IDS);
+  if (roleIds.some(r => owners.includes(r))) return "owner";
+  if (roleIds.some(r => admins.includes(r))) return "admin";
+  if (roleIds.some(r => mods.includes(r))) return "moderator";
+  if (roleIds.some(r => obs.includes(r))) return "observer";
+  return "public";
+}
+
+function parseCsv(value) { return String(value || "").split(",").map(s => s.trim()).filter(Boolean); }
+
+// ── RBAC Route Registration ──
+
+const routeCapabilities = new Map();
+const oauthStates = new Map();
+
+function auditWrite(req, action, targetType, targetId, detail = {}) {
+  const session = req.authSession;
+  if (!session) return;
+  const actorId = session.actorId || (session.authSource === "local" ? "local:admin" : "unknown");
+  const actorName = session.discordUsername || (session.authSource === "local" ? "Console Admin" : actorId);
+  duneDb.rbacAuditLog(db, {
+    actorId, actorName, action, targetType, targetId,
+    route: req.url || "unknown", result: "success", detail
+  }).catch(() => {});
+}
+
+function handleAPI(method, pathPattern, capability, handler) {
+  const key = `${method}:${pathPattern}`;
+  routeCapabilities.set(key, capability);
+  return handler;
+}
+
+function registerRoute(method, pathPattern, capability) {
+  routeCapabilities.set(`${method}:${pathPattern}`, capability);
+}
+
+// ── Route Capability Registrations ──
+// Players
+registerRoute("POST", "/api/players/:id/give-item", "players:write");
+registerRoute("POST", "/api/players/:id/give-items", "players:write");
+registerRoute("POST", "/api/players/:id/give-item-id", "players:write");
+registerRoute("POST", "/api/players/:id/add-currency", "players:write");
+registerRoute("POST", "/api/players/:id/add-faction-reputation", "players:write");
+registerRoute("POST", "/api/players/:id/add-intel", "players:write");
+registerRoute("POST", "/api/players/:id/augment-item", "players:write");
+registerRoute("POST", "/api/players/:id/clear-augments", "players:write");
+registerRoute("POST", "/api/players/:id/inventory/:itemId", "players:write");
+registerRoute("DELETE", "/api/players/:id/inventory/:itemId", "players:delete");
+registerRoute("POST", "/api/players/:id/clean-inventory", "players:delete");
+registerRoute("POST", "/api/players/:id/specializations/add-xp", "players:write");
+registerRoute("POST", "/api/players/:id/specializations/grant-max", "players:write");
+registerRoute("POST", "/api/players/:id/specializations/reset", "players:write");
+// Server Control
+registerRoute("POST", "/api/server/restart", "server:control");
+registerRoute("POST", "/api/server/start", "server:control");
+registerRoute("POST", "/api/server/stop", "server:control");
+registerRoute("POST", "/api/server/update", "server:control");
+// Backups
+registerRoute("POST", "/api/backups/create", "backups:manage");
+registerRoute("POST", "/api/backups/restore", "backups:manage");
+registerRoute("DELETE", "/api/backups/:id", "backups:manage");
+// Database
+registerRoute("POST", "/api/database/query", "database:query");
+// Config
+registerRoute("POST", "/api/settings", "server:control");
+// RBAC Admin
+registerRoute("PUT", "/api/rbac/roles/:id", "auth:manage");
+
+function requireRouteCapability(req, res, path) {
+  const session = req.authSession;
+  if (!session) return true; // auth handled upstream
+  const key = `${req.method}:${path}`;
+  const capability = routeCapabilities.get(key);
+  if (!capability) return true; // unregistered route — no enforcement yet (migration in progress)
+  if (requireCapability(session, capability, key)) return true;
+  json(res, 403, { ok: false, code: "not_authorized", error: `Not authorized. Required capability: ${capability}.` });
+  return false;
+}
+
 async function handleApi(req, res) {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
@@ -236,7 +321,22 @@ async function handleApi(req, res) {
   if (path === "/api/health") return json(res, 200, { ok: true, app: config.appName });
   if (path === "/api/auth/state") {
     const session = auth.readSession(req);
-    return json(res, 200, { authenticated: Boolean(session), csrfToken: session?.csrf || null, config: publicConfig(config) });
+    const profile = session ? {
+      authenticated: true,
+      csrfToken: session.csrf || null,
+      config: publicConfig(config),
+      user: {
+        name: session.discordUsername || (session.authSource === "local" ? "Console Admin" : session.actorId || "Unknown"),
+        avatar: session.discordUsername ? `https://cdn.discordapp.com/avatars/${session.actorId?.replace("discord:", "")}/${session.avatar || "0"}.png` : null,
+        source: session.authSource || "local",
+        role: session.roleIds?.length > 0 ? resolveRoleDisplay(session.roleIds) : (session.authSource === "local" ? "owner" : "public")
+      }
+    } : {
+      authenticated: false,
+      csrfToken: null,
+      config: publicConfig(config)
+    };
+    return json(res, 200, profile);
   }
   if (path === "/api/auth/login" && req.method === "POST") {
     const rateKey = loginRateLimitKey(req);
@@ -253,22 +353,133 @@ async function handleApi(req, res) {
     const session = auth.makeSession();
     setSessionCookie(res, session, config);
     audit(config, req, "auth.login");
-    return json(res, 200, { authenticated: true, csrfToken: session.csrf });
+    return json(res, 200, {
+      authenticated: true,
+      csrfToken: session.csrf,
+      user: { name: "Console Admin", avatar: null, source: "local", role: "owner" }
+    });
   }
   if (path === "/api/auth/logout" && req.method === "POST") {
-    const session = auth.requireAuth(req, res);
+    const authSession = auth.requireAuth(req, res);
     if (!session) return;
     clearSessionCookie(res, config);
     audit(config, req, "auth.logout");
     return json(res, 200, { ok: true });
   }
-  if (isDiscordAdapterRoute(path)) {
-    return handleDiscordAdapterRoute({ req, res, path, config, readJson, json });
+
+  // ── Discord OAuth2 Login ──
+  if (path === "/api/auth/discord" && req.method === "GET") {
+    if (!config.discordOAuth?.clientId) {
+      return json(res, 400, { ok: false, error: "Discord OAuth2 is not configured." });
+    }
+    const state = randomBytes(16).toString("hex");
+    oauthStates.set(state, { expiresAt: Date.now() + 300_000 });
+    const params = new URLSearchParams({
+      client_id: config.discordOAuth.clientId,
+      redirect_uri: config.discordOAuth.redirectUri,
+      response_type: "code",
+      scope: "identify guilds",
+      state
+    });
+    res.writeHead(302, { Location: `https://discord.com/api/oauth2/authorize?${params}` });
+    return res.end();
   }
 
-  const session = auth.requireAuth(req, res);
-  if (!session) return;
-  req.authSession = session;
+  if (path === "/api/auth/discord/callback" && req.method === "GET") {
+    if (!config.discordOAuth?.clientId) {
+      return json(res, 400, { ok: false, error: "Discord OAuth2 is not configured." });
+    }
+    const url = new URL(req.url, "http://localhost");
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (!code || !state || !oauthStates.has(state)) {
+      // If the user already has a valid session, just serve the SPA
+      const existingSession = auth.readSession(req);
+      if (existingSession) {
+        const indexPath = join(config.staticDir || "", "index.html");
+        if (existsSync(indexPath)) {
+          res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
+          createReadStream(indexPath).pipe(res);
+          return;
+        }
+      }
+      return json(res, 400, { ok: false, error: "Invalid or expired OAuth state." });
+    }
+    oauthStates.delete(state);
+
+    try {
+      // Exchange code for token
+      const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: config.discordOAuth.clientId,
+          client_secret: config.discordOAuth.clientSecret,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: config.discordOAuth.redirectUri
+        })
+      });
+      const tokenData = await tokenRes.json();
+      if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
+
+      // Fetch user info
+      const userRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      const user = await userRes.json();
+
+      // Fetch guild roles if guild ID is configured
+      let roleIds = [];
+      if (config.discordOAuth.guildId) {
+        const guildRes = await fetch(`https://discord.com/api/users/@me/guilds`, {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` }
+        });
+        const guilds = await guildRes.json();
+        if (Array.isArray(guilds)) {
+          const memberGuild = guilds.find(g => g.id === config.discordOAuth.guildId);
+          if (memberGuild?.roles) roleIds = memberGuild.roles;
+        }
+      }
+
+      const session = auth.makeSession();
+      session.actorId = `discord:${user.id}`;
+      session.discordUsername = user.username;
+      session.avatar = user.avatar || "0";
+      session.roleIds = roleIds;
+      session.authSource = "discord";
+      // Re-stamp capabilities based on Discord roles
+      stampSessionCapabilities(session);
+
+      setSessionCookie(res, session, config);
+      audit(config, req, "auth.login", { source: "discord", userId: user.id, username: user.username });
+      res.writeHead(200, withSecurityHeaders({ "content-type": "text/html; charset=utf-8" }));
+      return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dune Console</title><style>body{background:#0a0614;color:#e0dde8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px}a{color:#8b5cf6}</style></head><body><p>Logged in as <strong>${user.username}</strong>.</p><p id="status">Checking session...</p><a href="/" style="display:none" id="link">Continue to Console</a><script>
+var tries=0;
+function check(){tries++;fetch("/api/auth/state").then(function(r){return r.json()}).then(function(d){
+if(d.authenticated){document.getElementById("status").textContent="Session active — redirecting...";window.location.replace("/");}
+else if(tries<5){document.getElementById("status").textContent="Waiting for session... ("+tries+"/5)";setTimeout(check,800);}
+else{document.getElementById("status").textContent="Session not found. Please try again.";document.getElementById("link").style.display="inline-block";}
+}).catch(function(){if(tries<5){setTimeout(check,800);}});}
+setTimeout(check,600);
+</script></body></html>`);
+    } catch (error) {
+      return json(res, 500, { ok: false, error: "Discord authentication failed." });
+    }
+  }
+
+  if (isDiscordAdapterRoute(path)) {
+    return handleDiscordAdapterRoute({ req, res, path, config, readJson, json, db });
+  }
+
+  const authSession = auth.requireAuth(req, res);
+  if (!authSession) return;
+  req.authSession = authSession;
+
+  // RBAC capability check — gated routes register via handleAPI().
+  // If a route is registered with a capability, enforce it here.
+  // Unregistered routes pass through unchanged (migration in progress).
+  if (!requireRouteCapability(req, res, path)) return;
 
   if (path === "/api/setup/state") return json(res, 200, await setupState());
   if (path === "/api/setup/preflight" && req.method === "POST") return json(res, 200, await preflight(config));
@@ -447,6 +658,7 @@ async function handleApi(req, res) {
   if (path.match(/^\/api\/players\/[^/]+\/repair-vehicle-decay$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.repair-vehicle-decay", "REPAIR VEHICLE DECAY", (playerId, body) => duneDb.repairVehicleDecay(db, playerId, body));
   if (path.match(/^\/api\/players\/[^/]+\/refuel-vehicle$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.refuel-vehicle", "REFUEL VEHICLE", (playerId, body) => duneDb.refuelVehicle(db, playerId, body));
   if (path.match(/^\/api\/players\/[^/]+\/augment-item$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.augment-item", "APPLY AUGMENTS", (playerId, body) => duneDb.augmentInventoryItem(db, playerId, body.itemId, { augments: body.augments }));
+  if (path.match(/^\/api\/players\/[^/]+\/clear-augments$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.clear-augments", "CLEAR AUGMENTS", (playerId, body) => duneDb.clearItemAugments(db, playerId, body.itemId));
   if (path.match(/^\/api\/players\/[^/]+\/inventory\/[^/]+$/) && req.method === "DELETE") return inventoryDeleteRoute(req, res, path);
   if (path.match(/^\/api\/players\/[^/]+\/inventory\/[^/]+$/) && req.method === "PATCH") return inventoryUpdateRoute(req, res, path);
   if (path.match(/^\/api\/players\/[^/]+\/crafting-recipes$/)) return dbPlayerRoute(res, path, duneDb.playerCraftingRecipes);
@@ -532,6 +744,38 @@ async function handleApi(req, res) {
   if (path === "/api/deepdesert/update" && req.method === "POST") return deepDesertUpdateRoute(req, res);
   if (path === "/api/settings" && req.method === "POST") return writeConfig(req, res);
   if (path === "/api/settings") return json(res, 200, await setupState());
+
+  // ── RBAC Admin API ──
+  if (path === "/api/rbac/capabilities") {
+    const caps = await import("./integrations/discord/policy.js").then(p => ({
+      capabilities: Object.values(p.DISCORD_CAPABILITIES),
+      descriptions: p.CAPABILITY_DESCRIPTIONS
+    })).catch(() => ({ capabilities: [], descriptions: {} }));
+    return json(res, 200, { ok: true, ...caps });
+  }
+
+  if (path === "/api/rbac/roles" && req.method === "GET") {
+    await duneDb.rbacTablesCreate(db);
+    const result = await db.query("select role_id, capability from dune.rbac_role_capabilities order by role_id, capability");
+    return json(res, 200, { ok: true, rows: result.rows });
+  }
+
+  if (path.match(/^\/api\/rbac\/roles\/([^/]+)$/) && req.method === "PUT") {
+    const body = await readJson(req);
+    const roleId = decodeURIComponent(path.split("/")[4]);
+    if (!roleId) return json(res, 400, { error: "Role ID is required" });
+    const caps = Array.isArray(body.capabilities) ? body.capabilities : [];
+    await duneDb.rbacSetRoleCapabilities(db, roleId, caps, "web:admin");
+    return json(res, 200, { ok: true, roleId, capabilities: caps });
+  }
+
+  if (path === "/api/rbac/audit" && req.method === "GET") {
+    await duneDb.rbacTablesCreate(db);
+    const results = await db.query(
+      "select * from dune.rbac_audit_log order by timestamp desc limit 200"
+    );
+    return json(res, 200, { ok: true, rows: results.rows });
+  }
 
   return json(res, 404, { error: "Not found" });
 }
@@ -626,7 +870,7 @@ function addonContentRoute(req, res, path) {
   if (!existsSync(target)) return json(res, 404, { error: "Addon content file not found." });
   res.writeHead(200, withSecurityHeaders({
     "content-type": contentTypeForPath(target),
-    "x-frame-options": "SAMEORIGIN"
+    "cache-control": "no-cache, no-store, must-revalidate"
   }));
   createReadStream(target).pipe(res);
 }
@@ -1674,6 +1918,7 @@ async function directDbMutation(req, res, action, phrase, fn, meta = {}) {
   try {
     const result = config.mockMode ? { ok: true, mock: true } : await fn(body);
     audit(config, req, action, { ...meta, supported: true, result });
+    auditWrite(req, action, meta.playerId ? "player" : meta.storageId ? "storage" : "config", meta.playerId || meta.storageId || meta.itemId || "", meta);
     return json(res, 200, { supported: true, backupCreated: false, result });
   } catch (error) {
     const status = error.unsupported ? 501 : 400;
@@ -1741,8 +1986,9 @@ async function grantPlayerItem(playerId, item, target) {
   const operation = resolved.itemId ? "adminGiveItemId" : "adminGiveItem";
   const hasExplicitGrade = item.quality !== undefined || item.grade !== undefined;
   const selectedGrade = hasExplicitGrade ? validateGrantGrade(item.quality ?? item.grade) : undefined;
-  const usesDatabaseGrant = (selectedGrade !== undefined && selectedGrade > 0) || itemRequiresDatabaseGrant(resolved) || (item.augments && item.augments.length > 0);
-  const databaseGrade = hasExplicitGrade ? selectedGrade : 0;
+  const hasAugments = Array.isArray(item.augments) && item.augments.length > 0;
+  const usesDatabaseGrant = itemRequiresDatabaseGrant(resolved) || hasAugments;
+  const databaseGrade = hasExplicitGrade ? selectedGrade : (usesDatabaseGrant ? 1 : 0);
   const payload = {
     playerId: target.actionId || playerId,
     itemId: resolved.itemId,
