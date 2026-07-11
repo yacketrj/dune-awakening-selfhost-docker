@@ -3680,3 +3680,697 @@ export async function addonOpsEconomySummary(db) {
 function emptyEconomySummary() {
   return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
 }
+
+export async function discordPlayerLinksTableCreate(db) {
+  await db.query(`
+    create table if not exists dune.discord_player_links (
+      discord_user_id text primary key,
+      player_controller_id text not null,
+      faction text default 'fremen',
+      linked_at timestamp with time zone default now()
+    )`);
+  // Add faction column to existing tables (migration)
+  try { await db.query("alter table dune.discord_player_links add column if not exists faction text default 'fremen'"); } catch {}
+}
+
+export async function setPlayerFaction(db, discordUserId, faction) {
+  await discordPlayerLinksTableCreate(db);
+  await db.query(
+    "update dune.discord_player_links set faction = $2 where discord_user_id = $1",
+    [String(discordUserId), String(faction)]
+  );
+}
+
+export async function getPlayerFaction(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const result = await db.query(
+    "select coalesce(faction, 'fremen') as faction from dune.discord_player_links where discord_user_id = $1",
+    [String(discordUserId)]
+  );
+  return result.rows[0]?.faction || "fremen";
+}
+
+export async function resolvePlayerByName(db, characterName) {
+  const result = await db.query(`
+    select player_controller_id::text as player_controller_id,
+           character_name,
+           player_pawn_id::text as player_pawn_id,
+           coalesce(online_status::text, 'Offline') as online_status
+    from dune.player_state
+    where lower(character_name) = lower($1)
+    order by player_controller_id`, [String(characterName).trim()]);
+  return result.rows;
+}
+
+export async function getLinkedPlayer(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const result = await db.query(`
+    select dpl.discord_user_id,
+           dpl.player_controller_id,
+           coalesce(ps.character_name, '') as character_name,
+           coalesce(ps.player_pawn_id::text, '0') as player_pawn_id,
+           coalesce(ps.online_status::text, 'Offline') as online_status
+    from dune.discord_player_links dpl
+    join dune.player_state ps on ps.player_controller_id::text = dpl.player_controller_id
+    where dpl.discord_user_id = $1
+    limit 1`, [String(discordUserId)]);
+  return result.rows[0] || null;
+}
+
+export async function discordPlayerLink(db, discordUserId, playerControllerId) {
+  await discordPlayerLinksTableCreate(db);
+  await db.query("delete from dune.discord_player_links where player_controller_id = $1", [playerControllerId]);
+  await db.query(`
+    insert into dune.discord_player_links (discord_user_id, player_controller_id)
+    values ($1, $2)
+    on conflict (discord_user_id) do update
+      set player_controller_id = excluded.player_controller_id,
+          linked_at = now()`, [String(discordUserId), playerControllerId]);
+  return await getLinkedPlayer(db, discordUserId);
+}
+
+export async function discordPlayerUnlink(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const player = await getLinkedPlayer(db, discordUserId);
+  await db.query("delete from dune.discord_player_links where discord_user_id = $1", [String(discordUserId)]);
+  return Boolean(player);
+}
+
+// ── RBAC Tables ──
+
+export async function rbacTablesCreate(db) {
+  await db.query(`
+    create table if not exists dune.rbac_role_capabilities (
+      role_id    text not null,
+      capability text not null,
+      granted_by text,
+      granted_at timestamptz default now(),
+      primary key (role_id, capability)
+    )`);
+
+  await db.query(`
+    create table if not exists dune.rbac_audit_log (
+      id          serial primary key,
+      timestamp   timestamptz default now(),
+      actor_id    text not null,
+      actor_name  text,
+      action      text not null,
+      target_type text,
+      target_id   text,
+      route       text,
+      result      text not null,
+      detail      jsonb
+    )`);
+
+  try { await db.query("create index if not exists idx_rbac_audit_timestamp on dune.rbac_audit_log (timestamp desc)"); } catch {}
+  try { await db.query("create index if not exists idx_rbac_audit_actor on dune.rbac_audit_log (actor_id, timestamp desc)"); } catch {}
+}
+
+export async function rbacRoleCapabilities(db, roleId) {
+  const result = await db.query(
+    `select capability from dune.rbac_role_capabilities where role_id = $1 order by capability`,
+    [String(roleId)]
+  );
+  return result.rows.map(r => r.capability);
+}
+
+export async function rbacSetRoleCapabilities(db, roleId, capabilities, grantedBy = "system") {
+  await rbacTablesCreate(db);
+  await db.query("delete from dune.rbac_role_capabilities where role_id = $1", [String(roleId)]);
+  if (capabilities.length > 0) {
+    const values = capabilities.map((_, i) => `($1, $${i + 2}, $${capabilities.length + 2})`).join(", ");
+    await db.query(
+      `insert into dune.rbac_role_capabilities (role_id, capability, granted_by) values ${values}`,
+      [String(roleId), ...capabilities, String(grantedBy)]
+    );
+  }
+}
+
+export async function rbacAuditLog(db, { actorId, actorName, action, targetType, targetId, route, result, detail = {} }) {
+  if (!(await tableExists(db, "rbac_audit_log"))) return;
+  try {
+    await db.query(
+      `insert into dune.rbac_audit_log (actor_id, actor_name, action, target_type, target_id, route, result, detail)
+       values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+      [String(actorId), String(actorName || ""), String(action), String(targetType || ""),
+       String(targetId || ""), String(route || ""), String(result), JSON.stringify(detail)]
+    );
+  } catch { /* best effort */ }
+}
+
+export async function playerOwnedStorageQuery(db, playerControllerId) {
+  const result = await db.query(`
+    select p.id,
+           coalesce(max(case when pa.actor_name not like '##%' and pa.actor_name <> 'None' then pa.actor_name end), p.building_type) as name,
+           p.building_type as class,
+           coalesce(a.map, '') as map,
+           count(i.id)::int as item_count
+    from dune.placeables p
+    left join dune.actors a on a.id = p.id
+    left join dune.inventories inv on inv.actor_id = p.id
+    left join dune.items i on i.inventory_id = inv.id
+    left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
+    left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
+    left join dune.permission_actor pa on pa.actor_id = par.permission_actor_id
+    where par.player_id = $1
+      and par.rank = 1
+      and p.is_hologram = false
+      and p.owner_entity_id is not null
+      and p.owner_entity_id != 0
+    group by p.id, p.building_type, a.map
+    order by p.id`, [playerControllerId]);
+  return { rows: result.rows };
+}
+
+export async function guildStorageQuery(db, playerControllerId) {
+  const result = await db.query(`
+    select p.id,
+           coalesce(max(case when pa.actor_name not like '##%' and pa.actor_name <> 'None' then pa.actor_name end), p.building_type) as name,
+           p.building_type as class,
+           coalesce(a.map, '') as map,
+           count(i.id)::int as item_count
+    from dune.placeables p
+    left join dune.actors a on a.id = p.id
+    left join dune.inventories inv on inv.actor_id = p.id
+    left join dune.items i on i.inventory_id = inv.id
+    left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
+    left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
+    left join dune.guild_members gm on gm.player_id = par.player_id
+    left join dune.guild_members self_gm on self_gm.player_id = $1
+    left join dune.permission_actor pa on pa.actor_id = par.permission_actor_id
+    where gm.guild_id = self_gm.guild_id
+      and p.is_hologram = false
+      and p.owner_entity_id is not null
+      and p.owner_entity_id != 0
+    group by p.id, p.building_type, a.map
+    order by p.id`, [playerControllerId]);
+  return { rows: result.rows };
+}
+
+export async function searchItemsInContainers(db, { playerControllerId, query, scope = "owned" }) {
+  const searchTerm = `%${String(query).trim()}%`;
+
+  if (scope === "owned") {
+    const result = await db.query(`
+      select i.id,
+             i.template_id,
+             i.stack_size,
+             i.quality_level,
+             i.inventory_id,
+             inv.actor_id as container_id,
+             coalesce(
+               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability'), null),
+               null
+             ) as current_durability,
+             coalesce(
+               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::numeric, 0),
+               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'DecayedMaxDurability')::numeric, 0),
+               null
+             ) as max_durability
+      from dune.items i
+      join dune.inventories inv on i.inventory_id = inv.id
+      join dune.placeables p on p.id = inv.actor_id
+      left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
+      left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
+      where par.player_id = $1
+        and par.rank = 1
+        and i.template_id ilike $2
+      order by i.template_id
+      limit 200`, [playerControllerId, searchTerm]);
+    return { rows: result.rows };
+  }
+
+  if (scope === "guild") {
+    const result = await db.query(`
+      select distinct i.id,
+             i.template_id,
+             i.stack_size,
+             i.quality_level,
+             i.inventory_id,
+             inv.actor_id as container_id,
+             coalesce(
+               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability'), null),
+               null
+             ) as current_durability,
+             coalesce(
+               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::numeric, 0),
+               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'DecayedMaxDurability')::numeric, 0),
+               null
+             ) as max_durability
+      from dune.items i
+      join dune.inventories inv on i.inventory_id = inv.id
+      join dune.placeables p on p.id = inv.actor_id
+      left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
+      left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
+      left join dune.guild_members gm on gm.player_id = par.player_id
+      left join dune.guild_members self_gm on self_gm.player_id = $1
+      where gm.guild_id = self_gm.guild_id
+        and i.template_id ilike $2
+      order by i.template_id
+      limit 200`, [playerControllerId, searchTerm]);
+    return { rows: result.rows };
+  }
+
+  throw new Error(`Unsupported search scope: ${scope}. Use "owned" or "guild".`);
+}
+
+export async function searchItemsInPlayerInventory(db, playerPawnId, query) {
+  const searchTerm = `%${String(query).trim()}%`;
+  const result = await db.query(`
+    select i.id,
+           i.template_id,
+           i.stack_size,
+           i.quality_level,
+           i.position_index,
+           i.inventory_id,
+           coalesce(
+             nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability'), null),
+             null
+           ) as current_durability,
+           coalesce(
+             nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::numeric, 0),
+             nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'DecayedMaxDurability')::numeric, 0),
+             null
+           ) as max_durability
+    from dune.items i
+    join dune.inventories inv on i.inventory_id = inv.id
+    where inv.actor_id = $1 and inv.inventory_type in (0, 1, 15)
+      and i.template_id ilike $2
+    order by i.template_id
+    limit 200`, [intParam(playerPawnId, "player pawn id", 1), searchTerm]);
+  return { rows: result.rows };
+}
+export async function addonOpsActivitySummary(db) {
+  const exists = await tableExists(db, "player_state");
+  if (!exists) return emptyActivitySummary();
+
+  const columns = await columnsFor(db, "player_state");
+  const hasLoginTime = columns.has("last_login_time");
+  const hasActivity = columns.has("last_avatar_activity");
+  const hasReturning = columns.has("last_returning_player_event_time");
+  const hasTransfer = columns.has("transfer_count");
+
+  const now = "now()";
+  const constraints = [];
+
+  if (hasActivity) {
+    constraints.push(
+      `count(*) filter (where last_avatar_activity > ${now} - interval '1 hour')::int as active_last_1h`,
+      `count(*) filter (where last_avatar_activity > ${now} - interval '24 hours')::int as active_last_24h`,
+      `count(*) filter (where last_avatar_activity > ${now} - interval '7 days')::int as active_last_7d`,
+      `count(*) filter (where last_avatar_activity < ${now} - interval '30 days')::int as inactive_players`
+    );
+  } else {
+    constraints.push("0::int as active_last_1h", "0::int as active_last_24h", "0::int as active_last_7d", "0::int as inactive_players");
+  }
+
+  if (hasReturning) {
+    constraints.push(`count(*) filter (where last_returning_player_event_time > ${now} - interval '7 days')::int as returning_players`);
+  } else {
+    constraints.push("0::int as returning_players");
+  }
+
+  if (hasTransfer) {
+    constraints.push("count(*) filter (where transfer_count = 0)::int as new_players");
+  } else if (hasLoginTime) {
+    constraints.push(`count(*) filter (where last_login_time > ${now} - interval '7 days')::int as new_players`);
+  } else {
+    constraints.push("0::int as new_players");
+  }
+
+  const result = await db.query(`
+    select count(*)::int as total_players,
+           count(*) filter (where online_status = 'Online')::int as online_players,
+           count(*) filter (where life_state::text <> 'Alive')::int as players_dead,
+           ${constraints.join(",\n           ")}
+    from dune.player_state`);
+
+  const r = result.rows?.[0] || {};
+
+  let guildActivity = [];
+  try {
+    const guildsExist = await tableExists(db, "guilds");
+    const membersExist = await tableExists(db, "guild_members");
+    if (guildsExist && membersExist) {
+      const memberCols = await columnsFor(db, "guild_members");
+      const guildCols = await columnsFor(db, "guilds");
+      const playerCol = firstExistingColumn(memberCols, ["player_id", "player_controller_id", "account_id"]);
+      const memberGuildCol = firstExistingColumn(memberCols, ["guild_id", "id"]);
+      const guildIdCol = firstExistingColumn(guildCols, ["guild_id", "id"]);
+      const guildNameCol = firstExistingColumn(guildCols, ["guild_name", "name", "display_name"]);
+      if (playerCol && memberGuildCol && guildIdCol && guildNameCol) {
+        const guildResult = await db.query(`
+          select coalesce(g.${quoteIdentifier(guildNameCol)}, 'Unknown') as guild,
+                 count(gm.*)::int as members,
+                 count(ps.*) filter (where ps.online_status = 'Online')::int as online
+          from dune.guilds g
+          left join dune.guild_members gm on gm.${quoteIdentifier(memberGuildCol)} = g.${quoteIdentifier(guildIdCol)}
+          left join dune.player_state ps on ps.player_controller_id::text = gm.${quoteIdentifier(playerCol)}::text
+          group by g.${quoteIdentifier(guildNameCol)}
+          order by members desc
+          limit 20`);
+        guildActivity = guildResult.rows || [];
+      }
+    }
+  } catch { }
+
+  let factionActivity = [];
+  try {
+    const factionExists = await tableExists(db, "player_faction");
+    if (factionExists) {
+      const factionCols = await columnsFor(db, "player_faction");
+      const factionsExist = await tableExists(db, "factions");
+      const actorCol = firstExistingColumn(factionCols, ["actor_id", "player_id", "player_controller_id"]);
+      const factionIdCol = firstExistingColumn(factionCols, ["faction_id", "faction"]);
+      if (actorCol && factionIdCol) {
+        const factionResult = await db.query(`
+          select coalesce(f.name, pf.${quoteIdentifier(factionIdCol)}::text, 'Unknown') as faction,
+                 count(*)::int as members,
+                 count(*) filter (where ps.online_status = 'Online')::int as online
+          from dune.player_faction pf
+          join dune.player_state ps on ps.player_pawn_id::text = pf.${quoteIdentifier(actorCol)}::text
+          ${factionsExist ? "left join dune.factions f on f.id::text = pf." + quoteIdentifier(factionIdCol) + "::text" : ""}
+          group by f.name, pf.${quoteIdentifier(factionIdCol)}
+          order by members desc
+          limit 20`);
+        factionActivity = factionResult.rows || [];
+      }
+    }
+  } catch { }
+
+  let mapActivity = [];
+  try {
+    const mapsExist = await tableExists(db, "map_names");
+    const playerMapTable = await tableExists(db, "overmap_players");
+    if (mapsExist) {
+      const mapCols = await columnsFor(db, "map_names");
+      const mapIdCol = firstExistingColumn(mapCols, ["map_name_id", "id"]);
+      const mapNameCol = firstExistingColumn(mapCols, ["map_name", "name"]);
+      if (mapIdCol && mapNameCol) {
+        const mapResult = await db.query(`
+          select coalesce(mn.${quoteIdentifier(mapNameCol)}, 'Unknown') as map,
+                 ${playerMapTable
+                    ? `count(op.*)::int as actors,
+                       count(op.*) filter (where op.is_online)::int as online
+                       from dune.map_names mn
+                       left join dune.overmap_players op on op.map_name_id = mn.${quoteIdentifier(mapIdCol)}
+                       group by mn.${quoteIdentifier(mapNameCol)}`
+                    : `0::int as actors, 0::int as online
+                       from dune.map_names mn
+                       group by mn.${quoteIdentifier(mapNameCol)}`}
+          order by actors desc
+          limit 20`);
+        mapActivity = mapResult.rows || [];
+      }
+    }
+  } catch { }
+
+  return {
+    totalPlayers: Number(r.total_players || 0),
+    onlinePlayers: Number(r.online_players || 0),
+    activeLast1h: r.active_last_1h != null ? Number(r.active_last_1h) : null,
+    activeLast24h: r.active_last_24h != null ? Number(r.active_last_24h) : null,
+    activeLast7d: r.active_last_7d != null ? Number(r.active_last_7d) : null,
+    inactivePlayers: r.inactive_players != null ? Number(r.inactive_players) : null,
+    returningPlayers: r.returning_players != null ? Number(r.returning_players) : null,
+    newPlayers: r.new_players != null ? Number(r.new_players) : null,
+    playersDead: Number(r.players_dead || 0),
+    guildActivity,
+    factionActivity,
+    mapActivity
+  };
+}
+
+function emptyActivitySummary() {
+  return {
+    totalPlayers: 0, onlinePlayers: 0,
+    activeLast1h: null, activeLast24h: null, activeLast7d: null,
+    inactivePlayers: null, returningPlayers: null, newPlayers: null,
+    playersDead: 0,
+    guildActivity: [], factionActivity: [], mapActivity: []
+  };
+}
+
+const BACKEND_TO_SERVICE = {
+  HaggaBasin: "Survival_1",
+  DeepDesert: "DeepDesert_1",
+  Overland: "Overmap",
+  Arrakeen: "SH_Arrakeen",
+  HarkoVillage: "SH_HarkoVillage"
+};
+
+function mapDisplayName(backendName) {
+  const humanNames = {
+    HaggaBasin: "Hagga Basin",
+    DeepDesert: "Deep Desert",
+    Overland: "Overmap",
+    Arrakeen: "Arrakeen",
+    HarkoVillage: "Harko Village"
+  };
+  return humanNames[backendName] || backendName;
+}
+
+async function buildDisplayNameMap(db) {
+  const mapping = {};
+  try {
+    const result = await db.query(
+      `SELECT map, dimension_index, label FROM dune.world_partition WHERE map IS NOT NULL`
+    );
+    const byService = {};
+    for (const row of result.rows || []) {
+      if (!byService[row.map]) byService[row.map] = [];
+      byService[row.map].push(row);
+    }
+    for (const [backend, service] of Object.entries(BACKEND_TO_SERVICE)) {
+      const partitions = byService[service] || [];
+      if (partitions.length === 0) {
+        mapping[backend] = mapDisplayName(backend);
+      } else if (backend === "DeepDesert") {
+        partitions.sort((a, b) => a.dimension_index - b.dimension_index);
+        mapping[backend] = partitions.map(p => {
+          const instanceNum = p.dimension_index + 1;
+          const label = (p.label || "").trim();
+          if (label && !/^DeepDesert_\d+$/.test(label)) {
+            return label;
+          }
+          const mode = label.includes("PvP") ? "PvP" : label.includes("PvE") ? "PvE" : "";
+          return "Deep Desert Instance " + instanceNum + (mode ? " (" + mode + ")" : "");
+        }).join(", ");
+      } else {
+        const primary = partitions.find(p => p.dimension_index === 0) || partitions[0];
+        const label = (primary?.label || "").trim();
+        const baseName = mapDisplayName(backend);
+        const isAutoGenerated = new RegExp("^" + service.replace(/_/g, "\\\\_") + "_\\\\d+$").test(label);
+        mapping[backend] = (!label || isAutoGenerated) ? baseName : label + " - " + baseName;
+      }
+    }
+  } catch { }
+  return mapping;
+}
+
+export async function addonOpsResourcesSummary(db) {
+  if (!(await tableExists(db, "resourcefield_state"))) return emptyResourcesSummary();
+
+  const displayNames = await buildDisplayNameMap(db);
+
+  // Only include maps that have a running partition (server_id IS NOT NULL)
+  let activeMaps = new Set();
+  try {
+    const partitionResult = await db.query(
+      `SELECT DISTINCT map FROM dune.world_partition WHERE server_id IS NOT NULL`
+    );
+    for (const row of partitionResult.rows || []) {
+      for (const [backend, service] of Object.entries(BACKEND_TO_SERVICE)) {
+        if (row.map === service) activeMaps.add(backend);
+      }
+    }
+  } catch { }
+
+  const result = await db.query(`
+    select count(*)::int as total_fields,
+           coalesce(sum(value_remaining), 0)::bigint as total_value
+    from dune.resourcefield_state
+    where field_kind_id = 1
+      ${activeMaps.size > 0 ? `and map = ANY($${1})` : ""}`,
+    activeMaps.size > 0 ? [[...activeMaps]] : []);
+
+
+  const r = result.rows?.[0] || {};
+
+  let resourcesByMap = [];
+  try {
+      const mapResult = await db.query(`
+        select map,
+               count(*)::int as fields,
+               coalesce(sum(value_remaining), 0)::bigint as total_value
+        from dune.resourcefield_state
+        where field_kind_id = 1
+          ${activeMaps.size > 0 ? `and map = ANY($${1})` : ""}
+        group by map
+        order by fields desc`,
+        activeMaps.size > 0 ? [[...activeMaps]] : []);
+    resourcesByMap = (mapResult.rows || []).map(row => ({
+      ...row,
+      map: displayNames[row.map] || mapDisplayName(row.map)
+    }));
+  } catch { }
+
+  let spiceFieldsBySize = [];
+  try {
+    const spiceExists = await tableExists(db, "spicefield_types");
+    if (spiceExists) {
+      const spiceResult = await db.query(`
+        select sft.field_type as size,
+               sft.map_name as map,
+               coalesce(sum(sft.current_globally_active), 0)::int as currently_active,
+               coalesce(sum(sft.max_globally_active), 0)::int as max_active,
+               (select coalesce(sum(value_remaining), 0)::bigint
+                from dune.resourcefield_state rfs
+                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as total_value,
+               (select count(*)::int
+                from dune.resourcefield_state rfs
+                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as active_fields
+        from dune.spicefield_types sft
+        where sft.is_spawning_active = true
+          ${activeMaps.size > 0 ? `and sft.map_name = ANY($${1})` : ""}
+          and exists (select 1 from dune.resourcefield_state rfs2
+                       where rfs2.map = sft.map_name and rfs2.field_kind_id = 1)
+        group by sft.field_type, sft.map_name
+        order by sft.map_name, sft.field_type`,
+        activeMaps.size > 0 ? [[...activeMaps]] : []);
+      spiceFieldsBySize = (spiceResult.rows || []).map(row => ({
+        ...row,
+        map: displayNames[row.map] || mapDisplayName(row.map)
+      }));
+    }
+  } catch { }
+
+  return {
+    totalFields: Number(r.total_fields || 0),
+    totalValueRemaining: Number(r.total_value || 0),
+    resourcesByMap,
+    spiceFieldsBySize
+  };
+}
+
+function emptyResourcesSummary() {
+  return { totalFields: 0, totalValueRemaining: 0, resourcesByMap: [], spiceFieldsBySize: [] };
+}
+
+export async function addonOpsCombatDeaths(db) {
+  const exists = await tableExists(db, "player_death_log");
+  if (!exists) return emptyCombatDeaths();
+
+  const result = await db.query(`
+    select count(*)::int as total_deaths,
+           count(*) filter (where death_cause = 'Dead')::int as unknown_deaths,
+           count(*) filter (where death_cause = 'DeadByCoriolis')::int as coriolis_deaths,
+           count(*) filter (where death_cause = 'DeadBySandworm')::int as sandworm_deaths
+    from dune.player_death_log`);
+
+  const r = result.rows?.[0] || {};
+  const causes = [
+    { cause: "Sandworm", count: Number(r.sandworm_deaths || 0) },
+    { cause: "Coriolis", count: Number(r.coriolis_deaths || 0) },
+    { cause: "Unknown", count: Number(r.unknown_deaths || 0) }
+  ].filter(d => d.count > 0);
+
+  return {
+    totalDeaths: Number(r.total_deaths || 0),
+    pvpDeaths: 0,
+    pveDeaths: Number(r.total_deaths || 0),
+    deathsByCause: causes,
+    deathsByMap: [],
+    topHostileNpcs: [],
+    kdRatio: null
+  };
+}
+
+function emptyCombatDeaths() {
+  return { totalDeaths: 0, pvpDeaths: 0, pveDeaths: 0, deathsByCause: [], deathsByMap: [], topHostileNpcs: [], kdRatio: null };
+}
+
+export async function addonOpsEconomySummary(db) {
+  let totalCurrencyHolders = 0;
+  let totalSupply = 0;
+  let currencyBreakdown = [];
+
+  try {
+    const currencyExists = await tableExists(db, "player_virtual_currency_balances");
+    if (currencyExists) {
+      const result = await db.query(`
+        select count(distinct player_controller_id)::int as holders,
+               coalesce(sum(balance), 0)::bigint as total_supply
+        from dune.player_virtual_currency_balances`);
+      const r = result.rows?.[0] || {};
+      totalCurrencyHolders = Number(r.holders || 0);
+      totalSupply = Number(r.total_supply || 0);
+
+      const breakdown = await db.query(`
+        select currency_id::text as currency_id,
+               count(distinct player_controller_id)::int as holders,
+               coalesce(sum(balance), 0)::bigint as supply,
+               coalesce(round(avg(balance)), 0)::bigint as avg_balance,
+               coalesce(min(balance), 0)::bigint as min_balance,
+               coalesce(max(balance), 0)::bigint as max_balance
+        from dune.player_virtual_currency_balances
+        group by currency_id
+        order by supply desc`);
+      currencyBreakdown = breakdown.rows || [];
+    }
+  } catch { }
+
+  let activeOrders = 0;
+  let fulfilledOrders = 0;
+  let topTradedItems = [];
+
+  try {
+    const ordersExist = await tableExists(db, "dune_exchange_orders");
+    const fulfilledExist = await tableExists(db, "dune_exchange_fulfilled_orders");
+    if (ordersExist) {
+      const ordersResult = await db.query(`select count(*)::int as count from dune.dune_exchange_orders`);
+      activeOrders = Number(ordersResult.rows?.[0]?.count || 0);
+
+      const topResult = await db.query(`
+        select coalesce(template_id, 'Unknown') as template_id,
+               count(*)::int as orders,
+               coalesce(round(avg(item_price)), 0)::bigint as avg_price,
+               coalesce(min(item_price), 0)::bigint as min_price,
+               coalesce(max(item_price), 0)::bigint as max_price
+        from dune.dune_exchange_orders
+        group by template_id
+        order by orders desc
+        limit 20`);
+      topTradedItems = topResult.rows || [];
+    }
+    if (fulfilledExist) {
+      const fulfilledResult = await db.query(`select count(*)::int as count from dune.dune_exchange_fulfilled_orders`);
+      fulfilledOrders = Number(fulfilledResult.rows?.[0]?.count || 0);
+    }
+  } catch { }
+
+  let taxCollected = 0;
+  try {
+    const taxExists = await tableExists(db, "tax_invoice");
+    if (taxExists) {
+      const taxResult = await db.query(`
+        select coalesce(sum(amount), 0)::bigint as total
+        from dune.tax_invoice`);
+      taxCollected = Number(taxResult.rows?.[0]?.total || 0);
+    }
+  } catch { }
+
+  return {
+    totalCurrencyHolders,
+    totalSupply,
+    activeOrders,
+    fulfilledOrders,
+    taxCollected,
+    currencyBreakdown,
+    topTradedItems
+  };
+}
+
+function emptyEconomySummary() {
+  return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
+}
