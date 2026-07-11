@@ -5,7 +5,7 @@ import { playersApi } from "../../api/players";
 import type { Task } from "../../api/setup";
 import { compareTableValues, DataTable, useResizableColumns, useSortableRows, useSortState } from "../../components/common/DataTable";
 import { InlineActionResult } from "../../components/common/InlineActionResult";
-import { ItemCatalogSelector, ItemGradeSelect, PackageItemPreview, catalogItemId, catalogItemName, grantItemDurability, itemGrade, normalizeItemGrade, type CatalogItem } from "../../components/common/ItemCatalog";
+import { ItemCatalogSelector, ItemGradeSelect, MAX_ARMOR_AUGMENTS, PackageItemPreview, AugmentPicker, augmentLimit, catalogItemId, catalogItemName, grantItemDurability, itemGrade, normalizeItemGrade, type CatalogItem } from "../../components/common/ItemCatalog";
 import { firstDefined, formatCell } from "../../lib/display";
 import { PlayerCategoryIconRail } from "./PlayerCategoryIconRail";
 import { PlayerDetailTab } from "./PlayerDetailTab";
