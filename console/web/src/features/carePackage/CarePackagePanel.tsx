@@ -12,6 +12,9 @@ import {
   ItemGradeSelect,
   AugmentPicker,
   augmentLimit,
+  isWeapon,
+  isArmor,
+  isMelee,
   PackageItemPreview,
   catalogItemId,
   catalogItemName,
@@ -91,7 +94,20 @@ export function CarePackagePanel({ onError, confirmAction }: { onError: (text: s
     if ((!name || all.length === 0) && cat !== "weapons" && cat !== "clothing") return all;
     const limit = augmentLimit(itemName, cat, itemId);
     if (limit === 0) return [];
-    return all.sort((a: any, b: any) => a.name.localeCompare(b.name));
+    const combined = (itemId + " " + itemName).toLowerCase();
+    const isGear = isArmor(combined) || cat === "clothing";
+    const isMeleeW = isMelee(combined);
+    const isRanged = isWeapon(combined) || cat === "weapons";
+    const rangedGeneric = new Set(["damage","acuracy","shielddamage","range","recoil","reloadspeed","rateoffire","magazinecapacity","headshotdamage"]);
+    const commonGeneric = new Set(["deathdurability","ch5"]);
+    const wp = (id: string) => { const trimmed = id.replace(/_Schematic$/i, ""); const m = trimmed.match(/^T\d+_Augment_(.+?)(\d+|Off)$/); return m ? m[1].replace(/^Ch5_/, "").toLowerCase() : ""; };
+    return all.filter((aug) => {
+      const p = wp(aug.id);
+      if (isGear) return p.startsWith("armor") || commonGeneric.has(p);
+      if (isMeleeW) return p === "melee" || commonGeneric.has(p);
+      if (isRanged) return rangedGeneric.has(p) || commonGeneric.has(p) || p === "melee";
+      return true;
+    }).sort((a: any, b: any) => a.name.localeCompare(b.name));
   }
   async function run(action: () => Promise<unknown>) {
     onError("");
