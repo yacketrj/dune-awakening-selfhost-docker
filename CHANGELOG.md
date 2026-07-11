@@ -99,3 +99,6 @@ All notable changes to the `yacketrj/dune-awakening-selfhost-docker` fork.
 
 ### v1.3.44 – v1.3.46
 - Earlier upstream releases pre-fork
+
+#### Fixed
+- **`requireRouteCapability()` pass-through** — unregistered routes now ALLOW (was DENY), fixing all route access behind auth guard. Registered routes still enforce tiered capabilities.

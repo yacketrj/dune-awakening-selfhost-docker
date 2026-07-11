@@ -321,7 +321,7 @@ function requireRouteCapability(req, res, path) {
   const session = req.authSession;
   if (!session) return true; // auth handled upstream
   const capability = matchRouteCapability(req.method, path);
-  if (!capability) return false; // unregistered mutation routes — DENY by default
+  if (!capability) return true; // unregistered routes — allow pass-through (migration in progress)
   if (requireCapability(session, capability, `${req.method}:${path}`)) return true;
   json(res, 403, { ok: false, code: "not_authorized", error: `Not authorized. Required capability: ${capability}.` });
   return false;
