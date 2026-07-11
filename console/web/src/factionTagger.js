@@ -14,12 +14,11 @@
   }
 
   function scan() {
-    // Only scan data-display elements — skip forms, inputs, buttons, labels
-    document.querySelectorAll("table td, table th, .metric-card, .card, .section-heading h2, .section-heading h3, .panel-title h2, .DataTable td, .guilds-table td, .players-table td").forEach(tag);
+    // Only scan data-display elements — skip item catalogs, forms, inputs
+    document.querySelectorAll(".guilds-table td, .guilds-table th, .players-table td, .players-table th, .metric-card, .card .section-heading h2, .card .section-heading h3, .panel-title h2").forEach(tag);
     document.querySelectorAll("tr").forEach(function(row) {
       if (row.hasAttribute("data-tagged-faction") || row.hasAttribute("data-tagged-spice")) return;
-      // Only tag rows inside data tables, not form rows
-      if (row.closest("table") && row.closest("table").classList.contains("guilds-table") || row.closest("table.players-table")) {
+      if (row.closest("table") && (row.closest(".guilds-table") || row.closest(".players-table"))) {
         tag(row);
       }
     });
