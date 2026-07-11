@@ -628,3 +628,105 @@ const deathPoller = { enabled: false, init() {}, tick() {} };
 4. **Augment Preview** — Show tooltip preview of what stats each augment will add before applying.
 
 5. **Building Material Requirements** — Currently uses hardcoded estimates in `placeableResources.ts`. A scraper script from `dune.gaming.tools` could provide accurate, up-to-date resource data.
+
+---
+
+## 12. Max Roll DB Trigger
+
+### 12.1 Problem
+
+When a pre-augmented weapon is first loaded by the game, the game generates **random** `StatRolls` values for each augment. Our `buildItemStats` seeds all rolls to `[1.0]` (max), but the game overrides them on first load with random values specific to each augment type.
+
+The game writes these random values to the DB only on certain events (durability changes, equip/unequip), NOT on item load. So the DB shows our `[1.0]` seed until the weapon takes durability damage or similar.
+
+### 12.2 Solution: PostgreSQL Trigger
+
+A `BEFORE UPDATE` trigger on `dune.items` detects when the game writes random rolls and instantly replaces them with max values.
+
+**Trigger function:**
+
+```sql
+CREATE OR REPLACE FUNCTION dune.augment_max_rolls()
+RETURNS trigger AS $$
+DECLARE
+  aug_data jsonb;
+  rolls jsonb;
+  new_rolls jsonb := '[]'::jsonb;
+  roll_item jsonb;
+  i int;
+BEGIN
+  aug_data := NEW.stats->'FAugmentedItemStats'->1;
+  IF aug_data IS NULL OR aug_data->'AppliedAugmentRollData' IS NULL THEN
+    RETURN NEW;
+  END IF;
+  
+  rolls := aug_data->'AppliedAugmentRollData';
+  
+  FOR i IN 0..jsonb_array_length(rolls)-1 LOOP
+    roll_item := rolls->i;
+    roll_item := jsonb_set(roll_item, '{StatRolls}', '[1.0]'::jsonb);
+    new_rolls := new_rolls || roll_item;
+  END LOOP;
+  
+  NEW.stats := jsonb_set(
+    jsonb_set(NEW.stats, '{FAugmentedItemStats,1,AppliedAugmentRollData}', new_rolls),
+    '{FAugmentedItemStats,1,AppliedAugmentQualities}',
+    (SELECT jsonb_agg(5) FROM jsonb_array_elements(aug_data->'AppliedAugmentQualities'))
+  );
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Trigger registration:**
+
+```sql
+CREATE TRIGGER augment_max_rolls_trigger
+  BEFORE UPDATE ON dune.items
+  FOR EACH ROW
+  WHEN (NEW.stats->'FAugmentedItemStats'->1->'AppliedAugmentRollData' IS NOT NULL
+    AND NEW.stats::text <> OLD.stats::text
+    AND OLD.stats->'FAugmentedItemStats'->1 IS NOT NULL)
+  EXECUTE FUNCTION dune.augment_max_rolls();
+```
+
+### 12.3 Reality
+
+The game generates random `StatRolls` on **every** login, not just the first. The `AugmentedItemHash` identifies the item but does NOT prevent re-rolling. The DB trigger maxes stored values, but the game's in-memory random values are what the player sees.
+
+**What we achieve:** Our `[1.0]` format ensures the augment slot is **filled and recognized** by the game. The actual stat percentages will always be game-generated.
+
+**What we can't control:** The game's random number generator. Roll values are determined by the augment's base stat ranges and the game's RNG, not by stored DB values.
+
+### 12.4 Trigger Purpose
+
+The trigger remains useful for:
+- Ensuring all `StatRolls` arrays are syntactically valid (game may write partial/broken arrays)
+- Maxing `AppliedAugmentQualities` to 5
+- Providing clean data for inventory display tools and API responses
+
+### 12.5 Performance
+
+- Fires ONLY when: augment data exists AND stats actually changed AND old stats had augment data
+- Does NOT fire on: initial INSERT, normal loot/craft/trade, items without augments
+- Overhead: ~1 JSONB function call per augmented weapon per durability change event
+- For 30 active players: negligible (< 1ms per trigger fire)
+
+### 12.6 Verification
+
+Check if trigger worked:
+
+```sql
+SELECT i.id, i.template_id,
+       i.stats->'FAugmentedItemStats'->1->'AppliedAugmentRollData' as rolls,
+       i.stats->'FAugmentedItemStats'->1->'AugmentedItemHash' as hash
+FROM dune.items i WHERE i.template_id = 'B1C4_Unique_DualBlades1'
+ORDER BY i.id DESC LIMIT 1;
+```
+
+- `hash` IS NOT NULL → game processed the item
+- `rolls` all `[1.0]` → trigger maxed them
+- Player must RELOG after trigger fires to see updated values in-game
+
+5. **Building Material Requirements** — Currently uses hardcoded estimates in `placeableResources.ts`. A scraper script from `dune.gaming.tools` could provide accurate, up-to-date resource data.
