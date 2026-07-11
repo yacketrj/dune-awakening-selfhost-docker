@@ -342,7 +342,9 @@ async function handleApi(req, res) {
         name: session.discordUsername || (session.authSource === "local" ? "Console Admin" : session.actorId || "Unknown"),
         avatar: session.discordUsername ? `https://cdn.discordapp.com/avatars/${session.actorId?.replace("discord:", "")}/${session.avatar || "0"}.png` : null,
         source: session.authSource || "local",
-        role: session.roleIds?.length > 0 ? resolveRoleDisplay(session.roleIds) : (session.authSource === "local" ? "owner" : "public")
+        role: session.roleIds?.length > 0 ? resolveRoleDisplay(session.roleIds) : (session.authSource === "local" ? "owner" : "public"),
+        _debugRoleIds: session.roleIds || [],
+        _debugSource: session.authSource || "local"
       }
     } : {
       authenticated: false,
