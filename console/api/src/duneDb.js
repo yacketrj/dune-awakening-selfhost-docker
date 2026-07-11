@@ -2615,17 +2615,19 @@ function validateAugmentIds(augments) {
 }
 
 function buildItemStats({ augments = [], durability = {} } = {}) {
-  const customizationEntries = augments.length > 0
-    ? [augments.map((id) => ({
-        AugmentTemplateId: id,
+  const augmentEntries = augments.length > 0
+    ? augments.map((id) => ({
+        AugmentTemplateId: String(id).replace(/_Schematic$/i, ""),
         FAugmentItemStats: { StatRolls: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] }
-      }))]
-    : [[]];
+      }))
+    : [];
+  const customizationEntries = augmentEntries.length > 0 ? [augmentEntries] : [[]];
   const durabilityObj = durability.max !== undefined
     ? { CurrentDurability: Number(durability.current ?? durability.max), MaxDurability: Number(durability.max), DecayedMaxDurability: Number(durability.max), DecayedDurability: Number(durability.current ?? durability.max) }
     : {};
   return {
     FCustomizationStats: [customizationEntries[0], {}],
+    FAugmentItemStats: [augmentEntries.map((e) => e.FAugmentItemStats), {}],
     FItemStackAndDurabilityStats: [[], durabilityObj]
   };
 }
