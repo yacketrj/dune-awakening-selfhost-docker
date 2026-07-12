@@ -153,11 +153,10 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     <DataTable
       rows={rows}
       emptyMessage="No blueprints found. Import one above."
-      rowKey={(row) => String(row.id)}
-      onRowClick={(row) => toggleSelect(Number(row.id))}
-      action={(row: BlueprintRow) => <span className="icon-toggle-group">
-        <input type="checkbox" checked={selected.has(Number(row.id))} onChange={() => toggleSelect(Number(row.id))} style={{ width: "auto", margin: 0 }} />
-        <button className="icon-toggle-button success" title="Download" aria-label="Download Blueprint" onClick={(event) => { event.stopPropagation(); handleExportSingle(row); }}><Download size={16} /></button>
+      rowKey={(row) => String((row as BlueprintRow).id)}
+      action={(row: Record<string, unknown>) => <span className="icon-toggle-group">
+        <input type="checkbox" checked={selected.has(Number((row as BlueprintRow).id))} onChange={() => toggleSelect(Number((row as BlueprintRow).id))} style={{ width: "auto", margin: 0 }} />
+        <button className="icon-toggle-button success" title="Download" aria-label="Download Blueprint" onClick={(event) => { event.stopPropagation(); handleExportSingle(row as BlueprintRow); }}><Download size={16} /></button>
       </span>}
     />
   </section>;
