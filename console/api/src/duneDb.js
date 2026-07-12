@@ -4188,14 +4188,3 @@ export async function addonOpsEconomySummary(db) {
 function emptyEconomySummary() {
   return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
 }
-
-function isTemplateAugmentable(templateId) {
-  const name = String(templateId || "");
-  return isWeaponTemplate(name) || isArmorTemplate(name);
-}
-function isWeaponTemplate(name) {
-  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
-}
-function isArmorTemplate(name) {
-  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
-}
