@@ -144,8 +144,8 @@ All notable changes to the `yacketrj/dune-awakening-selfhost-docker` fork.
 
 | PR | Reviewer | Feedback | Resolution |
 |----|----------|----------|------------|
-| #75 | Red-Blink | Trim to docs+tests only — upstream already fixed roll-count fallback locally | Removed UI changes and duplicate augmentRollCount, kept docs + isTemplateAugmentable helpers |
-| #76 | Red-Blink | Split into smaller PRs — bundles placeables, care package, faction UI, docs. Fails web build with TSX errors | Stripped to 4 files: placeableResources.ts, DataTable.tsx, docs, 5KB icon. Removed 12 bloated 1.8-2MB PNGs (16MB total) |
+| #75 | Red-Blink | "Most useful behavior already in main. Remaining backend additions look unused." | Trimmed to docs-only: `PRE-AUGMENTED-GEAR.md` (730 lines). Removed `isTemplateAugmentable` helpers and all backend code. |
+| #76 | Red-Blink | "Icons messed up, 16MB just for icons" — "Split into smaller PRs, web build fails" | Stripped to 5 files: placeableResources.ts, DataTable.tsx, 5KB icon, UI-ENHANCEMENTS.md. Icons reduced from 16MB→5KB. Reverted corrupted TSX to upstream. |
 | #71 | Red-Blink | Remove generated coverage/SBOM artifacts, rebase after #69 merge | Removed 77 generated files (coverage HTML, lcov.info, SBOM JSON), resolved route conflicts |
 | #69 | Red-Blink | Fix await on handleSecureInfraRoute, update tests for new infra routes | Added missing `await`, fixed test assertions, trailing whitespace — MERGED upstream |
 | #13 | Red-Blink | Fix entrypoint/user flow — console API image switches to USER node before entrypoint, can't repair mounted repo ownership | Pending |

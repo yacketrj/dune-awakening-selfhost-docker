@@ -23,12 +23,15 @@
 
 ### PR #75 — Pre-Augmented Gear
 - **Reviewer**: Red-Blink
+- **Status**: RESOLVED — trimmed to docs-only per reviewer
 - **Issues**:
-  1. "We may not need the main backend change anymore" — upstream already fixed roll-count fallback
-  2. Wants to preserve docs, tests, compatibility data
+  1. "Most useful behavior already in main. Remaining backend additions look unused."
+  2. Suggested docs-only PR
 - **Resolution**:
-  1. Trimmed to 2 files: isTemplateAugmentable helpers (11 lines) + PRE-AUGMENTED-GEAR.md (730 lines)
-  2. Removed duplicate augmentRollCount (upstream has it via addf775)
+  1. Removed `isTemplateAugmentable/isWeaponTemplate/isArmorTemplate` helpers (unused call path)
+  2. Kept `PRE-AUGMENTED-GEAR.md` (730 lines) as architecture docs-only PR
+  3. CI green, all checks pass
+- **Closed**: 2026-07-12
 
 ### PR #13 — Container Hardening
 - **Reviewer**: Red-Blink
