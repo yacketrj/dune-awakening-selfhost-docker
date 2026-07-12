@@ -53,3 +53,11 @@ When upstream leaves PR feedback:
 - **Fix needed**: Restructure entrypoint/user flow so ownership repairs happen before switching to non-root user
 - **Progress**: Not started
 - **Last updated**: 2026-07-12
+
+### Permission issue on bind-mounted runtime/secrets
+- **Symptom**: `cat runtime/secrets/admin-web-password.txt: Permission denied` after container restart
+- **Root cause**: Container runs as root (DUNE_HOST_UID=0), creates files owned by root:root. Host user (darkdante, uid 1000) cannot read them
+- **Workaround**: Set DUNE_HOST_UID=1000 in .env, chown runtime/ after deploy
+- **Fix needed**: Entrypoint should repair ownership before switching to non-root user (PR #13)
+- **Also affects**: runtime/generated/ files created by orchestrator
+- **Discovered**: 2026-07-12 on e2e-clean stack
