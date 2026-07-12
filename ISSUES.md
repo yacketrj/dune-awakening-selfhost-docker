@@ -64,3 +64,44 @@ When upstream leaves PR feedback:
 - **Fix needed**: Entrypoint should repair ownership before switching to non-root user (PR #13)
 - **Also affects**: runtime/generated/ files created by orchestrator
 - **Discovered**: 2026-07-12 on e2e-clean stack
+
+### Pipeline Improvement — Pre-PR Validation
+- **Reporter**: RedBlink (DAWK)
+- **Status**: OPEN
+- **Priority**: HIGH
+- **Created**: 2026-07-12
+
+#### Problem
+Upstream reviewer is spending excessive time finding errors in PRs:
+- Back-and-forth on merge conflicts, trailing whitespace, syntax errors
+- Web build failures (corrupted TSX from merge resolution)
+- Missed checks (generated artifacts committed, icon size bloating)
+- In-game testing not done before PR submission
+
+#### Root Causes
+1. Pre-push gates bypassed with `--no-verify`
+2. No automated CI on our fork — upstream CI is the first CI run
+3. No in-game validation before PR submission
+4. Merge conflict resolution (`both sides`) introduces JSX corruption
+5. No pre-PR check for generated artifacts (coverage, SBOM, dist)
+
+#### Required Pre-PR Checklist (per DAWK)
+- [ ] Backend: `node --test test/*.test.js` — 0 failures
+- [ ] Frontend: `npm run build` in `console/web/` — 0 errors
+- [ ] Game: Deploy to e2e-clean, test the feature in-game
+- [ ] Security: Run pre-push gates WITHOUT `--no-verify`
+- [ ] Clean diff: Only intended files changed, no merge artifacts
+- [ ] No generated files: No coverage/, dist/, .tmp/, SBOM
+
+#### Action Items
+1. Stop using `--no-verify` on pushes
+2. Add CI workflow to our fork (yacketrj) mirroring upstream
+3. Create pre-PR validation script that runs all checks locally
+4. Add `git diff --check` for trailing whitespace to local checks
+5. Add check for generated artifacts in changed files
+6. After merge conflicts, verify JSX/TSX files compile before pushing
+7. Test in-game on e2e-clean before pushing to upstream PR branch
+
+#### Notes
+"what I usually do: set goal to implement feature X, do backend, check frontend, test ingame, then commit" — DAWK
+"nothing is automatic 🙂 the upstream PR cut goes through a lot of checks and tests" — Dark Dante
