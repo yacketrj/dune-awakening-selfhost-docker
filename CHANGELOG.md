@@ -186,3 +186,11 @@ This runs tests, updates CHANGELOG, commits version bump, tags, pushes, and send
 crontab -l
 ```
 Checks fork sync, PR mergeability, CI failures, and sends Discord notifications for issues.
+
+### Process: Upstream Request Workflow
+For every upstream PR review request:
+1. **Create ISSUES.md entry** — symptom, root cause, reviewer feedback, status, progress
+2. **Add CHANGELOG.md entry** — in the "Upstream PR Feedback" table with issue link
+3. **Update progress** — edit ISSUES.md status field as work progresses (Not started → In Progress → Resolved)
+4. **Close with resolution** — update CHANGELOG table with "Resolution" column, mark ISSUES.md closed
+5. **Notify Discord** — `notify-new-issue.sh` on creation, `release.sh` on resolution

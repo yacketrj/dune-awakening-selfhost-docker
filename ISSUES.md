@@ -42,3 +42,14 @@ When upstream leaves PR feedback:
 1. Add to CHANGELOG.md "Upstream PR Feedback" table
 2. Add to ISSUES.md "Upstream PR Feedback" section with reviewer, issues, resolution
 3. Link the specific PR comments
+
+### PR #13 — Container Hardening
+- **Reviewer**: Red-Blink
+- **Status**: PENDING
+- **Issues**:
+  1. Entrypoint runs as USER node before entrypoint.sh executes
+  2. Cannot repair mounted repo/app ownership (root-owned installs)
+  3. Need to verify Docker socket access and mounted repo writes
+- **Fix needed**: Restructure entrypoint/user flow so ownership repairs happen before switching to non-root user
+- **Progress**: Not started
+- **Last updated**: 2026-07-12
