@@ -194,3 +194,10 @@ For every upstream PR review request:
 3. **Update progress** — edit ISSUES.md status field as work progresses (Not started → In Progress → Resolved)
 4. **Close with resolution** — update CHANGELOG table with "Resolution" column, mark ISSUES.md closed
 5. **Notify Discord** — `notify-new-issue.sh` on creation, `release.sh` on resolution
+
+### Process Update: Automated Issue Tracking
+- **Cron auto-logging** — `validate-and-report.sh` now auto-creates ISSUES.md entries for PR conflicts, CI failures, and sync issues
+- **Deduplication** — uses content hashing to skip repeat detections
+- **Auto-resolution** — marks issues RESOLVED when the next run shows 0 issues
+- **State tracking** — `/tmp/acp-issue-state.txt` persists between cron runs
+- **Discord notification** — always sent regardless of ISSUES.md logging
