@@ -139,3 +139,14 @@ All notable changes to the `yacketrj/dune-awakening-selfhost-docker` fork.
 
 #### Fixed
 - **`requireRouteCapability()` pass-through** — unregistered routes now ALLOW (was DENY), fixing all route access behind auth guard. Registered routes still enforce tiered capabilities.
+
+### Upstream PR Feedback
+
+| PR | Reviewer | Feedback | Resolution |
+|----|----------|----------|------------|
+| #75 | Red-Blink | Trim to docs+tests only — upstream already fixed roll-count fallback locally | Removed UI changes and duplicate augmentRollCount, kept docs + isTemplateAugmentable helpers |
+| #76 | Red-Blink | Split into smaller PRs — bundles placeables, care package, faction UI, docs. Fails web build with TSX errors | Stripped to 4 files: placeableResources.ts, DataTable.tsx, docs, 5KB icon. Removed 12 bloated 1.8-2MB PNGs (16MB total) |
+| #71 | Red-Blink | Remove generated coverage/SBOM artifacts, rebase after #69 merge | Removed 77 generated files (coverage HTML, lcov.info, SBOM JSON), resolved route conflicts |
+| #69 | Red-Blink | Fix await on handleSecureInfraRoute, update tests for new infra routes | Added missing `await`, fixed test assertions, trailing whitespace — MERGED upstream |
+| #13 | Red-Blink | Fix entrypoint/user flow — console API image switches to USER node before entrypoint, can't repair mounted repo ownership | Pending |
+
