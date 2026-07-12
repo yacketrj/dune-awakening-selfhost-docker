@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Download, Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import { api } from "../../api/client";
 import { DataTable } from "../../components/common/DataTable";
 import { formatUiSentence } from "../../lib/display";
 
 type BlueprintRow = Record<string, unknown> & { id: number; name: string; owner_name?: string; item_id?: number; pieces: number; placeables: number };
 
-export function BlueprintsPanel({ onError, confirmAction }: { onError: (text: string) => void; confirmAction: (message: string, options?: Record<string, unknown>) => Promise<boolean> }) {
+export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playerName = "" }: { onError: (text: string) => void; confirmAction: (message: string, options?: Record<string, unknown>) => Promise<boolean>; dbPlayerId?: string; playerName?: string }) {
   const [rows, setRows] = useState<BlueprintRow[]>([]);
   const [message, setMessage] = useState("");
-  const [importOpen, setImportOpen] = useState(false);
-  const [playerId, setPlayerId] = useState("");
-  const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [exportingAll, setExportingAll] = useState(false);
 
   useEffect(() => {
     load();
@@ -23,7 +22,11 @@ export function BlueprintsPanel({ onError, confirmAction }: { onError: (text: st
     try {
       const result = await api<BlueprintRow[] | { rows: BlueprintRow[] }>("/api/blueprints");
       const data = Array.isArray(result) ? result : ((result as { rows: BlueprintRow[] }).rows || []);
-      setRows(data);
+      if (dbPlayerId) {
+        setRows(data.filter((row) => String(row.owner_id ?? row.owner_name ?? "") === dbPlayerId || String(row.player_id ?? "") === dbPlayerId));
+      } else {
+        setRows(data);
+      }
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     }
@@ -47,23 +50,30 @@ export function BlueprintsPanel({ onError, confirmAction }: { onError: (text: st
     }
   }
 
-  async function handleImport() {
-    if (!importFile || !playerId.trim()) return;
-    const id = Number(playerId);
-    if (!Number.isFinite(id) || id < 1) {
-      setMessage("Invalid player ID");
-      return;
+  async function handleExportAll() {
+    if (rows.length === 0) return;
+    setExportingAll(true);
+    try {
+      for (const row of rows) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        await handleExport(row);
+      }
+    } finally {
+      setExportingAll(false);
     }
-    if (!(await confirmAction(`Import blueprint to player ${id}? Player must be offline.`, {}))) return;
+  }
+
+  async function handleImport() {
+    if (!importFile || !dbPlayerId) return;
+    if (!(await confirmAction(`Import blueprint for ${playerName || "this player"}? Player must be offline.`, {}))) return;
     setImporting(true);
     const form = new FormData();
     form.append("file", importFile);
-    form.append("player_id", playerId);
+    form.append("player_id", dbPlayerId);
     try {
       const result = await api<{ ok: boolean; message?: string; error?: string }>("/api/blueprints/import", { method: "POST", body: form });
       setMessage(result.message || result.error || "Import completed");
       setImportFile(null);
-      setPlayerId("");
       load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -72,26 +82,18 @@ export function BlueprintsPanel({ onError, confirmAction }: { onError: (text: st
     }
   }
 
-  return <section className="panel">
-    <div className="panel-title"><h2>Blueprints</h2></div>
+  return <section>
     {message && <div className="result-panel transient-result"><strong>Import Result.</strong><p>{formatUiSentence(message)}</p></div>}
-    <div className={`playerAdmin_toggle ${importOpen ? "open" : ""}`}>
-      <button className="playerAdmin_toggleHeader" onClick={() => setImportOpen(!importOpen)}>
-        {importOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Import Blueprint</span>
+    <div className="action-line" style={{ marginBottom: 10 }}>
+      <label className="file-upload-label" style={{ flex: 1 }}>Blueprint JSON<input type="file" accept=".json,application/json" onChange={(e) => setImportFile(e.target.files?.[0] || null)} /></label>
+      <button disabled={!importFile || !dbPlayerId || importing} onClick={handleImport}>
+        {importing ? "Importing..." : <><Upload size={16} /> Import</>}
       </button>
-      {importOpen && <div className="playerAdmin_toggleBody">
-        <div className="playerAdmin_section">
-          <p className="action-help-note">Player must be offline. Blueprint is imported as a Solido Replicator item into their backpack.</p>
-          <div className="action-line">
-            <label>Player ID<input type="text" value={playerId} onChange={(e) => setPlayerId(e.target.value)} placeholder="Enter player pawn ID" /></label>
-            <label className="file-upload-label">Blueprint JSON<input type="file" accept=".json,application/json" onChange={(e) => setImportFile(e.target.files?.[0] || null)} /></label>
-            <button disabled={!importFile || !playerId.trim() || importing} onClick={handleImport}>
-              {importing ? "Importing..." : <><Upload size={16} /> Import</>}
-            </button>
-          </div>
-        </div>
-      </div>}
+      <button disabled={rows.length === 0 || exportingAll} onClick={handleExportAll} className="success">
+        {exportingAll ? "Exporting..." : <><Download size={16} /> Export All</>}
+      </button>
     </div>
+    <p className="action-help-note" style={{ marginBottom: 10 }}>{playerName || "Player"} must be offline to import. Blueprint is added as a Solido Replicator item to their backpack.</p>
     <DataTable
       rows={rows}
       emptyMessage="No blueprints found. Import one above."
