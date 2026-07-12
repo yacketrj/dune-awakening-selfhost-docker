@@ -4187,44 +4187,14 @@ export async function addonOpsEconomySummary(db) {
 
 function emptyEconomySummary() {
   return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
-}
-
-// ── Per-augment roll counts + template validation ──
-function augmentRollCount(augmentId) {
-  const id = String(augmentId || "").replace(/_Schematic$/i, "");
-  const m = id.match(/^T\d+_Augment_(.+?)(\d+|Off)$/);
-  const type = m ? m[1].replace(/^Ch5_/, "").toLowerCase() : "";
-  const num = m?.[2] || "";
-  const key = num ? type + num : type;
-  // Roll counts from https://dune.gaming.tools per augment
-  const KNOWN = {
-    "melee8": 3,             // Blade Optimizer: Damage, Atk Stam, Block Stam
-    "melee4": 2,             // Aggressive Grip Adjuster
-    "melee1": 2,             // Blade Sharpener (assumed 2)
-    "melee6": 1,             // Blade Blood Grooves
-    "ch5melee1": 2,         // Heavy Metal Blade Coating
-    "spitdartrifle7": 8,     // Unique: 5 fixed + 3 random
-    "spitdartrifle5": 2,
-    "spitdartrifle2": 1,
-    "spitdartrifle1": 2,
-    "damage1": 1,            // Heavy Caliber Upgrade
-    "damage2": 1,            // House Heavy Caliber Upgrade
-    "deathdurabilityoff": 1, // Protective Coating
-  };
-  if (KNOWN[key]) return KNOWN[key];
-  if (type === "melee" || type.startsWith("ch5melee")) return 2;
-  return 1;
-}
 
 function isTemplateAugmentable(templateId) {
   const name = String(templateId || "");
   return isWeaponTemplate(name) || isArmorTemplate(name);
 }
-
 function isWeaponTemplate(name) {
   return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
 }
-
 function isArmorTemplate(name) {
   return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
 }
