@@ -201,3 +201,9 @@ For every upstream PR review request:
 - **Auto-resolution** — marks issues RESOLVED when the next run shows 0 issues
 - **State tracking** — `/tmp/acp-issue-state.txt` persists between cron runs
 - **Discord notification** — always sent regardless of ISSUES.md logging
+
+### Pipeline Improvement Issue (per upstream reviewer)
+- **Problem**: Back-and-forth on PRs — reviewer finds errors we should catch locally
+- **Root cause**: Pre-push gates bypassed, no fork CI, no in-game testing before submission
+- **Required**: Backend tests + frontend build + in-game validation + security gates before push
+- **Action**: Stop `--no-verify`, add fork CI, create pre-PR validation script (tracked in ISSUES.md)
