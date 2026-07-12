@@ -410,7 +410,6 @@ async function handleApi(req, res) {
     });
     params.append("scope", "identify");
     params.append("scope", "guilds");
-    params.append("scope", "guilds.members.read");
     res.writeHead(302, { Location: `https://discord.com/api/oauth2/authorize?${params}` });
     return res.end();
   }
