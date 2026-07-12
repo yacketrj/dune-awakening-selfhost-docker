@@ -155,21 +155,29 @@ function RolesTab({
               onClick={() => setSelectedRole(role)}
             >
               <span className="rbac-role-name">{role}</span>
-              <span className="rbac-role-count">{count}</span>
+              <span className="rbac-role-count">{role === "owner" ? "all" : count}</span>
             </button>
           );
         })}
       </div>
 
+      {selectedRole === "owner" && (
+        <div className="rbac-owner-note">
+          <Shield size={16} />
+          <span>Owner always has all capabilities. This role cannot be modified.</span>
+        </div>
+      )}
+
       <div className="rbac-cap-grid">
         {Object.entries(CAPABILITY_DOMAINS).map(([domain, caps]) => (
-          <div key={domain} className="rbac-cap-domain">
+          <div key={domain} className={`rbac-cap-domain ${selectedRole === "owner" ? "rbac-cap-domain-locked" : ""}`}>
             <h4>{domain}</h4>
             {caps.map((cap) => (
-              <label key={cap} className="rbac-cap-toggle">
+              <label key={cap} className={`rbac-cap-toggle ${selectedRole === "owner" ? "rbac-cap-toggle-locked" : ""}`}>
                 <input
                   type="checkbox"
-                  checked={selectedCaps.has(cap)}
+                  checked={selectedRole === "owner" ? true : selectedCaps.has(cap)}
+                  disabled={selectedRole === "owner"}
                   onChange={() => toggleCap(cap)}
                 />
                 <span>{CAPABILITY_LABELS[cap] || cap}</span>
@@ -180,13 +188,20 @@ function RolesTab({
       </div>
 
       <div className="rbac-save-bar">
-        <button className="success" disabled={!dirty || saving} onClick={() => void saveRole()}>
-          <Save size={16} />
-          {saving ? "Saving..." : "Save"}
-        </button>
-        <span className="rbac-save-note">
-          {dirty ? "Changes not saved" : "All changes saved"}
-        </span>
+        {selectedRole !== "owner" && (
+          <>
+            <button className="success" disabled={!dirty || saving} onClick={() => void saveRole()}>
+              <Save size={16} />
+              {saving ? "Saving..." : "Save"}
+            </button>
+            <span className="rbac-save-note">
+              {dirty ? "Changes not saved" : "All changes saved"}
+            </span>
+          </>
+        )}
+        {selectedRole === "owner" && (
+          <span className="rbac-save-note">Owner role is immutable — always has all 21 capabilities</span>
+        )}
       </div>
     </div>
   );
