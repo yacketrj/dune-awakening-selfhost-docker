@@ -150,3 +150,39 @@ All notable changes to the `yacketrj/dune-awakening-selfhost-docker` fork.
 | #69 | Red-Blink | Fix await on handleSecureInfraRoute, update tests for new infra routes | Added missing `await`, fixed test assertions, trailing whitespace — MERGED upstream |
 | #13 | Red-Blink | Fix entrypoint/user flow — console API image switches to USER node before entrypoint, can't repair mounted repo ownership | Pending |
 
+
+---
+
+## Process
+
+### Issue Tracking
+- New issues are logged in `ISSUES.md` with symptom, root cause, workaround, and fix status
+- Use `notify-new-issue.sh "title" "description"` to send Discord notification to #acp-updates
+- Upstream PR feedback is captured in both CHANGELOG.md (feedback table) and ISSUES.md (per-PR section)
+
+### Release Process
+```bash
+# 1. Ensure all tests pass
+cd console/api && npm test
+
+# 2. Update CHANGELOG.md under [Unreleased]
+
+# 3. Tag and release
+release.sh v1.4.0 feature/rbac-core
+```
+This runs tests, updates CHANGELOG, commits version bump, tags, pushes, and sends Discord notification.
+
+### Pre-Push Gates
+```bash
+# Runs automatically on git push (blocking)
+# Manual run:
+~/.local/bin/pre-push-gates
+```
+5 security scans + 4 upstream CI mirror checks. Fails closed — any non-zero exit blocks the push.
+
+### Hourly Validation
+```bash
+# Runs via crontab every hour
+crontab -l
+```
+Checks fork sync, PR mergeability, CI failures, and sends Discord notifications for issues.
