@@ -4187,6 +4187,7 @@ export async function addonOpsEconomySummary(db) {
 
 function emptyEconomySummary() {
   return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
+}
 
 function isTemplateAugmentable(templateId) {
   const name = String(templateId || "");
