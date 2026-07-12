@@ -2682,11 +2682,37 @@ function augmentRollPayloadFromStats(stats) {
   return perfectAugmentRollPayload(payload);
 }
 
-function perfectAugmentRollPayload(payload = {}) {
-  const rollCount = Array.isArray(payload.StatRolls) && payload.StatRolls.length > 0 ? payload.StatRolls.length : 1;
+function augmentRollCount(augmentId) {
+  const id = String(augmentId || "").replace(/_Schematic$/i, "");
+  const m = id.match(/^T\d+_Augment_(.+?)(\d+|Off)$/);
+  const type = m ? m[1].replace(/^Ch5_/, "").toLowerCase() : "";
+  const num = m?.[2] || "";
+  const key = num ? type + num : type;
+  const KNOWN = {
+    "melee8": 3,
+    "melee4": 2,
+    "melee1": 2,
+    "melee6": 1,
+    "ch5melee1": 2,
+    "spitdartrifle7": 8,
+    "spitdartrifle5": 2,
+    "spitdartrifle2": 1,
+    "spitdartrifle1": 2,
+    "damage1": 1,
+    "damage2": 1,
+    "deathdurabilityoff": 1,
+  };
+  if (KNOWN[key]) return KNOWN[key];
+  if (type === "melee" || type.startsWith("ch5melee")) return 2;
+  return 1;
+}
+
+function perfectAugmentRollPayload(payload = {}, augmentId = "") {
+  const hasExisting = Array.isArray(payload?.StatRolls) && payload.StatRolls.length > 0;
+  const rollCount = hasExisting ? payload.StatRolls.length : augmentRollCount(augmentId);
   return {
     StatRolls: Array.from({ length: rollCount }, () => 1),
-    AppliedEffectIndices: Array.isArray(payload.AppliedEffectIndices) ? payload.AppliedEffectIndices : []
+    AppliedEffectIndices: Array.isArray(payload?.AppliedEffectIndices) ? payload.AppliedEffectIndices : []
   };
 }
 
@@ -2860,7 +2886,7 @@ async function loadAugmentRollPayloads(tx, augmentIds = [], qualityOverride = nu
     }
   }
   for (const id of uniqueIds) {
-    if (!payloads.has(id)) payloads.set(id, { quality: overrideQuality ?? 1, rollData: perfectAugmentRollPayload() });
+    if (!payloads.has(id)) payloads.set(id, { quality: overrideQuality ?? 1, rollData: perfectAugmentRollPayload({}, id) });
   }
   return payloads;
 }
