@@ -28,8 +28,8 @@ export function RbacAdminPanel() {
     try {
       const data = await getRoleCapabilities();
       setRoleCaps(data.rows);
-    } catch {
-      setError("Failed to load role capabilities");
+    } catch (e) {
+      setError("Failed to load role capabilities: " + (e instanceof Error ? e.message : String(e)));
     }
   }, []);
 
@@ -37,8 +37,8 @@ export function RbacAdminPanel() {
     try {
       const data = await getAuditLog();
       setAuditLog(data.rows);
-    } catch {
-      setError("Failed to load audit log");
+    } catch (e) {
+      setError("Failed to load audit log: " + (e instanceof Error ? e.message : String(e)));
     }
   }, []);
 
