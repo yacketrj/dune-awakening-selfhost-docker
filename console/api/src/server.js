@@ -323,7 +323,10 @@ function matchRouteCapability(method, path) {
   if (routeCapabilities.has(key)) return routeCapabilities.get(key);
   // Pattern match — convert :param patterns to regex
   for (const [pattern, capability] of routeCapabilities.entries()) {
-    const [pMethod, pPath] = pattern.split(":");
+    const colonIdx = pattern.indexOf(":");
+    if (colonIdx < 0) continue;
+    const pMethod = pattern.slice(0, colonIdx);
+    const pPath = pattern.slice(colonIdx + 1);
     if (pMethod !== method) continue;
     const regex = new RegExp("^" + pPath.replace(/:(\w+)/g, "([^/]+)") + "$");
     if (regex.test(path)) return capability;
