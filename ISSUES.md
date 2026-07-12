@@ -105,3 +105,15 @@ Upstream reviewer is spending excessive time finding errors in PRs:
 #### Notes
 "what I usually do: set goal to implement feature X, do backend, check frontend, test ingame, then commit" — DAWK
 "nothing is automatic 🙂 the upstream PR cut goes through a lot of checks and tests" — Dark Dante
+
+### RabbitMQ Quality Limitation (Discovery)
+- **Status**: CLOSED
+- **Finding**: Funcom game server ignores Quality/Grade/ItemQuality in AddItemToInventory RabbitMQ messages
+- **Impact**: Quality 1-5 items must use DB path; live console only works for grade 0
+- **Evidence**: CLI sends correct payload, inventory increases, but item is always grade 0
+- **Resolution**: Reverted PR #77 fix-branches, documented limitation
+
+### Pipeline Improvement — Pre-PR Validation
+- **Status**: IN PROGRESS
+- **Progress**: All pipeline scripts created in `yacketrj/dune-docker-addon/pipeline/`
+- **Next**: Install fork CI, test pipeline on next PR

@@ -207,3 +207,15 @@ For every upstream PR review request:
 - **Root cause**: Pre-push gates bypassed, no fork CI, no in-game testing before submission
 - **Required**: Backend tests + frontend build + in-game validation + security gates before push
 - **Action**: Stop `--no-verify`, add fork CI, create pre-PR validation script (tracked in ISSUES.md)
+
+### PR #77 — Closed
+- RabbitMQ `AddItemToInventory` ignores quality fields. Quality items require DB path.
+- Findings documented in ISSUES.md. Fix branches reverted.
+
+### Pipeline Tools (yacketrj/dune-docker-addon/pipeline/)
+- `pre-push-gates` — now includes web build + artifact guard checks
+- `pre-pr-check.sh` — 6-step validation before any upstream PR push
+- `merge-safety.sh` — JSX/TSX syntax check after merge conflict resolution
+- `artifact-guard.sh` — blocks generated files in git diffs
+- `fork-ci.yml` — mirrors upstream CI for yacketrj fork
+- All tools symlinked to `~/.local/bin/`, GitHub-backed for portability
