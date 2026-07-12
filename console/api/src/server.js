@@ -409,10 +409,10 @@ async function handleApi(req, res) {
       client_id: config.discordOAuth.clientId,
       redirect_uri: config.discordOAuth.redirectUri,
       response_type: "code",
+      scope: "identify guilds",
+      prompt: "none",
       state
     });
-    params.append("scope", "identify");
-    params.append("scope", "guilds");
     res.writeHead(302, { Location: `https://discord.com/api/oauth2/authorize?${params}` });
     return res.end();
   }
@@ -424,6 +424,24 @@ async function handleApi(req, res) {
     const url = new URL(req.url, "http://localhost");
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+
+    // prompt=none failed — user needs to authorize, retry with consent
+    if (error === "consent_required" || error === "login_required") {
+      oauthStates.delete(state);
+      const newState = randomBytes(16).toString("hex");
+      oauthStates.set(newState, { expiresAt: Date.now() + 300_000 });
+      const params = new URLSearchParams({
+        client_id: config.discordOAuth.clientId,
+        redirect_uri: config.discordOAuth.redirectUri,
+        response_type: "code",
+        scope: "identify guilds",
+        state: newState
+      });
+      res.writeHead(302, { Location: `https://discord.com/api/oauth2/authorize?${params}` });
+      return res.end();
+    }
+
     if (!code || !state || !oauthStates.has(state)) {
       // If the user already has a valid session, just serve the SPA
       const existingSession = auth.readSession(req);
