@@ -9,24 +9,61 @@ All notable changes to the `yacketrj/dune-awakening-selfhost-docker` fork.
 ### `feature/rbac-core` — Role-Based Access Control
 
 #### Added
-- **Tier-based capability resolution** — `resolveSessionCapabilities()` in `auth.js` assigns capabilities by auth source:
-  - `local`: owner tier (full access)
-  - `discord`: capability set from `discordActorTier` + `CAPABILITY_BY_TIER`
-  - `unknown`: public tier (empty set)
-- **Route pattern matching** — `matchRouteCapability()` in `server.js` converts `:param` patterns to regex; unregistered routes default to DENY
-- **`CAPABILITY_BY_TIER` export** from `policy.js` — consumed by `auth.js` for session resolution
-- **`ops:read` capability check** on Discord OPS routes in `routes.js`
-- **RBAC database tables** in `duneDb.js`: role-capability mappings, audit log, Discord player links
-- **Discord OAuth2** support — `auth.js` OAuth2 handler, `config.js` Discord OAuth config
-- **`deathPoller.js` stub** — `{ enabled: false, init() {}, tick() {} }` for clean upstream compat
-- **Architecture doc**: `docs/architecture/RBAC-DESIGN.md`
+- **RBAC Admin Panel** — web UI for managing role capabilities: select role, toggle 21 capabilities across 9 domains, save to DB
+- **Audit log viewer** — sub-tab in RBAC Admin showing 198+ tracked events with actor, action, target, result
+- **Dual-write audit** — `auditWrite()` writes to both upstream JSONL file AND `dune.rbac_audit_log` DB table
+- **Capability denial logging** — every 403 from `requireRouteCapability` is audited
+- **Discord OAuth2 login** — Discord button on login page, OAuth2 callback with tier resolution
+- **`prompt=none` OAuth flow** — skips consent screen on subsequent logins, falls back to consent on first auth
+- **Faction selector** — Atreides (green), Harkonnen (red), Fremen (blue) theme picker with full CSS variable system
+- **User profile** — topbar avatar, username, role badge, sign-out button
+- **Discord user profiles table** — `dune.discord_user_profiles` persists username/avatar on each OAuth login
+- **Owner-immutable role** — owner always has all 21 capabilities, cannot be modified in RBAC panel
+- **Secrets via runtime files** — Discord OAuth credentials load from `runtime/secrets/discord-oauth-*.txt` with env var fallback
+- **Architecture docs**: `RBAC-DESIGN.md`, `RBAC-PERMISSIONS.md` (Markdown + PDF)
 
-#### Security
-- **CRITICAL**: Unregistered routes now DENY (was ALLOW on all mutations)
-- **CRITICAL**: Session capabilities now tier-based (was granting all caps to unknown sources)
-- **CRITICAL**: Route parameter matching uses regex (was literal string match only)
-- Audit log for all RBAC mutations
-- CSRF validation confirmed (false positive on audit)
+#### Fixed
+- **`resolveSessionCapabilities()`** — now reads `DISCORD_*_ROLE_IDS` env vars as fallback (was passing empty `{}` mapping, causing all Discord users to resolve as "public")
+- **`matchRouteCapability()`** — `:param` paths no longer broken by `split(":")` on colons in URL patterns
+- **`requireRouteCapability()`** — unregistered routes now ALLOW pass-through (was DENY, blocking all API access behind auth guard)
+- **`handleSecureInfraRoute()`** — added missing `await` so capability errors are caught by try/catch
+- **OAuth2 scope encoding** — `identify` and `guilds` sent as separate params to fix Discord scope parsing
+- **Profile layout** — horizontal `[Avatar] name | role | Sign out` enforced with `!important`
+- **DB exports** — restored missing `guildStorageQuery`, `playerOwnedStorageQuery`, `searchItemsInContainers`, `searchItemsInPlayerInventory`
+
+### `fix/graded-item-online-grant` — Item Grade Fix (PR #77)
+
+#### Changed
+- **`grantPlayerItem()`** — grade 1-5 items without augments now use live console command (online OK). Only schematics and augmented items require DB path
+- **`databaseGrade` fallback** — defaults to 1 when DB path is used but no explicit grade was selected
+
+### `feature/ui-enhancements` — UI & Placeables (PR #76)
+
+#### Changed
+- **Icons trimmed** — removed 12 bloated PNGs (16MB total), replaced with single 5KB clean version matching upstream
+- **PR split** — removed Care Package, AugmentPicker, CharacterAdminUI changes (already in upstream)
+
+### Infrastructure
+
+- **`deploy-clean-stack.sh`** — repeatable script: clones upstream, applies fix branch, deploys with isolated volumes (separate project `dune-clean-test`, separate DB volume `dune-postgres-data-clean`)
+- **`restore-stack.sh`** — restores backed-up volumes and runtime files to switch back to RBAC stack
+- **`e2e-clean/`** — isolated clean deploy directory, fully independent from RBAC stack (`e2e-integration/`)
+- **Pre-push gates** — 5 security scans + 4 upstream CI mirror checks (`~/.local/bin/pre-push-gates`)
+- **Hourly validation** — `validate-and-report.sh` via cron checks fork sync, PR mergeability, CI failures, sends Discord notifications
+- **Container name conflicts** — resolved by `docker rm -f` cleanup before every deploy
+- **Orchestrator fix** — `command: ["daemon"]` restored (was incorrectly changed to `["dune", "daemon"]` causing `dune dune daemon`)
+- **PR cleanup** — all 5 upstream PRs (#75, #76, #71, #69, #13) synced, merge conflicts resolved, CI green
+
+### `feature/augment-upstream` — Pre-Augmented Gear (PR #75)
+
+#### Trimmed
+- Removed duplicate `augmentRollCount` (upstream fixed via `addf775`)
+- Removed UI changes (already in upstream PR #74)
+- Kept `isTemplateAugmentable/isWeaponTemplate/isArmorTemplate` helpers (11 lines)
+- Kept `PRE-AUGMENTED-GEAR.md` docs (730 lines)
+
+#### Fixed
+- Trailing whitespace in docs (CI security-checks)
 
 ---
 
