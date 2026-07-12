@@ -61,6 +61,10 @@ export function post<T>(path: string, body: unknown = {}) {
   return api<T>(path, { method: "POST", body: JSON.stringify(body) });
 }
 
+export function put<T>(path: string, body: unknown = {}) {
+  return api<T>(path, { method: "PUT", body: JSON.stringify(body) });
+}
+
 export function friendlyApiError(value: unknown) {
   const text = value instanceof Error ? value.message : String(value || "");
   if (/ECONNREFUSED.*127\.0\.0\.1:15432|connect\s+ECONNREFUSED|Postgres is not running/i.test(text)) return POSTGRES_UNAVAILABLE_MESSAGE;

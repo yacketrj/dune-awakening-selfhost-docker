@@ -2118,6 +2118,108 @@ td .inline-action-result-wrap { flex: 1 0 100%; justify-content: flex-start; min
 [data-tagged-spice] span,
 [data-tagged-spice] strong { color: #c4b5fd; }
 
+/* ── RBAC Admin Panel ── */
+.rbac-subtabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.rbac-subtab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.rbac-subtab.active {
+  background: var(--accent-bg);
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+
+.rbac-roles-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.rbac-role-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rbac-role-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+.rbac-role-chip.active {
+  border-color: var(--accent-strong);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+.rbac-role-count {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  min-width: 20px;
+  text-align: center;
+}
+
+.rbac-cap-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.rbac-cap-domain {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-muted);
+}
+.rbac-cap-domain h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--title);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.rbac-cap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 28px;
+}
+.rbac-cap-toggle input {
+  width: auto;
+  accent-color: var(--accent-strong);
+}
+
+.rbac-save-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.rbac-save-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rbac-audit-tab {
+  margin-top: 0;
+}
+
 /* ── Guild Faction Badges ── */
 .guild-faction-badge {
   display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: capitalize;

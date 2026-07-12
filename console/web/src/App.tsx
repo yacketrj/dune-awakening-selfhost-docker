@@ -31,7 +31,7 @@ import {
 import { parseUpdateTask, stackVersionButtonLabel, stackVersionButtonTitle } from "./features/updates/updateUtils";
 import { formatUiSentence, stripAnsi, summarizeCommandText, titleCase } from "./lib/display";
 
-type Tab = "Home" | "Server Control" | "Services" | "Players" | "Guilds" | "Landsraad" | "Admin Tools" | "Live Map" | "Maps" | "Care Package" | "Addons" | "Database" | "Storage" | "Backups" | "Logs" | "Updates" | "Settings";
+type Tab = "Home" | "Server Control" | "Services" | "Players" | "Guilds" | "Landsraad" | "Admin Tools" | "Live Map" | "Maps" | "Care Package" | "Addons" | "Database" | "Storage" | "Backups" | "Logs" | "Updates" | "Settings" | "RBAC";
 type SetupState = { files: Record<string, boolean>; config: Record<string, unknown> };
 let openConfirmDialog: ((request: ConfirmDialogRequest) => void) | null = null;
 
@@ -51,6 +51,7 @@ const ServicesPanel = lazy(() => import("./features/services/ServicesPanel").the
 const SettingsPanel = lazy(() => import("./features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 const StoragePanel = lazy(() => import("./features/storage/StoragePanel").then((module) => ({ default: module.StoragePanel })));
 const UpdatesPanel = lazy(() => import("./features/updates/UpdatesPanel").then((module) => ({ default: module.UpdatesPanel })));
+const RbacAdminPanel = lazy(() => import("./features/rbac/RbacAdminPanel").then((module) => ({ default: module.RbacAdminPanel })));
 
 function confirmDialog(message: string, options: Partial<Omit<ConfirmDialogRequest, "message" | "resolve">> = {}) {
   return new Promise<boolean>((resolve) => {
@@ -100,7 +101,8 @@ const navGroups: { title: string; items: { tab: Tab; icon: React.ReactNode }[] }
       { tab: "Database", icon: <Database size={18} /> },
       { tab: "Updates", icon: <RefreshCw size={18} /> },
       { tab: "Logs", icon: <FileText size={18} /> },
-      { tab: "Settings", icon: <Settings size={18} /> }
+      { tab: "Settings", icon: <Settings size={18} /> },
+      { tab: "RBAC", icon: <Shield size={18} /> }
     ]
   },
   {
@@ -627,6 +629,7 @@ export function App() {
             formatResultMessage={formatResultMessage}
           /></LazyTabBoundary>}
         {!redeploySetupOpen && tab === "Settings" && <LazyTabBoundary label="Loading Settings"><SettingsPanel onPasswordChanged={logoutAfterPasswordChange} /></LazyTabBoundary>}
+        {!redeploySetupOpen && tab === "RBAC" && userProfile?.role === "owner" && <LazyTabBoundary label="Loading RBAC Admin"><RbacAdminPanel /></LazyTabBoundary>}
         {!redeploySetupOpen && tab !== "Maps" && <TaskProgress task={task} onDismiss={() => setTask(null)} />}
         <AppFooter />
       </main>
