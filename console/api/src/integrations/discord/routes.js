@@ -32,6 +32,10 @@ import {
 
 
 // Secure infra operation whitelist
+import { buildDuneArgs, runDune } from "../../runner.js";
+
+// Secure infra operation whitelist — maps route keys to known-safe dune operations.
+// Never passes user input directly to the dune CLI.
 const INFRA_OPERATIONS = Object.freeze({
   SERVERS: { operation: "servers", timeoutMs: 15000, capability: DISCORD_CAPABILITIES.SERVICES_READ },
   PORTS: { operation: "ports", timeoutMs: 15000, capability: DISCORD_CAPABILITIES.SERVICES_READ },
@@ -350,6 +354,26 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
         query: body.query,
         scope: "guild"
       }));
+    // Secure infra routes — read-only, whitelisted operations only.
+    // Actor identity and capability are enforced before any dune CLI call.
+    if (path === DISCORD_ADAPTER_ROUTES.SERVERS && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      return await handleSecureInfraRoute({ key: "SERVERS", config, json, res, actor });
+    }
+    if (path === DISCORD_ADAPTER_ROUTES.PORTS && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      return await handleSecureInfraRoute({ key: "PORTS", config, json, res, actor });
+    }
+    if (path === DISCORD_ADAPTER_ROUTES.DB && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      return await handleSecureInfraRoute({ key: "DB", config, json, res, actor });
+    }
+
+    if (path === DISCORD_ADAPTER_ROUTES.VERSION && req.method === "GET") {
+      return json(res, 200, { ok: true, version: config.version || "dev" });
     }
 
     throw policyError("not_found", "Discord adapter route not found.", 404);

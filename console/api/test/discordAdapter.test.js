@@ -1,8 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { writeFileSync, unlinkSync } from "node:fs";
 import { DISCORD_ADAPTER_ROUTES, discordAdapterErrorResponse, discordAdapterHealth, discordAdapterPopulation, discordAdapterReadiness, discordAdapterServices, discordAdapterStatus, discordWritesEnabled } from "../src/integrations/discord/adapter.js";
 
 const OLD_ENV = { ...process.env };
+const FAKE_TOKEN_FILE = "/tmp/dune-test-bot-token.txt";
+const FAKE_TOKEN = "test-bot-token-value";
+
+function setupBotToken() {
+  writeFileSync(FAKE_TOKEN_FILE, FAKE_TOKEN);
+  process.env.DUNE_BOT_API_TOKEN_FILE = FAKE_TOKEN_FILE;
+}
+
+function teardownBotToken() {
+  try { unlinkSync(FAKE_TOKEN_FILE); } catch {}
+  delete process.env.DUNE_BOT_API_TOKEN_FILE;
+}
+
+function authHeaders() {
+  return { authorization: `Bearer ${FAKE_TOKEN}` };
+}
 
 function resetEnv() {
   process.env.DISCORD_OBSERVER_ROLE_IDS = "role-observer";
@@ -220,7 +237,6 @@ test("formats safe adapter errors", () => {
 
 // Server route integration test — exercises handleDiscordAdapterRoute through a live HTTP server
 import { createServer } from "node:http";
-import { writeFileSync, unlinkSync } from "node:fs";
 import { handleDiscordAdapterRoute } from "../src/integrations/discord/routes.js";
 
 test("adapter routes respond through mounted HTTP server path", async () => {
@@ -308,6 +324,73 @@ test("infra routes reject missing actor body", () => {
     () => { throw new Error("Discord actor context is required."); },
     /actor/i
   );
+test("infra routes reject missing actor body", async () => {
+  setupBotToken();
+  try {
+
+    const req = { method: "POST", headers: authHeaders() };
+    const res = { statusCode: 0, body: null };
+    const json = (r, code, body) => { res.statusCode = code; res.body = body; };
+
+    await handleDiscordAdapterRoute({
+      req, res, path: DISCORD_ADAPTER_ROUTES.SERVERS,
+      config: { repoRoot: "/tmp" },
+      readJson: async () => ({ actor: null }),
+      json
+    });
+    assert.ok(res.statusCode >= 400, `expected 4xx for missing actor, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
+    assert.match(res.body?.error || "", /actor/i);
+  } finally {
+    teardownBotToken();
+  }
+});
+
+test("infra routes reject unauthorized actor tier", async () => {
+  setupBotToken();
+  try {
+
+    const req = { method: "POST", headers: authHeaders() };
+    const res = { statusCode: 0, body: null };
+    const json = (r, code, body) => { res.statusCode = code; res.body = body; };
+    const oldObs = process.env.DISCORD_OBSERVER_ROLE_IDS;
+    process.env.DISCORD_OBSERVER_ROLE_IDS = "role-observer";
+
+    try {
+      await handleDiscordAdapterRoute({
+        req, res, path: DISCORD_ADAPTER_ROUTES.SERVERS,
+        config: { repoRoot: "/tmp" },
+        readJson: async () => ({ actor: actor(["role-public"]) }),
+        json
+      });
+      // Public tier should not have SERVICES_READ — expect rejection
+      assert.ok(res.statusCode >= 400, `expected 4xx for public+servers, got ${res.statusCode}`);
+    } finally {
+      process.env.DISCORD_OBSERVER_ROLE_IDS = oldObs;
+    }
+  } finally {
+    teardownBotToken();
+  }
+});
+
+test("infra routes accept authorized actor tier", async () => {
+  setupBotToken();
+  try {
+
+    const req = { method: "GET", headers: authHeaders() };
+    const res = { statusCode: 0, body: null };
+    const json = (r, code, body) => { res.statusCode = code; res.body = body; };
+
+    await handleDiscordAdapterRoute({
+      req, res, path: DISCORD_ADAPTER_ROUTES.VERSION,
+      config: { repoRoot: "/tmp", version: "test-version" },
+      readJson: async () => ({}),
+      json
+    });
+    assert.equal(res.statusCode, 200, `expected 200 for version, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body?.version, "test-version", `expected version=test-version, got ${JSON.stringify(res.body)}`);
+  } finally {
+    teardownBotToken();
+  }
 });
 
 test("VERSION route uses config.version not hardcoded path", () => {
