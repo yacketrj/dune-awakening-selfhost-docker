@@ -1,7 +1,7 @@
 
 ## Upstream PR Feedback
 
-### PR #76 — UI Enhancements
+### PR #76 — UI Enhancements (CLOSED — split into #78 + #79)
 - **Reviewer**: Red-Blink (DAWK)
 - **Issues**:
   1. Icon assets "messed up" — 16MB total for 12 PNGs at 1.8-2MB each

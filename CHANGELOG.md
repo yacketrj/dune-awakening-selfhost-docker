@@ -219,3 +219,8 @@ For every upstream PR review request:
 - `artifact-guard.sh` — blocks generated files in git diffs
 - `fork-ci.yml` — mirrors upstream CI for yacketrj fork
 - All tools symlinked to `~/.local/bin/`, GitHub-backed for portability
+
+### PR #76 — Closed & Split
+- Closed per reviewer request. Split into:
+  - PR #78 (`feature/placeables-ui`): placeable resource catalog + DataTable + icon
+  - PR #79 (`feature/ui-docs`): UI enhancements docs
