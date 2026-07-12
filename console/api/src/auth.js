@@ -43,14 +43,27 @@ export function resolveSessionCapabilities(session, rbacConfig = {}) {
   if (!session) return new Set();
   // Local admin password → full owner tier
   if (session.authSource === "local") return ALL_CAPABILITIES ? new Set(ALL_CAPABILITIES) : new Set();
-  // Discord OAuth2 → resolve from role mapping
+  // Discord OAuth2 → resolve from role mapping (env vars or config override)
   if (session.authSource === "discord" && session.roleIds?.length > 0) {
-    const mapping = rbacConfig.rbacRoleMapping || {};
+    const mapping = rbacConfig.rbacRoleMapping || resolveRoleMappingFromEnv();
     const tier = discordActorTier({ roleIds: session.roleIds }, mapping);
     return CAPABILITY_BY_TIER[tier] || CAPABILITY_BY_TIER.public || new Set();
   }
   // Unknown source → public tier only
   return new Set();
+}
+
+function resolveRoleMappingFromEnv() {
+  return {
+    ownerRoleIds: parseCsv(process.env.DISCORD_OWNER_ROLE_IDS),
+    adminRoleIds: parseCsv(process.env.DISCORD_ADMIN_ROLE_IDS),
+    moderatorRoleIds: parseCsv(process.env.DISCORD_MODERATOR_ROLE_IDS),
+    observerRoleIds: parseCsv(process.env.DISCORD_OBSERVER_ROLE_IDS)
+  };
+}
+
+function parseCsv(value) {
+  return String(value || "").split(",").map(s => s.trim()).filter(Boolean);
 }
 
 export function requireCapability(session, capability, route) {
