@@ -1,6 +1,6 @@
 # UI Enhancements Documentation
 
-**Branch:** `feature/ui-enhancements`  
+**Branch:** `feature/ui-enhancements`
 **Status:** Complete, tested, ready for upstream PR
 
 ---
