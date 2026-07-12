@@ -31,6 +31,8 @@ const MAX_INTEL_POINTS = 2779;
 const MAX_TABLE_PREVIEW_ROWS = 10000;
 const INVENTORY_EDITABLE_COLUMNS = new Set(["stack_size", "quality_level", "position_index", "current_durability", "max_durability"]);
 let craftingRecipeCatalogCache = null;
+let adminItemMetadataCache = null;
+let augmentCompatibilityCache = null;
 
 export class UnsupportedCapabilityError extends Error {
   constructor(message, details = {}) {
@@ -1569,9 +1571,19 @@ export async function playerInventory(db, id) {
            i.stats
     from dune.items i
     join dune.inventories inv on i.inventory_id = inv.id
-    where inv.actor_id = $1 and inv.inventory_type in (0, 1, 15)
+    where inv.actor_id = $1
     order by i.template_id`, [intParam(id, "player id", 1)]);
-  return { capabilities: { inventory: true }, rows: result.rows };
+  const itemMetadata = adminItemMetadata();
+  const rows = result.rows.map(({ stats, ...row }) => {
+    const metadata = itemMetadata.get(String(row.template_id || ""));
+    return {
+      ...row,
+      category: metadata?.category || "",
+      source: metadata?.source || "",
+      augments: extractAugmentIdsFromStats(stats)
+    };
+  });
+  return { capabilities: { inventory: true }, rows };
 }
 
 export async function playerCurrency(db, id) {
@@ -2292,6 +2304,46 @@ function craftingRecipeCatalog() {
   return craftingRecipeCatalogCache;
 }
 
+function adminItemMetadata() {
+  if (adminItemMetadataCache) return adminItemMetadataCache;
+  const metadata = new Map();
+  try {
+    const path = [
+      resolve(process.cwd(), "runtime/data/admin-items.json"),
+      resolve(process.cwd(), "../../runtime/data/admin-items.json")
+    ].find((candidate) => existsSync(candidate)) || resolve(process.cwd(), "runtime/data/admin-items.json");
+    const items = JSON.parse(readFileSync(path, "utf8"));
+    for (const item of Array.isArray(items) ? items : []) {
+      const id = String(item.id || "").trim();
+      if (!id) continue;
+      metadata.set(id, { name: String(item.name || ""), category: String(item.category || ""), source: String(item.source || "") });
+    }
+  } catch {
+    // Inventory still works without the optional local catalog metadata.
+  }
+  adminItemMetadataCache = metadata;
+  return adminItemMetadataCache;
+}
+
+function augmentCompatibilityCatalog() {
+  if (augmentCompatibilityCache) return augmentCompatibilityCache;
+  try {
+    const path = [
+      resolve(process.cwd(), "runtime/data/augment-compatibility.json"),
+      resolve(process.cwd(), "../../runtime/data/augment-compatibility.json")
+    ].find((candidate) => existsSync(candidate)) || resolve(process.cwd(), "runtime/data/augment-compatibility.json");
+    const data = JSON.parse(readFileSync(path, "utf8"));
+    const namedItems = new Map();
+    for (const [name, tags] of Object.entries(data.methodItems || {})) {
+      if (Array.isArray(tags)) namedItems.set(normalizeAugmentName(name), tags.map(String));
+    }
+    augmentCompatibilityCache = { augments: data.augments || {}, namedItems };
+  } catch {
+    augmentCompatibilityCache = { augments: {}, namedItems: new Map() };
+  }
+  return augmentCompatibilityCache;
+}
+
 export async function playerResearchItems(db, id) {
   await requireCapability(await supportsResearchItems(db), "Research unlocks require dune.actors.properties with TechKnowledgePlayerComponent.");
   const player = await resolvePlayerMutationTarget(db, id);
@@ -2614,94 +2666,475 @@ function validateAugmentIds(augments) {
   return ids;
 }
 
-function isTemplateAugmentable(templateId) {
-  const name = String(templateId || "");
-  return isWeaponTemplate(name) || isArmorTemplate(name);
+function isStandaloneAugmentTemplate(templateId) {
+  const id = String(templateId || "");
+  return Boolean(augmentCompatibilityCatalog().augments[id]) || /^T\d+_Augment_/i.test(id);
 }
 
-function isWeaponTemplate(name) {
-  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
+function normalizeStandaloneAugmentQuality(templateId, qualityLevel) {
+  return isStandaloneAugmentTemplate(templateId) && qualityLevel < 1 ? 1 : qualityLevel;
 }
 
-function isArmorTemplate(name) {
-  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
+function augmentRollPayloadFromStats(stats) {
+  const augmentStats = stats?.FAugmentItemStats;
+  if (!Array.isArray(augmentStats) || !augmentStats[1] || typeof augmentStats[1] !== "object") return null;
+  const payload = augmentStats[1];
+  return perfectAugmentRollPayload(payload);
 }
 
-function buildItemStats({ augments = [], durability = {} } = {}) {
-  const customizationEntries = augments.length > 0
-    ? [augments.map((id) => ({
-        AugmentTemplateId: id,
-        FAugmentItemStats: { StatRolls: [0.3, 0.2, 0.1, 0.05, 0.0, 0.0, 0.0] }
-      }))]
-    : [[]];
-  const durabilityObj = durability.max !== undefined
-    ? { CurrentDurability: Number(durability.current ?? durability.max), MaxDurability: Number(durability.max), DecayedMaxDurability: Number(durability.max), DecayedDurability: Number(durability.current ?? durability.max) }
-    : {};
+function perfectAugmentRollPayload(payload = {}) {
+  const rollCount = Array.isArray(payload.StatRolls) && payload.StatRolls.length > 0 ? payload.StatRolls.length : 1;
   return {
-    FCustomizationStats: [customizationEntries[0], {}],
-    FItemStackAndDurabilityStats: [[], durabilityObj]
+    StatRolls: Array.from({ length: rollCount }, () => 1),
+    AppliedEffectIndices: Array.isArray(payload.AppliedEffectIndices) ? payload.AppliedEffectIndices : []
   };
 }
 
-export async function augmentInventoryItem(db, playerId, itemId, { augments = [] } = {}) {
+function augmentItemText(templateId) {
+  const metadata = adminItemMetadata().get(String(templateId || "")) || {};
+  return [
+    templateId,
+    metadata.name,
+    metadata.category,
+    metadata.source
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function normalizeAugmentName(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function augmentTemplateMetadata(templateId) {
+  return adminItemMetadata().get(String(templateId || "")) || {};
+}
+
+function augmentItemKindForTemplate(templateId) {
+  const metadata = augmentTemplateMetadata(templateId);
+  const category = String(metadata.category || "").toLowerCase();
+  const source = String(metadata.source || "").toLowerCase();
+  const text = augmentItemText(templateId);
+  if (category === "schematics" || source === "schematics" || /_schematic$/i.test(String(templateId || "")) || /schematic/i.test(text)) return "schematic";
+  if (
+    category === "clothing" ||
+    source === "clothing" ||
+    /social|castoffs|garment|helmet|boots|gloves|stillsuit|still_suit|suit|top|bottom|shirt|pants|robe|cloak|hood|wearable|clothing|armor|chest|guard/i.test(text)
+  ) return "clothing";
+  if (
+    category === "weapons" ||
+    source === "weapons" ||
+    /weapon|lasgun|lg\b|choamlg|spitdart|jabal|dmr|rifle|longrifle|logrifle|karpov|battle.?rifle|hark.?ar|unique.?ar|\bar\d*|br\d*|disruptor|smg|lmg|vulcan|atre.?lmg|drillshot|shotgun|scattergun|grda|pyrocket|fireball|flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|sda|choamsda|uniquesda|melee|sword|blade|knife|dirk|rapier|kindjal|minotaur|dualblades|crysknife|dewreaper|ghola|hook/i.test(text)
+  ) return "weapon";
+  return "other";
+}
+
+function inferredAugmentItemTags(templateId) {
+  const metadata = augmentTemplateMetadata(templateId);
+  const namedTags = augmentCompatibilityCatalog().namedItems.get(normalizeAugmentName(metadata.name));
+  if (namedTags?.length) return namedTags;
+  return [];
+}
+
+function augmentTagsMatch(itemTags, augmentTags) {
+  return augmentTags.some((augmentTag) => itemTags.some((itemTag) => itemTag === augmentTag || itemTag.startsWith(`${augmentTag}.`)));
+}
+
+function augmentAllowedForTemplate(templateId, augmentId) {
+  const entry = augmentCompatibilityCatalog().augments[String(augmentId || "")];
+  const augmentTags = Array.isArray(entry?.tags) ? entry.tags.map(String) : [];
+  if (augmentTags.length === 0) return false;
+  const itemTags = inferredAugmentItemTags(templateId);
+  return itemTags.length > 0 && augmentTagsMatch(itemTags, augmentTags);
+}
+
+function validateAugmentsForTemplate(templateId, augmentIds) {
+  if (!augmentIds.length) return;
+  const kind = augmentItemKindForTemplate(templateId);
+  if (kind !== "clothing" && kind !== "weapon") {
+    throw new Error(`Cannot apply augments to ${templateId}. Only clothing and weapons support augments.`);
+  }
+  const maxAugments = kind === "clothing" ? 2 : 3;
+  if (augmentIds.length > maxAugments) throw new Error(`${templateId} supports up to ${maxAugments} augment(s).`);
+  const invalid = augmentIds.filter((id) => !augmentAllowedForTemplate(templateId, id));
+  if (invalid.length > 0) {
+    throw new Error(`Cannot apply ${invalid.join(", ")} to ${templateId}. Select augment(s) that match this ${kind}.`);
+  }
+}
+
+function augmentSlotKeystoneIdsForTemplate(templateId) {
+  const kind = augmentItemKindForTemplate(templateId);
+  if (kind === "clothing") return [42, 43];
+  if (kind !== "weapon") return [];
+
+  const tags = inferredAugmentItemTags(templateId);
+  const isMelee = tags.some((tag) => /MeleeWeapons/i.test(tag));
+  const isRanged = tags.some((tag) => /RangedWeapons/i.test(tag));
+  if (isMelee && !isRanged) return [44, 45, 46];
+  if (isRanged && !isMelee) return [47, 48, 49];
+  return [44, 45, 46, 47, 48, 49];
+}
+
+async function ensureAugmentSlotKeystones(tx, player, templateId, augmentIds = []) {
+  if (!augmentIds.length) return { supported: true, insertedRows: 0, keystoneIds: [] };
+  if (!(await tableExists(tx, "purchased_specialization_keystones")) || !(await tableExists(tx, "specialization_keystones_map"))) {
+    return { supported: false, insertedRows: 0, keystoneIds: [] };
+  }
+
+  const keystoneIds = augmentSlotKeystoneIdsForTemplate(templateId);
+  if (!keystoneIds.length) return { supported: true, insertedRows: 0, keystoneIds: [] };
+
+  if (await tableExists(tx, "specialization_tracks")) {
+    await withKnownLiveRefresh(tx, () => tx.query(`
+      insert into dune.specialization_tracks (player_id, track_type, xp_amount, level)
+      values ($1::bigint, 'Crafting'::dune.specializationtracktype, 3100, 19.338913)
+      on conflict (player_id, track_type) do update
+      set xp_amount = greatest(dune.specialization_tracks.xp_amount, excluded.xp_amount),
+          level = greatest(dune.specialization_tracks.level, excluded.level)`, [player.controllerId]), { features: ["specialization"] });
+  }
+
+  const result = await withKnownLiveRefresh(tx, () => tx.query(`
+    insert into dune.purchased_specialization_keystones (player_id, keystone_id)
+    select $1::bigint, id
+    from dune.specialization_keystones_map
+    where id = any($2::bigint[])
+    on conflict do nothing`, [player.controllerId, keystoneIds]), { features: ["keystones"] });
+  return { supported: true, insertedRows: result.rowCount || 0, keystoneIds };
+}
+
+function normalizeAugmentQuality(value) {
+  return intParam(value ?? 1, "augment grade", 1, 5);
+}
+
+function augmentRollScore(rowTemplateId, sourceTemplateId, rollPayload) {
+  const rolls = Array.isArray(rollPayload?.StatRolls) ? rollPayload.StatRolls.map(Number) : [];
+  const hasSpecificRoll = rolls.length > 1 || rolls.some((value) => value !== 1);
+  return (sourceTemplateId && rowTemplateId === sourceTemplateId ? 100 : 0) + (hasSpecificRoll ? 10 : 0);
+}
+
+async function loadAugmentRollPayloads(tx, augmentIds = [], qualityOverride = null, { sourceTemplateId = "", excludeItemId = 0 } = {}) {
+  const uniqueIds = [...new Set(augmentIds)];
+  if (uniqueIds.length === 0) return new Map();
+  const overrideQuality = qualityOverride === null || qualityOverride === undefined ? null : normalizeAugmentQuality(qualityOverride);
+  const scoredPayloads = new Map();
+  const rows = await tx.query(`
+    select distinct on (template_id) template_id, quality_level, stats
+    from dune.items
+    where template_id = any($1::text[])
+      and stats ? 'FAugmentItemStats'
+    order by template_id, id desc`, [uniqueIds]);
+  const payloads = new Map();
+  for (const row of rows.rows) {
+    const payload = augmentRollPayloadFromStats(row.stats);
+    if (payload) {
+      payloads.set(row.template_id, { quality: overrideQuality ?? Number(row.quality_level ?? 1), rollData: payload });
+      scoredPayloads.set(row.template_id, 0);
+    }
+  }
+  const missingAfterStandalone = uniqueIds.filter((id) => !payloads.has(id));
+  const patterns = uniqueIds.map((id) => `%${id}%`);
+  if (patterns.length > 0) {
+    const augmentedRows = await tx.query(`
+      select id, template_id, stats
+      from dune.items
+      where stats ? 'FAugmentedItemStats'
+        and stats::text like any($1::text[])
+        and ($2::bigint = 0 or id <> $2::bigint)
+      order by
+        case when template_id = $3 then 0 else 1 end,
+        id desc
+      limit 200`, [patterns, Number(excludeItemId || 0), sourceTemplateId || ""]);
+    for (const row of augmentedRows.rows) {
+      const payload = row.stats?.FAugmentedItemStats?.[1];
+      const applied = Array.isArray(payload?.AppliedAugments) ? payload.AppliedAugments : [];
+      const rollData = Array.isArray(payload?.AppliedAugmentRollData) ? payload.AppliedAugmentRollData : [];
+      const qualities = Array.isArray(payload?.AppliedAugmentQualities) ? payload.AppliedAugmentQualities : [];
+      for (let index = 0; index < applied.length; index += 1) {
+        const appliedId = typeof applied[index] === "string" ? applied[index] : applied[index]?.Name;
+        if (!uniqueIds.includes(appliedId)) continue;
+        const rollPayload = perfectAugmentRollPayload(rollData[index] || {});
+        const score = augmentRollScore(row.template_id, sourceTemplateId, rollPayload);
+        if (!payloads.has(appliedId) || score > (scoredPayloads.get(appliedId) ?? -1)) {
+          payloads.set(appliedId, { quality: overrideQuality ?? Number(qualities[index] ?? 1), rollData: rollPayload });
+          scoredPayloads.set(appliedId, score);
+        }
+      }
+    }
+  }
+  for (const id of uniqueIds) {
+    if (!payloads.has(id)) payloads.set(id, { quality: overrideQuality ?? 1, rollData: perfectAugmentRollPayload() });
+  }
+  return payloads;
+}
+
+function buildAugmentedItemStats(augmentIds = [], rollPayloads = new Map()) {
+  const missing = augmentIds.filter((id) => !rollPayloads.has(id));
+  if (missing.length > 0) {
+    throw new Error(`Cannot build augment payloads for: ${missing.join(", ")}.`);
+  }
+  return [
+    [],
+    {
+      AppliedAugments: augmentIds.map((id) => ({ Name: id })),
+      AppliedAugmentQualities: augmentIds.map((id) => rollPayloads.get(id).quality),
+      AppliedAugmentRollData: augmentIds.map((id) => rollPayloads.get(id).rollData)
+    }
+  ];
+}
+
+function normalizeDurabilityStats(durabilityStats, fallback = {}) {
+  const existing = Array.isArray(durabilityStats) ? durabilityStats : [[], {}];
+  const first = Array.isArray(existing[0]) ? existing[0] : [];
+  const durability = existing[1] && typeof existing[1] === "object" && !Array.isArray(existing[1])
+    ? { ...existing[1] }
+    : {};
+  if (Object.keys(durability).length > 0) return [first, durability];
+
+  const max = Number(fallback.max ?? fallback.current ?? 100);
+  const current = Number(fallback.current ?? max);
+  return [first, {
+    CurrentDurability: current,
+    MaxDurability: max,
+    DecayedMaxDurability: max
+  }];
+}
+
+function normalizeAugmentableBaseStats(templateId, stats = {}, durability = {}) {
+  const kind = augmentItemKindForTemplate(templateId);
+  if (kind !== "clothing" && kind !== "weapon") return stats || {};
+  const next = { ...(stats || {}) };
+  next.FCustomizationStats = removeLegacyAugmentsFromCustomization(next.FCustomizationStats);
+  next.FItemStackAndDurabilityStats = normalizeDurabilityStats(next.FItemStackAndDurabilityStats, durability);
+  if (kind === "weapon" && !Array.isArray(next.FWeaponItemStats)) {
+    next.FWeaponItemStats = [[], { CurrentAmmo: 0 }];
+  }
+  return next;
+}
+
+function removeLegacyAugmentsFromCustomization(customizationStats) {
+  const existingCustomization = Array.isArray(customizationStats) ? customizationStats : [[], {}];
+  const first = Array.isArray(existingCustomization[0]) ? existingCustomization[0] : [];
+  const cleanedFirst = first.filter((value) => !(typeof value === "string" && /^T\d+_Augment_/i.test(value)));
+  return [cleanedFirst, existingCustomization[1] || {}];
+}
+
+function buildItemStats({ templateId = "", augments = [], durability = {}, rollPayloads = new Map() } = {}) {
+  const durabilityObj = durability.max !== undefined
+    ? { CurrentDurability: Number(durability.current ?? durability.max), MaxDurability: Number(durability.max), DecayedMaxDurability: Number(durability.max) }
+    : {};
+  const stats = normalizeAugmentableBaseStats(templateId, {
+    FCustomizationStats: [[], {}],
+    FItemStackAndDurabilityStats: [[], durabilityObj]
+  }, durability);
+  if (augments.length > 0) stats.FAugmentedItemStats = buildAugmentedItemStats(augments, rollPayloads);
+  return stats;
+}
+
+function currentEpochSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function itemInsertShape(baseColumns, baseValues, itemColumns) {
+  const columns = [...baseColumns];
+  const values = [...baseValues];
+  if (itemColumns.has("is_new")) {
+    columns.push("is_new");
+    values.push(false);
+  }
+  if (itemColumns.has("acquisition_time")) {
+    columns.push("acquisition_time");
+    values.push(currentEpochSeconds());
+  }
+  return { columns, values };
+}
+
+function extractAugmentIdsFromStats(stats) {
+  const found = [];
+  const visit = (value) => {
+    if (!value) return;
+    if (typeof value === "string") {
+      if (/^T\d+_Augment_/i.test(value)) found.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value === "object") Object.values(value).forEach(visit);
+  };
+  visit(stats?.FAugmentedItemStats);
+  visit(stats?.FCustomizationStats);
+  return [...new Set(found)];
+}
+
+export async function augmentInventoryItem(db, playerId, itemId, { augments = [], augmentQuality = 1 } = {}) {
   await requireCapability(await supportsInventoryEdit(db), "Augment inventory item requires dune.items and dune.inventories.");
   const safeItemId = intParam(itemId, "item id", 1);
   const augmentIds = validateAugmentIds(augments);
+  const augmentQualityLevel = normalizeAugmentQuality(augmentQuality);
   if (augmentIds.length === 0) throw new Error("At least one augment ID is required");
   return db.transaction(async (tx) => {
+    const itemColumns = await columnsFor(tx, "items");
+    const metadataSelect = [
+      itemColumns.has("is_new") ? "i.is_new" : "null::boolean as is_new",
+      itemColumns.has("acquisition_time") ? "i.acquisition_time" : "null::bigint as acquisition_time"
+    ].join(", ");
     const player = await resolvePlayerMutationTarget(tx, playerId);
+    requireOfflinePlayer(player, "Apply augments");
     const owned = await tx.query(`
-      select i.id, i.stats, i.template_id
+      select i.id, i.stats, i.template_id, ${metadataSelect}
       from dune.items i
       join dune.inventories inv on inv.id = i.inventory_id
       where i.id = $1 and inv.actor_id = $2
       for update`, [safeItemId, player.actorId]);
     if (!owned.rows[0]) throw new Error("Inventory item was not found in the selected player's directly-owned inventory");
-    const templateId = String(owned.rows[0].template_id || "");
-    if (!isTemplateAugmentable(templateId)) throw new Error("Augments can only be applied to weapons and armor. This item type is not augmentable.");
     const existing = owned.rows[0].stats || {};
-    const existingCustomization = Array.isArray(existing.FCustomizationStats) ? existing.FCustomizationStats : [[], {}];
-    const existingAugments = Array.isArray(existingCustomization[0]) ? existingCustomization[0] : [];
-    const merged = [...new Set([...existingAugments, ...augmentIds])].slice(0, 20);
-    const nextStats = { ...existing, FCustomizationStats: [merged, existingCustomization[1] || {}] };
-    await tx.query("update dune.items set stats = $1::jsonb where id = $2", [JSON.stringify(nextStats), safeItemId]);
-    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, augments: merged, previous: existingAugments };
+    const existingAugments = extractAugmentIdsFromStats(existing);
+    const nextAugments = [...new Set(augmentIds)].slice(0, 20);
+    validateAugmentsForTemplate(owned.rows[0].template_id, nextAugments);
+    const slotUnlocks = await ensureAugmentSlotKeystones(tx, player, owned.rows[0].template_id, nextAugments);
+    const rollPayloads = await loadAugmentRollPayloads(tx, nextAugments, augmentQualityLevel, { sourceTemplateId: owned.rows[0].template_id, excludeItemId: safeItemId });
+    const nextStats = {
+      ...normalizeAugmentableBaseStats(owned.rows[0].template_id, existing),
+      FAugmentedItemStats: buildAugmentedItemStats(nextAugments, rollPayloads)
+    };
+    const setClauses = ["stats = $1::jsonb"];
+    const values = [JSON.stringify(nextStats)];
+    if (itemColumns.has("is_new")) {
+      values.push(false);
+      setClauses.push(`is_new = $${values.length}`);
+    }
+    if (itemColumns.has("acquisition_time") && Number(owned.rows[0].acquisition_time || 0) <= 0) {
+      values.push(currentEpochSeconds());
+      setClauses.push(`acquisition_time = $${values.length}`);
+    }
+    values.push(safeItemId);
+    await tx.query(`update dune.items set ${setClauses.join(", ")} where id = $${values.length}`, values);
+    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, augments: nextAugments, augmentQuality: augmentQualityLevel, previous: existingAugments, slotUnlocks };
   });
 }
 
-export async function clearItemAugments(db, playerId, itemId) {
-  await requireCapability(await supportsInventoryEdit(db), "Clear item augments requires dune.items and dune.inventories.");
-  const safeItemId = intParam(itemId, "item id", 1);
+export async function playerInventoryItemIds(db, playerId, templateId) {
+  const target = intParam(playerId, "player id", 1);
+  const resolvedTemplate = validateTemplateId(templateId);
+  const result = await db.query(`
+    select i.id::bigint as id
+    from dune.items i
+    join dune.inventories inv on inv.id = i.inventory_id
+    where inv.actor_id = $1
+      and i.template_id = $2`, [target, resolvedTemplate]);
+  return result.rows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id));
+}
+
+export async function maxPlayerInventoryItemId(db, playerId, templateId) {
+  const ids = await playerInventoryItemIds(db, playerId, templateId);
+  return ids.length > 0 ? Math.max(...ids) : 0;
+}
+
+export async function augmentNewestPlayerItem(db, playerId, templateId, { afterItemId = 0, existingItemIds = [], augments = [], augmentQuality = 1 } = {}) {
+  const target = intParam(playerId, "player id", 1);
+  const resolvedTemplate = validateTemplateId(templateId);
+  const safeAfterItemId = intParam(afterItemId || 0, "after item id", 0);
+  const knownItemIds = Array.isArray(existingItemIds)
+    ? [...new Set(existingItemIds.map((id) => intParam(id, "existing item id", 1)))]
+    : [];
+  const augmentIds = validateAugmentIds(augments);
+  if (augmentIds.length === 0) throw new Error("At least one augment ID is required");
+  const augmentQualityLevel = normalizeAugmentQuality(augmentQuality);
+  validateAugmentsForTemplate(resolvedTemplate, augmentIds);
   return db.transaction(async (tx) => {
-    const player = await resolvePlayerMutationTarget(tx, playerId);
-    const owned = await tx.query(`
+    const itemColumns = await columnsFor(tx, "items");
+    const found = await tx.query(`
       select i.id, i.stats, i.template_id
       from dune.items i
       join dune.inventories inv on inv.id = i.inventory_id
-      where i.id = $1 and inv.actor_id = $2
-      for update`, [safeItemId, player.actorId]);
-    if (!owned.rows[0]) throw new Error("Inventory item was not found");
-    const existing = owned.rows[0].stats || {};
-    const fc = Array.isArray(existing.FCustomizationStats) ? existing.FCustomizationStats : [[], {}];
-    const previous = Array.isArray(fc[0]) ? fc[0] : [];
-    if (previous.length === 0) return { ok: true, itemId: safeItemId, cleared: 0 };
-    const nextStats = { ...existing, FCustomizationStats: [[], fc[1] || {}] };
-    await tx.query("update dune.items set stats = $1::jsonb where id = $2", [JSON.stringify(nextStats), safeItemId]);
-    return { ok: true, itemId: safeItemId, templateId: owned.rows[0].template_id, cleared: previous.length, previous };
+      where inv.actor_id = $1
+        and i.template_id = $2
+        and (
+          coalesce(array_length($3::bigint[], 1), 0) = 0
+          or not (i.id = any($3::bigint[]))
+        )
+        and (
+          coalesce(array_length($3::bigint[], 1), 0) > 0
+          or i.id > $4
+        )
+      order by i.id desc
+      limit 1
+      for update`, [target, resolvedTemplate, knownItemIds, safeAfterItemId]);
+    const item = found.rows[0];
+    if (!item) throw new Error(`${resolvedTemplate} was granted live, but the new inventory row was not found yet`);
+    const owner = await tx.query(`
+      select coalesce(player_controller_id, $1::bigint) as controller_id
+      from dune.player_state
+      where player_pawn_id = $1::bigint or id = $1::bigint
+      limit 1`, [target]);
+    const player = { actorId: target, controllerId: Number(owner.rows[0]?.controller_id || target) };
+    const slotUnlocks = await ensureAugmentSlotKeystones(tx, player, resolvedTemplate, augmentIds);
+    const rollPayloads = await loadAugmentRollPayloads(tx, augmentIds, augmentQualityLevel, { sourceTemplateId: resolvedTemplate, excludeItemId: Number(item.id) });
+    const nextStats = {
+      ...normalizeAugmentableBaseStats(resolvedTemplate, item.stats || {}, { current: 100, max: 100 }),
+      FAugmentedItemStats: buildAugmentedItemStats(augmentIds, rollPayloads)
+    };
+    const setClauses = ["stats = $1::jsonb"];
+    const values = [JSON.stringify(nextStats)];
+    if (itemColumns.has("is_new")) {
+      values.push(false);
+      setClauses.push(`is_new = $${values.length}`);
+    }
+    values.push(item.id);
+    await tx.query(`update dune.items set ${setClauses.join(", ")} where id = $${values.length}`, values);
+    return { ok: true, itemId: Number(item.id), templateId: resolvedTemplate, augments: augmentIds, augmentQuality: augmentQualityLevel, slotUnlocks };
   });
 }
 
-export async function giveItemToStorage(db, storageId, { itemName = "", itemId = "", templateId = "", quantity = 1, quality = 0, augments = [] }) {
+export async function playerItemAugmentState(db, playerId, itemId, expectedAugments = []) {
+  const target = intParam(playerId, "player id", 1);
+  const safeItemId = intParam(itemId, "item id", 1);
+  const expected = validateAugmentIds(expectedAugments);
+  const result = await db.query(`
+    select i.id, i.template_id, i.stats
+    from dune.items i
+    join dune.inventories inv on inv.id = i.inventory_id
+    where i.id = $1 and inv.actor_id = $2
+    limit 1`, [safeItemId, target]);
+  const item = result.rows[0];
+  if (!item) return { ok: false, itemId: safeItemId, reason: "missing" };
+  const stats = item.stats || {};
+  const applied = extractAugmentIdsFromStats(stats);
+  const missingAugments = expected.filter((id) => !applied.includes(id));
+  const kind = augmentItemKindForTemplate(item.template_id);
+  const missingBaseStats = kind === "weapon" && !Array.isArray(stats.FWeaponItemStats);
+  const durabilityStats = Array.isArray(stats.FItemStackAndDurabilityStats) ? stats.FItemStackAndDurabilityStats[1] : null;
+  const missingDurability = (kind === "weapon" || kind === "clothing") && (
+    !durabilityStats ||
+    typeof durabilityStats !== "object" ||
+    (
+      durabilityStats.CurrentDurability === undefined &&
+      durabilityStats.MaxDurability === undefined &&
+      durabilityStats.DecayedMaxDurability === undefined
+    )
+  );
+  return {
+    ok: missingAugments.length === 0 && !missingBaseStats && !missingDurability,
+    itemId: Number(item.id),
+    templateId: item.template_id,
+    appliedAugments: applied,
+    missingAugments,
+    missingBaseStats,
+    missingDurability,
+    kind
+  };
+}
+
+export async function giveItemToStorage(db, storageId, { itemName = "", itemId = "", templateId = "", quantity = 1, quality = 0, augments = [], augmentQuality = 1 }) {
   await requireCapability(await supportsStorageGiveItem(db), "Storage give-item requires compatible dune.inventories and dune.items insert columns.");
   const target = intParam(storageId, "storage id", 1);
   const resolvedTemplate = validateTemplateId(templateId || itemId || itemName);
   const stackSize = intParam(quantity, "quantity", 1, 1000000);
-  const qualityLevel = intParam(quality, "quality", 0, 1000000);
+  const qualityLevel = normalizeStandaloneAugmentQuality(resolvedTemplate, intParam(quality, "quality", 0, 1000000));
   const augmentIds = validateAugmentIds(augments);
-  if (augmentIds.length > 0 && !isTemplateAugmentable(resolvedTemplate)) {
-    throw new Error("Augments can only be applied to weapons and armor. This item type is not augmentable.");
-  }
+  const augmentQualityLevel = normalizeAugmentQuality(augmentQuality);
+  validateAugmentsForTemplate(resolvedTemplate, augmentIds);
   return db.transaction(async (tx) => {
+    const itemColumns = await columnsFor(tx, "items");
     const storage = await tx.query(`
       select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
       from dune.inventories
@@ -2715,67 +3148,78 @@ export async function giveItemToStorage(db, storageId, { itemName = "", itemId =
     const currentCount = Number(count.rows[0]?.count || 0);
     if (inventory.max_item_count > 0 && currentCount >= inventory.max_item_count) throw new Error("Storage is full by item slot count");
     const position = await tx.query("select coalesce(max(position_index), -1)::int + 1 as position_index from dune.items where inventory_id = $1", [inventory.id]);
-    const stats = buildItemStats({ augments: augmentIds });
+    const rollPayloads = await loadAugmentRollPayloads(tx, augmentIds, augmentQualityLevel, { sourceTemplateId: resolvedTemplate });
+    const stats = buildItemStats({ templateId: resolvedTemplate, augments: augmentIds, rollPayloads });
+    const insert = itemInsertShape(
+      ["inventory_id", "template_id", "stack_size", "quality_level", "position_index", "stats"],
+      [inventory.id, resolvedTemplate, stackSize, qualityLevel, Number(position.rows[0]?.position_index || 0), JSON.stringify(stats)],
+      itemColumns
+    );
     const inserted = await tx.query(`
-      insert into dune.items (inventory_id, template_id, stack_size, quality_level, position_index, stats)
-      values ($1, $2, $3, $4, $5, $6::jsonb)
-      returning id, template_id, stack_size, quality_level, position_index, inventory_id`, [
-      inventory.id,
-      resolvedTemplate,
-      stackSize,
-      qualityLevel,
-      Number(position.rows[0]?.position_index || 0),
-      JSON.stringify(stats)
-    ]);
+      insert into dune.items (${insert.columns.join(", ")})
+      values (${insert.values.map((_, index) => index === 5 ? `$${index + 1}::jsonb` : `$${index + 1}`).join(", ")})
+      returning id, template_id, stack_size, quality_level, position_index, inventory_id`, insert.values);
     return { ok: true, storage: inventory, inserted: inserted.rows[0], augments: augmentIds.length > 0 ? augmentIds : undefined };
   });
 }
 
-export async function giveItemToPlayer(db, playerId, { itemName = "", itemId = "", templateId = "", quantity = 1, quality = 1, augments = [] }) {
+export async function giveItemToPlayer(db, playerId, { itemName = "", itemId = "", templateId = "", quantity = 1, quality = 1, augments = [], augmentQuality = 1, allowOnlinePreAugmented = false }) {
   await requireCapability(await supportsPlayerGiveItem(db), "Player give-item requires compatible dune.inventories and dune.items insert columns.");
   const target = intParam(playerId, "player id", 1);
   const resolvedTemplate = validateTemplateId(templateId || itemId || itemName);
   const stackSize = intParam(quantity, "quantity", 1, 1000000);
-  const qualityLevel = intParam(quality, "grade", 0, 5);
+  const qualityLevel = normalizeStandaloneAugmentQuality(resolvedTemplate, intParam(quality, "grade", 0, 5));
   const augmentIds = validateAugmentIds(augments);
-  if (augmentIds.length > 0 && !isTemplateAugmentable(resolvedTemplate)) {
-    throw new Error("Augments can only be applied to weapons and armor. This item type is not augmentable.");
-  }
+  const augmentQualityLevel = normalizeAugmentQuality(augmentQuality);
+  validateAugmentsForTemplate(resolvedTemplate, augmentIds);
   return db.transaction(async (tx) => {
+    const itemColumns = await columnsFor(tx, "items");
+    const player = await resolvePlayerMutationTarget(tx, target);
+    const playerOnline = String(player.onlineStatus || "").toLowerCase() === "online";
+    if (augmentIds.length > 0 && !allowOnlinePreAugmented) requireOfflinePlayer(player, "Pre-augmented item grants");
     const inventory = await tx.query(`
       select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
       from dune.inventories
       where actor_id = $1 and inventory_type = 0
       order by id
       limit 1
-      for update`, [target]);
+      for update`, [player.actorId]);
     const fallbackInventory = inventory.rows[0] ? inventory : await tx.query(`
       select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
       from dune.inventories
       where actor_id = $1
       order by id
       limit 1
-      for update`, [target]);
+      for update`, [player.actorId]);
     if (!fallbackInventory.rows[0]) throw new Error("Player inventory was not found");
     const inv = fallbackInventory.rows[0];
     const count = await tx.query("select count(*)::int as count from dune.items where inventory_id = $1", [inv.id]);
     const currentCount = Number(count.rows[0]?.count || 0);
     if (inv.max_item_count > 0 && currentCount >= inv.max_item_count) throw new Error("Player inventory is full by item slot count");
     const position = await tx.query("select coalesce(max(position_index), -1)::int + 1 as position_index from dune.items where inventory_id = $1", [inv.id]);
-    const stats = buildItemStats({ augments: augmentIds, durability: { current: 100, max: 100 } });
+    const slotUnlocks = await ensureAugmentSlotKeystones(tx, player, resolvedTemplate, augmentIds);
+    const rollPayloads = await loadAugmentRollPayloads(tx, augmentIds, augmentQualityLevel, { sourceTemplateId: resolvedTemplate });
+    const stats = buildItemStats({ templateId: resolvedTemplate, augments: augmentIds, durability: { current: 100, max: 100 }, rollPayloads });
+    const insert = itemInsertShape(
+      ["inventory_id", "template_id", "stack_size", "quality_level", "position_index", "stats"],
+      [inv.id, resolvedTemplate, stackSize, qualityLevel, Number(position.rows[0]?.position_index || 0), JSON.stringify(stats)],
+      itemColumns
+    );
     const inserted = await tx.query(`
-      insert into dune.items (inventory_id, template_id, stack_size, quality_level, position_index, stats)
-      values ($1, $2, $3, $4, $5, $6::jsonb)
-      returning id, template_id, stack_size, quality_level, position_index, inventory_id`, [
-      inv.id,
-      resolvedTemplate,
-      stackSize,
-      qualityLevel,
-      Number(position.rows[0]?.position_index || 0),
-      JSON.stringify(stats)
-    ]);
+      insert into dune.items (${insert.columns.join(", ")})
+      values (${insert.values.map((_, index) => index === 5 ? `$${index + 1}::jsonb` : `$${index + 1}`).join(", ")})
+      returning id, template_id, stack_size, quality_level, position_index, inventory_id`, insert.values);
     const augmentNote = augmentIds.length > 0 ? ` with ${augmentIds.length} augment(s) pre-applied` : "";
-    return { ok: true, playerId: target, inserted: inserted.rows[0], augments: augmentIds.length > 0 ? augmentIds : undefined, message: `${resolvedTemplate} was added at Grade ${qualityLevel}${augmentNote}. The player may need to relog or refresh inventory before it appears in-game.` };
+    return {
+      ok: true,
+      playerId: player.actorId,
+      inserted: inserted.rows[0],
+      augments: augmentIds.length > 0 ? augmentIds : undefined,
+      augmentQuality: augmentIds.length > 0 ? augmentQualityLevel : undefined,
+      slotUnlocks,
+      requiresRelog: playerOnline,
+      message: `${resolvedTemplate} was added at Grade ${qualityLevel}${augmentNote}.${playerOnline ? " Relog required for item or augments to appear correctly." : " The player will see the database edit on next login."}`
+    };
   });
 }
 
@@ -3401,6 +3845,335 @@ export async function addonOpsHealthSummary(db) {
   return addonOpsHealthSummaryV2(db);
 }
 
+export async function addonOpsActivitySummary(db) {
+  const exists = await tableExists(db, "player_state");
+  if (!exists) return emptyActivitySummary();
+
+  const columns = await columnsFor(db, "player_state");
+  const hasLoginTime = columns.has("last_login_time");
+  const hasActivity = columns.has("last_avatar_activity");
+  const hasReturning = columns.has("last_returning_player_event_time");
+  const hasTransfer = columns.has("transfer_count");
+
+  const now = "now()";
+  const constraints = [];
+
+  if (hasActivity) {
+    constraints.push(
+      `count(*) filter (where last_avatar_activity > ${now} - interval '1 hour')::int as active_last_1h`,
+      `count(*) filter (where last_avatar_activity > ${now} - interval '24 hours')::int as active_last_24h`,
+      `count(*) filter (where last_avatar_activity > ${now} - interval '7 days')::int as active_last_7d`,
+      `count(*) filter (where last_avatar_activity < ${now} - interval '30 days')::int as inactive_players`
+    );
+  } else {
+    constraints.push("0::int as active_last_1h", "0::int as active_last_24h", "0::int as active_last_7d", "0::int as inactive_players");
+  }
+
+  if (hasReturning) {
+    constraints.push(`count(*) filter (where last_returning_player_event_time > ${now} - interval '7 days')::int as returning_players`);
+  } else {
+    constraints.push("0::int as returning_players");
+  }
+
+  if (hasTransfer) {
+    constraints.push("count(*) filter (where transfer_count = 0)::int as new_players");
+  } else if (hasLoginTime) {
+    constraints.push(`count(*) filter (where last_login_time > ${now} - interval '7 days')::int as new_players`);
+  } else {
+    constraints.push("0::int as new_players");
+  }
+
+  const result = await db.query(`
+    select count(*)::int as total_players,
+           count(*) filter (where online_status = 'Online')::int as online_players,
+           count(*) filter (where life_state::text <> 'Alive')::int as players_dead,
+           ${constraints.join(",\n           ")}
+    from dune.player_state`);
+
+  const r = result.rows?.[0] || {};
+
+  let guildActivity = [];
+  try {
+    const guildsExist = await tableExists(db, "guilds");
+    const membersExist = await tableExists(db, "guild_members");
+    if (guildsExist && membersExist) {
+      const memberCols = await columnsFor(db, "guild_members");
+      const guildCols = await columnsFor(db, "guilds");
+      const playerCol = firstExistingColumn(memberCols, ["player_id", "player_controller_id", "account_id"]);
+      const memberGuildCol = firstExistingColumn(memberCols, ["guild_id", "id"]);
+      const guildIdCol = firstExistingColumn(guildCols, ["guild_id", "id"]);
+      const guildNameCol = firstExistingColumn(guildCols, ["guild_name", "name", "display_name"]);
+      if (playerCol && memberGuildCol && guildIdCol && guildNameCol) {
+        const guildResult = await db.query(`
+          select coalesce(g.${quoteIdentifier(guildNameCol)}, 'Unknown') as guild,
+                 count(gm.*)::int as members,
+                 count(ps.*) filter (where ps.online_status = 'Online')::int as online
+          from dune.guilds g
+          left join dune.guild_members gm on gm.${quoteIdentifier(memberGuildCol)} = g.${quoteIdentifier(guildIdCol)}
+          left join dune.player_state ps on ps.player_controller_id::text = gm.${quoteIdentifier(playerCol)}::text
+          group by g.${quoteIdentifier(guildNameCol)}
+          order by members desc
+          limit 20`);
+        guildActivity = guildResult.rows || [];
+      }
+    }
+  } catch { }
+
+  let factionActivity = [];
+  try {
+    const factionExists = await tableExists(db, "player_faction");
+    if (factionExists) {
+      const factionCols = await columnsFor(db, "player_faction");
+      const factionsExist = await tableExists(db, "factions");
+      const actorCol = firstExistingColumn(factionCols, ["actor_id", "player_id", "player_controller_id"]);
+      const factionIdCol = firstExistingColumn(factionCols, ["faction_id", "faction"]);
+      if (actorCol && factionIdCol) {
+        const factionResult = await db.query(`
+          select coalesce(f.name, pf.${quoteIdentifier(factionIdCol)}::text, 'Unknown') as faction,
+                 count(*)::int as members,
+                 count(*) filter (where ps.online_status = 'Online')::int as online
+          from dune.player_faction pf
+          join dune.player_state ps on ps.player_pawn_id::text = pf.${quoteIdentifier(actorCol)}::text
+          ${factionsExist ? "left join dune.factions f on f.id::text = pf." + quoteIdentifier(factionIdCol) + "::text" : ""}
+          group by f.name, pf.${quoteIdentifier(factionIdCol)}
+          order by members desc
+          limit 20`);
+        factionActivity = factionResult.rows || [];
+      }
+    }
+  } catch { }
+
+  let mapActivity = [];
+  try {
+    const mapsExist = await tableExists(db, "map_names");
+    const playerMapTable = await tableExists(db, "overmap_players");
+    if (mapsExist) {
+      const mapCols = await columnsFor(db, "map_names");
+      const mapIdCol = firstExistingColumn(mapCols, ["map_name_id", "id"]);
+      const mapNameCol = firstExistingColumn(mapCols, ["map_name", "name"]);
+      if (mapIdCol && mapNameCol) {
+        const mapResult = await db.query(`
+          select coalesce(mn.${quoteIdentifier(mapNameCol)}, 'Unknown') as map,
+                 ${playerMapTable
+                    ? `count(op.*)::int as actors,
+                       count(op.*) filter (where op.is_online)::int as online
+                       from dune.map_names mn
+                       left join dune.overmap_players op on op.map_name_id = mn.${quoteIdentifier(mapIdCol)}
+                       group by mn.${quoteIdentifier(mapNameCol)}`
+                    : `0::int as actors, 0::int as online
+                       from dune.map_names mn
+                       group by mn.${quoteIdentifier(mapNameCol)}`}
+          order by actors desc
+          limit 20`);
+        mapActivity = mapResult.rows || [];
+      }
+    }
+  } catch { }
+
+  return {
+    totalPlayers: Number(r.total_players || 0),
+    onlinePlayers: Number(r.online_players || 0),
+    activeLast1h: r.active_last_1h != null ? Number(r.active_last_1h) : null,
+    activeLast24h: r.active_last_24h != null ? Number(r.active_last_24h) : null,
+    activeLast7d: r.active_last_7d != null ? Number(r.active_last_7d) : null,
+    inactivePlayers: r.inactive_players != null ? Number(r.inactive_players) : null,
+    returningPlayers: r.returning_players != null ? Number(r.returning_players) : null,
+    newPlayers: r.new_players != null ? Number(r.new_players) : null,
+    playersDead: Number(r.players_dead || 0),
+    guildActivity,
+    factionActivity,
+    mapActivity
+  };
+}
+
+function emptyActivitySummary() {
+  return {
+    totalPlayers: 0, onlinePlayers: 0,
+    activeLast1h: null, activeLast24h: null, activeLast7d: null,
+    inactivePlayers: null, returningPlayers: null, newPlayers: null,
+    playersDead: 0,
+    guildActivity: [], factionActivity: [], mapActivity: []
+  };
+}
+
+export async function addonOpsResourcesSummary(db) {
+  if (!(await tableExists(db, "resourcefield_state"))) return emptyResourcesSummary();
+
+  const result = await db.query(`
+    select count(*)::int as total_fields,
+           coalesce(sum(value_remaining), 0)::bigint as total_value
+    from dune.resourcefield_state
+    where field_kind_id = 1`);
+
+  const r = result.rows?.[0] || {};
+
+  let resourcesByMap = [];
+  try {
+      const mapResult = await db.query(`
+        select map,
+               count(*)::int as fields,
+               coalesce(sum(value_remaining), 0)::bigint as total_value
+        from dune.resourcefield_state
+        where field_kind_id = 1
+        group by map
+        order by fields desc`);
+    resourcesByMap = mapResult.rows || [];
+  } catch { }
+
+  let spiceFieldsBySize = [];
+  try {
+    const spiceExists = await tableExists(db, "spicefield_types");
+    if (spiceExists) {
+      const spiceResult = await db.query(`
+        select sft.field_type as size,
+               sft.map_name as map,
+               coalesce(sum(sft.current_globally_active), 0)::int as currently_active,
+               coalesce(sum(sft.max_globally_active), 0)::int as max_active,
+               (select coalesce(sum(value_remaining), 0)::bigint
+                from dune.resourcefield_state rfs
+                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as total_value,
+               (select count(*)::int
+                from dune.resourcefield_state rfs
+                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as active_fields
+        from dune.spicefield_types sft
+        where sft.is_spawning_active = true
+        group by sft.field_type, sft.map_name
+        order by sft.map_name, sft.field_type`);
+      spiceFieldsBySize = spiceResult.rows || [];
+    }
+  } catch { }
+
+  return {
+    totalFields: Number(r.total_fields || 0),
+    totalValueRemaining: Number(r.total_value || 0),
+    resourcesByMap,
+    spiceFieldsBySize
+  };
+}
+
+function emptyResourcesSummary() {
+  return { totalFields: 0, totalValueRemaining: 0, resourcesByMap: [], spiceFieldsBySize: [] };
+}
+
+export async function addonOpsCombatDeaths(db) {
+  const exists = await tableExists(db, "player_death_log");
+  if (!exists) return emptyCombatDeaths();
+
+  const result = await db.query(`
+    select count(*)::int as total_deaths,
+           count(*) filter (where death_cause = 'Dead')::int as unknown_deaths,
+           count(*) filter (where death_cause = 'DeadByCoriolis')::int as coriolis_deaths,
+           count(*) filter (where death_cause = 'DeadBySandworm')::int as sandworm_deaths
+    from dune.player_death_log`);
+
+  const r = result.rows?.[0] || {};
+  const causes = [
+    { cause: "Sandworm", count: Number(r.sandworm_deaths || 0) },
+    { cause: "Coriolis", count: Number(r.coriolis_deaths || 0) },
+    { cause: "Unknown", count: Number(r.unknown_deaths || 0) }
+  ].filter(d => d.count > 0);
+
+  return {
+    totalDeaths: Number(r.total_deaths || 0),
+    pvpDeaths: 0,
+    pveDeaths: Number(r.total_deaths || 0),
+    deathsByCause: causes,
+    deathsByMap: [],
+    topHostileNpcs: [],
+    kdRatio: null
+  };
+}
+
+function emptyCombatDeaths() {
+  return { totalDeaths: 0, pvpDeaths: 0, pveDeaths: 0, deathsByCause: [], deathsByMap: [], topHostileNpcs: [], kdRatio: null };
+}
+
+export async function addonOpsEconomySummary(db) {
+  let totalCurrencyHolders = 0;
+  let totalSupply = 0;
+  let currencyBreakdown = [];
+
+  try {
+    const currencyExists = await tableExists(db, "player_virtual_currency_balances");
+    if (currencyExists) {
+      const result = await db.query(`
+        select count(distinct player_controller_id)::int as holders,
+               coalesce(sum(balance), 0)::bigint as total_supply
+        from dune.player_virtual_currency_balances`);
+      const r = result.rows?.[0] || {};
+      totalCurrencyHolders = Number(r.holders || 0);
+      totalSupply = Number(r.total_supply || 0);
+
+      const breakdown = await db.query(`
+        select currency_id::text as currency_id,
+               count(distinct player_controller_id)::int as holders,
+               coalesce(sum(balance), 0)::bigint as supply,
+               coalesce(round(avg(balance)), 0)::bigint as avg_balance,
+               coalesce(min(balance), 0)::bigint as min_balance,
+               coalesce(max(balance), 0)::bigint as max_balance
+        from dune.player_virtual_currency_balances
+        group by currency_id
+        order by supply desc`);
+      currencyBreakdown = breakdown.rows || [];
+    }
+  } catch { }
+
+  let activeOrders = 0;
+  let fulfilledOrders = 0;
+  let topTradedItems = [];
+
+  try {
+    const ordersExist = await tableExists(db, "dune_exchange_orders");
+    const fulfilledExist = await tableExists(db, "dune_exchange_fulfilled_orders");
+    if (ordersExist) {
+      const ordersResult = await db.query(`select count(*)::int as count from dune.dune_exchange_orders`);
+      activeOrders = Number(ordersResult.rows?.[0]?.count || 0);
+
+      const topResult = await db.query(`
+        select coalesce(template_id, 'Unknown') as template_id,
+               count(*)::int as orders,
+               coalesce(round(avg(item_price)), 0)::bigint as avg_price,
+               coalesce(min(item_price), 0)::bigint as min_price,
+               coalesce(max(item_price), 0)::bigint as max_price
+        from dune.dune_exchange_orders
+        group by template_id
+        order by orders desc
+        limit 20`);
+      topTradedItems = topResult.rows || [];
+    }
+    if (fulfilledExist) {
+      const fulfilledResult = await db.query(`select count(*)::int as count from dune.dune_exchange_fulfilled_orders`);
+      fulfilledOrders = Number(fulfilledResult.rows?.[0]?.count || 0);
+    }
+  } catch { }
+
+  let taxCollected = 0;
+  try {
+    const taxExists = await tableExists(db, "tax_invoice");
+    if (taxExists) {
+      const taxResult = await db.query(`
+        select coalesce(sum(amount), 0)::bigint as total
+        from dune.tax_invoice`);
+      taxCollected = Number(taxResult.rows?.[0]?.total || 0);
+    }
+  } catch { }
+
+  return {
+    totalCurrencyHolders,
+    totalSupply,
+    activeOrders,
+    fulfilledOrders,
+    taxCollected,
+    currencyBreakdown,
+    topTradedItems
+  };
+}
+
+function emptyEconomySummary() {
+  return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
+}
+
+// ── RBAC & Discord Player Functions ──
 export async function discordPlayerLinksTableCreate(db) {
   await db.query(`
     create table if not exists dune.discord_player_links (
@@ -3562,559 +4335,3 @@ export async function rbacAuditLog(db, { actorId, actorName, action, targetType,
   } catch { /* best effort */ }
 }
 
-export async function playerOwnedStorageQuery(db, playerControllerId) {
-  const result = await db.query(`
-    select p.id,
-           coalesce(max(case when pa.actor_name not like '##%' and pa.actor_name <> 'None' then pa.actor_name end), p.building_type) as name,
-           p.building_type as class,
-           coalesce(a.map, '') as map,
-           count(i.id)::int as item_count
-    from dune.placeables p
-    left join dune.actors a on a.id = p.id
-    left join dune.inventories inv on inv.actor_id = p.id
-    left join dune.items i on i.inventory_id = inv.id
-    left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
-    left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
-    left join dune.permission_actor pa on pa.actor_id = par.permission_actor_id
-    where par.player_id = $1
-      and par.rank = 1
-      and p.is_hologram = false
-      and p.owner_entity_id is not null
-      and p.owner_entity_id != 0
-    group by p.id, p.building_type, a.map
-    order by p.id`, [playerControllerId]);
-  return { rows: result.rows };
-}
-
-export async function guildStorageQuery(db, playerControllerId) {
-  const result = await db.query(`
-    select p.id,
-           coalesce(max(case when pa.actor_name not like '##%' and pa.actor_name <> 'None' then pa.actor_name end), p.building_type) as name,
-           p.building_type as class,
-           coalesce(a.map, '') as map,
-           count(i.id)::int as item_count
-    from dune.placeables p
-    left join dune.actors a on a.id = p.id
-    left join dune.inventories inv on inv.actor_id = p.id
-    left join dune.items i on i.inventory_id = inv.id
-    left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
-    left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
-    left join dune.guild_members gm on gm.player_id = par.player_id
-    left join dune.guild_members self_gm on self_gm.player_id = $1
-    left join dune.permission_actor pa on pa.actor_id = par.permission_actor_id
-    where gm.guild_id = self_gm.guild_id
-      and p.is_hologram = false
-      and p.owner_entity_id is not null
-      and p.owner_entity_id != 0
-    group by p.id, p.building_type, a.map
-    order by p.id`, [playerControllerId]);
-  return { rows: result.rows };
-}
-
-export async function searchItemsInContainers(db, { playerControllerId, query, scope = "owned" }) {
-  const searchTerm = `%${String(query).trim()}%`;
-
-  if (scope === "owned") {
-    const result = await db.query(`
-      select i.id,
-             i.template_id,
-             i.stack_size,
-             i.quality_level,
-             i.inventory_id,
-             inv.actor_id as container_id,
-             coalesce(
-               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability'), null),
-               null
-             ) as current_durability,
-             coalesce(
-               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::numeric, 0),
-               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'DecayedMaxDurability')::numeric, 0),
-               null
-             ) as max_durability
-      from dune.items i
-      join dune.inventories inv on i.inventory_id = inv.id
-      join dune.placeables p on p.id = inv.actor_id
-      left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
-      left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
-      where par.player_id = $1
-        and par.rank = 1
-        and i.template_id ilike $2
-      order by i.template_id
-      limit 200`, [playerControllerId, searchTerm]);
-    return { rows: result.rows };
-  }
-
-  if (scope === "guild") {
-    const result = await db.query(`
-      select distinct i.id,
-             i.template_id,
-             i.stack_size,
-             i.quality_level,
-             i.inventory_id,
-             inv.actor_id as container_id,
-             coalesce(
-               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability'), null),
-               null
-             ) as current_durability,
-             coalesce(
-               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::numeric, 0),
-               nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'DecayedMaxDurability')::numeric, 0),
-               null
-             ) as max_durability
-      from dune.items i
-      join dune.inventories inv on i.inventory_id = inv.id
-      join dune.placeables p on p.id = inv.actor_id
-      left join dune.actor_fgl_entities afe on afe.entity_id = p.owner_entity_id
-      left join dune.permission_actor_rank par on par.permission_actor_id = afe.actor_id
-      left join dune.guild_members gm on gm.player_id = par.player_id
-      left join dune.guild_members self_gm on self_gm.player_id = $1
-      where gm.guild_id = self_gm.guild_id
-        and i.template_id ilike $2
-      order by i.template_id
-      limit 200`, [playerControllerId, searchTerm]);
-    return { rows: result.rows };
-  }
-
-  throw new Error(`Unsupported search scope: ${scope}. Use "owned" or "guild".`);
-}
-
-export async function searchItemsInPlayerInventory(db, playerPawnId, query) {
-  const searchTerm = `%${String(query).trim()}%`;
-  const result = await db.query(`
-    select i.id,
-           i.template_id,
-           i.stack_size,
-           i.quality_level,
-           i.position_index,
-           i.inventory_id,
-           coalesce(
-             nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'CurrentDurability'), null),
-             null
-           ) as current_durability,
-           coalesce(
-             nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'MaxDurability')::numeric, 0),
-             nullif((i.stats->'FItemStackAndDurabilityStats'->1->>'DecayedMaxDurability')::numeric, 0),
-             null
-           ) as max_durability
-    from dune.items i
-    join dune.inventories inv on i.inventory_id = inv.id
-    where inv.actor_id = $1 and inv.inventory_type in (0, 1, 15)
-      and i.template_id ilike $2
-    order by i.template_id
-    limit 200`, [intParam(playerPawnId, "player pawn id", 1), searchTerm]);
-  return { rows: result.rows };
-}
-export async function addonOpsActivitySummary(db) {
-  const exists = await tableExists(db, "player_state");
-  if (!exists) return emptyActivitySummary();
-
-  const columns = await columnsFor(db, "player_state");
-  const hasLoginTime = columns.has("last_login_time");
-  const hasActivity = columns.has("last_avatar_activity");
-  const hasReturning = columns.has("last_returning_player_event_time");
-  const hasTransfer = columns.has("transfer_count");
-
-  const now = "now()";
-  const constraints = [];
-
-  if (hasActivity) {
-    constraints.push(
-      `count(*) filter (where last_avatar_activity > ${now} - interval '1 hour')::int as active_last_1h`,
-      `count(*) filter (where last_avatar_activity > ${now} - interval '24 hours')::int as active_last_24h`,
-      `count(*) filter (where last_avatar_activity > ${now} - interval '7 days')::int as active_last_7d`,
-      `count(*) filter (where last_avatar_activity < ${now} - interval '30 days')::int as inactive_players`
-    );
-  } else {
-    constraints.push("0::int as active_last_1h", "0::int as active_last_24h", "0::int as active_last_7d", "0::int as inactive_players");
-  }
-
-  if (hasReturning) {
-    constraints.push(`count(*) filter (where last_returning_player_event_time > ${now} - interval '7 days')::int as returning_players`);
-  } else {
-    constraints.push("0::int as returning_players");
-  }
-
-  if (hasTransfer) {
-    constraints.push("count(*) filter (where transfer_count = 0)::int as new_players");
-  } else if (hasLoginTime) {
-    constraints.push(`count(*) filter (where last_login_time > ${now} - interval '7 days')::int as new_players`);
-  } else {
-    constraints.push("0::int as new_players");
-  }
-
-  const result = await db.query(`
-    select count(*)::int as total_players,
-           count(*) filter (where online_status = 'Online')::int as online_players,
-           count(*) filter (where life_state::text <> 'Alive')::int as players_dead,
-           ${constraints.join(",\n           ")}
-    from dune.player_state`);
-
-  const r = result.rows?.[0] || {};
-
-  let guildActivity = [];
-  try {
-    const guildsExist = await tableExists(db, "guilds");
-    const membersExist = await tableExists(db, "guild_members");
-    if (guildsExist && membersExist) {
-      const memberCols = await columnsFor(db, "guild_members");
-      const guildCols = await columnsFor(db, "guilds");
-      const playerCol = firstExistingColumn(memberCols, ["player_id", "player_controller_id", "account_id"]);
-      const memberGuildCol = firstExistingColumn(memberCols, ["guild_id", "id"]);
-      const guildIdCol = firstExistingColumn(guildCols, ["guild_id", "id"]);
-      const guildNameCol = firstExistingColumn(guildCols, ["guild_name", "name", "display_name"]);
-      if (playerCol && memberGuildCol && guildIdCol && guildNameCol) {
-        const guildResult = await db.query(`
-          select coalesce(g.${quoteIdentifier(guildNameCol)}, 'Unknown') as guild,
-                 count(gm.*)::int as members,
-                 count(ps.*) filter (where ps.online_status = 'Online')::int as online
-          from dune.guilds g
-          left join dune.guild_members gm on gm.${quoteIdentifier(memberGuildCol)} = g.${quoteIdentifier(guildIdCol)}
-          left join dune.player_state ps on ps.player_controller_id::text = gm.${quoteIdentifier(playerCol)}::text
-          group by g.${quoteIdentifier(guildNameCol)}
-          order by members desc
-          limit 20`);
-        guildActivity = guildResult.rows || [];
-      }
-    }
-  } catch { }
-
-  let factionActivity = [];
-  try {
-    const factionExists = await tableExists(db, "player_faction");
-    if (factionExists) {
-      const factionCols = await columnsFor(db, "player_faction");
-      const factionsExist = await tableExists(db, "factions");
-      const actorCol = firstExistingColumn(factionCols, ["actor_id", "player_id", "player_controller_id"]);
-      const factionIdCol = firstExistingColumn(factionCols, ["faction_id", "faction"]);
-      if (actorCol && factionIdCol) {
-        const factionResult = await db.query(`
-          select coalesce(f.name, pf.${quoteIdentifier(factionIdCol)}::text, 'Unknown') as faction,
-                 count(*)::int as members,
-                 count(*) filter (where ps.online_status = 'Online')::int as online
-          from dune.player_faction pf
-          join dune.player_state ps on ps.player_pawn_id::text = pf.${quoteIdentifier(actorCol)}::text
-          ${factionsExist ? "left join dune.factions f on f.id::text = pf." + quoteIdentifier(factionIdCol) + "::text" : ""}
-          group by f.name, pf.${quoteIdentifier(factionIdCol)}
-          order by members desc
-          limit 20`);
-        factionActivity = factionResult.rows || [];
-      }
-    }
-  } catch { }
-
-  let mapActivity = [];
-  try {
-    const mapsExist = await tableExists(db, "map_names");
-    const playerMapTable = await tableExists(db, "overmap_players");
-    if (mapsExist) {
-      const mapCols = await columnsFor(db, "map_names");
-      const mapIdCol = firstExistingColumn(mapCols, ["map_name_id", "id"]);
-      const mapNameCol = firstExistingColumn(mapCols, ["map_name", "name"]);
-      if (mapIdCol && mapNameCol) {
-        const mapResult = await db.query(`
-          select coalesce(mn.${quoteIdentifier(mapNameCol)}, 'Unknown') as map,
-                 ${playerMapTable
-                    ? `count(op.*)::int as actors,
-                       count(op.*) filter (where op.is_online)::int as online
-                       from dune.map_names mn
-                       left join dune.overmap_players op on op.map_name_id = mn.${quoteIdentifier(mapIdCol)}
-                       group by mn.${quoteIdentifier(mapNameCol)}`
-                    : `0::int as actors, 0::int as online
-                       from dune.map_names mn
-                       group by mn.${quoteIdentifier(mapNameCol)}`}
-          order by actors desc
-          limit 20`);
-        mapActivity = mapResult.rows || [];
-      }
-    }
-  } catch { }
-
-  return {
-    totalPlayers: Number(r.total_players || 0),
-    onlinePlayers: Number(r.online_players || 0),
-    activeLast1h: r.active_last_1h != null ? Number(r.active_last_1h) : null,
-    activeLast24h: r.active_last_24h != null ? Number(r.active_last_24h) : null,
-    activeLast7d: r.active_last_7d != null ? Number(r.active_last_7d) : null,
-    inactivePlayers: r.inactive_players != null ? Number(r.inactive_players) : null,
-    returningPlayers: r.returning_players != null ? Number(r.returning_players) : null,
-    newPlayers: r.new_players != null ? Number(r.new_players) : null,
-    playersDead: Number(r.players_dead || 0),
-    guildActivity,
-    factionActivity,
-    mapActivity
-  };
-}
-
-function emptyActivitySummary() {
-  return {
-    totalPlayers: 0, onlinePlayers: 0,
-    activeLast1h: null, activeLast24h: null, activeLast7d: null,
-    inactivePlayers: null, returningPlayers: null, newPlayers: null,
-    playersDead: 0,
-    guildActivity: [], factionActivity: [], mapActivity: []
-  };
-}
-
-const BACKEND_TO_SERVICE = {
-  HaggaBasin: "Survival_1",
-  DeepDesert: "DeepDesert_1",
-  Overland: "Overmap",
-  Arrakeen: "SH_Arrakeen",
-  HarkoVillage: "SH_HarkoVillage"
-};
-
-function mapDisplayName(backendName) {
-  const humanNames = {
-    HaggaBasin: "Hagga Basin",
-    DeepDesert: "Deep Desert",
-    Overland: "Overmap",
-    Arrakeen: "Arrakeen",
-    HarkoVillage: "Harko Village"
-  };
-  return humanNames[backendName] || backendName;
-}
-
-async function buildDisplayNameMap(db) {
-  const mapping = {};
-  try {
-    const result = await db.query(
-      `SELECT map, dimension_index, label FROM dune.world_partition WHERE map IS NOT NULL`
-    );
-    const byService = {};
-    for (const row of result.rows || []) {
-      if (!byService[row.map]) byService[row.map] = [];
-      byService[row.map].push(row);
-    }
-    for (const [backend, service] of Object.entries(BACKEND_TO_SERVICE)) {
-      const partitions = byService[service] || [];
-      if (partitions.length === 0) {
-        mapping[backend] = mapDisplayName(backend);
-      } else if (backend === "DeepDesert") {
-        partitions.sort((a, b) => a.dimension_index - b.dimension_index);
-        mapping[backend] = partitions.map(p => {
-          const instanceNum = p.dimension_index + 1;
-          const label = (p.label || "").trim();
-          if (label && !/^DeepDesert_\d+$/.test(label)) {
-            return label;
-          }
-          const mode = label.includes("PvP") ? "PvP" : label.includes("PvE") ? "PvE" : "";
-          return "Deep Desert Instance " + instanceNum + (mode ? " (" + mode + ")" : "");
-        }).join(", ");
-      } else {
-        const primary = partitions.find(p => p.dimension_index === 0) || partitions[0];
-        const label = (primary?.label || "").trim();
-        const baseName = mapDisplayName(backend);
-        const isAutoGenerated = new RegExp("^" + service.replace(/_/g, "\\\\_") + "_\\\\d+$").test(label);
-        mapping[backend] = (!label || isAutoGenerated) ? baseName : label + " - " + baseName;
-      }
-    }
-  } catch { }
-  return mapping;
-}
-
-export async function addonOpsResourcesSummary(db) {
-  if (!(await tableExists(db, "resourcefield_state"))) return emptyResourcesSummary();
-
-  const displayNames = await buildDisplayNameMap(db);
-
-  // Only include maps that have a running partition (server_id IS NOT NULL)
-  let activeMaps = new Set();
-  try {
-    const partitionResult = await db.query(
-      `SELECT DISTINCT map FROM dune.world_partition WHERE server_id IS NOT NULL`
-    );
-    for (const row of partitionResult.rows || []) {
-      for (const [backend, service] of Object.entries(BACKEND_TO_SERVICE)) {
-        if (row.map === service) activeMaps.add(backend);
-      }
-    }
-  } catch { }
-
-  const result = await db.query(`
-    select count(*)::int as total_fields,
-           coalesce(sum(value_remaining), 0)::bigint as total_value
-    from dune.resourcefield_state
-    where field_kind_id = 1
-      ${activeMaps.size > 0 ? `and map = ANY($${1})` : ""}`,
-    activeMaps.size > 0 ? [[...activeMaps]] : []);
-
-
-  const r = result.rows?.[0] || {};
-
-  let resourcesByMap = [];
-  try {
-      const mapResult = await db.query(`
-        select map,
-               count(*)::int as fields,
-               coalesce(sum(value_remaining), 0)::bigint as total_value
-        from dune.resourcefield_state
-        where field_kind_id = 1
-          ${activeMaps.size > 0 ? `and map = ANY($${1})` : ""}
-        group by map
-        order by fields desc`,
-        activeMaps.size > 0 ? [[...activeMaps]] : []);
-    resourcesByMap = (mapResult.rows || []).map(row => ({
-      ...row,
-      map: displayNames[row.map] || mapDisplayName(row.map)
-    }));
-  } catch { }
-
-  let spiceFieldsBySize = [];
-  try {
-    const spiceExists = await tableExists(db, "spicefield_types");
-    if (spiceExists) {
-      const spiceResult = await db.query(`
-        select sft.field_type as size,
-               sft.map_name as map,
-               coalesce(sum(sft.current_globally_active), 0)::int as currently_active,
-               coalesce(sum(sft.max_globally_active), 0)::int as max_active,
-               (select coalesce(sum(value_remaining), 0)::bigint
-                from dune.resourcefield_state rfs
-                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as total_value,
-               (select count(*)::int
-                from dune.resourcefield_state rfs
-                where rfs.map = sft.map_name and rfs.field_kind_id = 1) as active_fields
-        from dune.spicefield_types sft
-        where sft.is_spawning_active = true
-          ${activeMaps.size > 0 ? `and sft.map_name = ANY($${1})` : ""}
-          and exists (select 1 from dune.resourcefield_state rfs2
-                       where rfs2.map = sft.map_name and rfs2.field_kind_id = 1)
-        group by sft.field_type, sft.map_name
-        order by sft.map_name, sft.field_type`,
-        activeMaps.size > 0 ? [[...activeMaps]] : []);
-      spiceFieldsBySize = (spiceResult.rows || []).map(row => ({
-        ...row,
-        map: displayNames[row.map] || mapDisplayName(row.map)
-      }));
-    }
-  } catch { }
-
-  return {
-    totalFields: Number(r.total_fields || 0),
-    totalValueRemaining: Number(r.total_value || 0),
-    resourcesByMap,
-    spiceFieldsBySize
-  };
-}
-
-function emptyResourcesSummary() {
-  return { totalFields: 0, totalValueRemaining: 0, resourcesByMap: [], spiceFieldsBySize: [] };
-}
-
-export async function addonOpsCombatDeaths(db) {
-  const exists = await tableExists(db, "player_death_log");
-  if (!exists) return emptyCombatDeaths();
-
-  const result = await db.query(`
-    select count(*)::int as total_deaths,
-           count(*) filter (where death_cause = 'Dead')::int as unknown_deaths,
-           count(*) filter (where death_cause = 'DeadByCoriolis')::int as coriolis_deaths,
-           count(*) filter (where death_cause = 'DeadBySandworm')::int as sandworm_deaths
-    from dune.player_death_log`);
-
-  const r = result.rows?.[0] || {};
-  const causes = [
-    { cause: "Sandworm", count: Number(r.sandworm_deaths || 0) },
-    { cause: "Coriolis", count: Number(r.coriolis_deaths || 0) },
-    { cause: "Unknown", count: Number(r.unknown_deaths || 0) }
-  ].filter(d => d.count > 0);
-
-  return {
-    totalDeaths: Number(r.total_deaths || 0),
-    pvpDeaths: 0,
-    pveDeaths: Number(r.total_deaths || 0),
-    deathsByCause: causes,
-    deathsByMap: [],
-    topHostileNpcs: [],
-    kdRatio: null
-  };
-}
-
-function emptyCombatDeaths() {
-  return { totalDeaths: 0, pvpDeaths: 0, pveDeaths: 0, deathsByCause: [], deathsByMap: [], topHostileNpcs: [], kdRatio: null };
-}
-
-export async function addonOpsEconomySummary(db) {
-  let totalCurrencyHolders = 0;
-  let totalSupply = 0;
-  let currencyBreakdown = [];
-
-  try {
-    const currencyExists = await tableExists(db, "player_virtual_currency_balances");
-    if (currencyExists) {
-      const result = await db.query(`
-        select count(distinct player_controller_id)::int as holders,
-               coalesce(sum(balance), 0)::bigint as total_supply
-        from dune.player_virtual_currency_balances`);
-      const r = result.rows?.[0] || {};
-      totalCurrencyHolders = Number(r.holders || 0);
-      totalSupply = Number(r.total_supply || 0);
-
-      const breakdown = await db.query(`
-        select currency_id::text as currency_id,
-               count(distinct player_controller_id)::int as holders,
-               coalesce(sum(balance), 0)::bigint as supply,
-               coalesce(round(avg(balance)), 0)::bigint as avg_balance,
-               coalesce(min(balance), 0)::bigint as min_balance,
-               coalesce(max(balance), 0)::bigint as max_balance
-        from dune.player_virtual_currency_balances
-        group by currency_id
-        order by supply desc`);
-      currencyBreakdown = breakdown.rows || [];
-    }
-  } catch { }
-
-  let activeOrders = 0;
-  let fulfilledOrders = 0;
-  let topTradedItems = [];
-
-  try {
-    const ordersExist = await tableExists(db, "dune_exchange_orders");
-    const fulfilledExist = await tableExists(db, "dune_exchange_fulfilled_orders");
-    if (ordersExist) {
-      const ordersResult = await db.query(`select count(*)::int as count from dune.dune_exchange_orders`);
-      activeOrders = Number(ordersResult.rows?.[0]?.count || 0);
-
-      const topResult = await db.query(`
-        select coalesce(template_id, 'Unknown') as template_id,
-               count(*)::int as orders,
-               coalesce(round(avg(item_price)), 0)::bigint as avg_price,
-               coalesce(min(item_price), 0)::bigint as min_price,
-               coalesce(max(item_price), 0)::bigint as max_price
-        from dune.dune_exchange_orders
-        group by template_id
-        order by orders desc
-        limit 20`);
-      topTradedItems = topResult.rows || [];
-    }
-    if (fulfilledExist) {
-      const fulfilledResult = await db.query(`select count(*)::int as count from dune.dune_exchange_fulfilled_orders`);
-      fulfilledOrders = Number(fulfilledResult.rows?.[0]?.count || 0);
-    }
-  } catch { }
-
-  let taxCollected = 0;
-  try {
-    const taxExists = await tableExists(db, "tax_invoice");
-    if (taxExists) {
-      const taxResult = await db.query(`
-        select coalesce(sum(amount), 0)::bigint as total
-        from dune.tax_invoice`);
-      taxCollected = Number(taxResult.rows?.[0]?.total || 0);
-    }
-  } catch { }
-
-  return {
-    totalCurrencyHolders,
-    totalSupply,
-    activeOrders,
-    fulfilledOrders,
-    taxCollected,
-    currencyBreakdown,
-    topTradedItems
-  };
-}
-
-function emptyEconomySummary() {
-  return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
-}
