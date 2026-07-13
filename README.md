@@ -20,6 +20,7 @@ Join our fast growing Discord: [Dune: Awakening Docker](https://discord.gg/9pQqy
 - Live status, readiness, service controls, logs, backups, and updates
 - Player tools for lookup, profile, inventory, crafting, progression, journey, skills, stats, history, and online activity views
 - Player actions for item grants, XP, skill points, water refill, teleport, kick, and vehicle spawn
+- **Blueprint Import/Export** — import, export, list, and delete player building blueprints. Multi-file import with inventory validation, name deduplication, progress tracking, and cascade delete. [Full report](docs/blueprints-report.md)
 - Admin Tools with item, vehicle, skill, command history, and broadcast workflows
 - Care Packages with configurable kits and automatic grant rules
 - Live map marker/list view for online player and server activity
