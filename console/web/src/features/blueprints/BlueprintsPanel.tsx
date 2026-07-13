@@ -86,6 +86,19 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     setSelected(next);
   }
 
+  function addFiles(files: FileList) {
+    const existing = new Set(importFiles.map(f => f.name));
+    const fresh: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      if (!existing.has(files[i].name)) fresh.push(files[i]);
+    }
+    setImportFiles(prev => [...prev, ...fresh]);
+  }
+
+  function removeFile(name: string) {
+    setImportFiles(prev => prev.filter(f => f.name !== name));
+  }
+
   function toggleSelectAll() {
     if (selected.size === rows.length && rows.length > 0) {
       setSelected(new Set());
@@ -169,7 +182,7 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     <div className="action-line" style={{ marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
       <label className="file-upload-label" style={{ flex: 1, minWidth: 200 }}>
         Import Blueprint(s)
-        <input type="file" accept=".json,application/json" multiple onChange={(e) => setImportFiles(Array.from(e.target.files || []))} />
+        <input type="file" accept=".json,application/json" multiple onChange={(e) => addFiles(e.target.files as FileList)} />
       </label>
       <button disabled={importFiles.length === 0 || !dbPlayerId || importing} onClick={handleImport}>
         <Upload size={16} /> {importing ? "..." : `Import ${importFiles.length || ""}`}
@@ -181,6 +194,16 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
         <Download size={16} /> Export All
       </button>
     </div>
+    {importFiles.length > 0 && (
+      <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {importFiles.map(f => (
+          <span key={f.name} style={{ fontSize: 11, background: "var(--surface-raised)", padding: "2px 6px", borderRadius: 3, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {f.name}
+            <span onClick={() => removeFile(f.name)} style={{ cursor: "pointer", fontWeight: "bold", color: "var(--danger)" }}>&times;</span>
+          </span>
+        ))}
+      </div>
+    )}
     <p className="action-help-note" style={{ marginBottom: 10 }}>
       {playerName || "Player"} must be offline to import. Blueprints are added as Solido Replicator items to their backpack.
     </p>
