@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload, Trash2 } from "lucide-react";
 import { api } from "../../api/client";
 import { DataTable } from "../../components/common/DataTable";
 import { formatUiSentence } from "../../lib/display";
@@ -94,9 +94,53 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     }
   }
 
+  async function handleDeleteSingle(row: BlueprintRow) {
+    if (!(await confirmAction(`Delete blueprint "${row.name || row.id}"? Solido item will be removed from inventory.`, {}))) return;
+    try {
+      const res = await api<{ ok: boolean }>(`/api/blueprints/${row.id}`, { method: "DELETE" });
+      setMessage(res.ok ? "Blueprint deleted." : "Delete failed.");
+    } catch {
+      setMessage("Delete failed.");
+    }
+    load();
+  }
+
+  async function handleDeleteSelected() {
+    const toDelete = rows.filter((row) => selected.has(Number(row.id)));
+    if (toDelete.length === 0) return;
+    if (!(await confirmAction(`Delete ${toDelete.length} blueprint(s)? Solido item will be removed from inventory.`, {}))) return;
+    let ok = 0;
+    let failed = 0;
+    for (const row of toDelete) {
+      try {
+        const res = await api<{ ok: boolean }>(`/api/blueprints/${row.id}`, { method: "DELETE" });
+        if (res.ok) ok++; else failed++;
+      } catch {
+        failed++;
+      }
+    }
+    setMessage(`${ok} deleted${failed ? `, ${failed} failed` : ""}`);
+    setSelected(new Set());
+    load();
+  }
+
   async function handleImport() {
     if (importFiles.length === 0 || !dbPlayerId) return;
-    if (!(await confirmAction(`Import ${importFiles.length} blueprint(s) for ${playerName || "this player"}? Player must be offline.`, {}))) return;
+
+    // Check inventory capacity
+    let slotsWarning = "";
+    try {
+      const inv = await api<{ rows: Record<string,unknown>[] }>(`/api/players/${dbPlayerId}/inventory`);
+      const itemCount = (inv.rows || []).length;
+      const maxSlots = 200; // default backpack capacity
+      const available = maxSlots - itemCount;
+      if (importFiles.length > available) {
+        slotsWarning = ` — WARNING: only ${available} inventory slots available for ${importFiles.length} solido items. ${importFiles.length - available} will not fit.`;
+      }
+    } catch { /* inventory check best-effort */ }
+
+    const confirmMsg = `Import ${importFiles.length} blueprint(s) for ${playerName || "this player"}?${slotsWarning} Player must be offline.`;
+    if (!(await confirmAction(confirmMsg, {}))) return;
     setImporting(true);
     let ok = 0;
     let failed: string[] = [];
@@ -142,26 +186,42 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     </p>
 
     {rows.length > 0 && (
-      <div style={{ marginBottom: 6, fontSize: 12, color: "var(--muted)" }}>
-        <label style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <div style={{ marginBottom: 6, fontSize: 12, display: "flex", alignItems: "center", gap: 12 }}>
+        <label style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
           <input type="checkbox" checked={selCount === rows.length && rows.length > 0} onChange={toggleSelectAll} />
           {selCount > 0 ? `${selCount} selected` : "Select all"}
         </label>
+        <button
+          className="danger"
+          disabled={selCount === 0}
+          onClick={handleDeleteSelected}
+          style={{ padding: "2px 8px", fontSize: 12 }}
+        >
+          <Trash2 size={13} /> Delete
+        </button>
       </div>
     )}
 
     <DataTable
       rows={rows}
       emptyMessage="No blueprints found. Import one above."
+      columns={["name"]}
+      renderCell={(row: Record<string, unknown>, col: string) => {
+        if (col === "name") return <span style={{ fontWeight: 500 }}>{formatUiSentence(String(row.name || "???"))}</span>;
+        return null;
+      }}
       rowKey={(row) => String((row as BlueprintRow).id)}
       secondaryAction={(row: Record<string, unknown>) => (
         <input type="checkbox" checked={selected.has(Number((row as BlueprintRow).id))} onChange={() => toggleSelect(Number((row as BlueprintRow).id))} style={{ width: "auto", margin: 0 }} />
       )}
       secondaryActionLabel="Select"
       secondaryActionClassName="actions-column"
-      action={(row: Record<string, unknown>) => <span className="icon-toggle-group">
-        <button className="icon-toggle-button success" title="Download" aria-label="Download Blueprint" onClick={(event) => { event.stopPropagation(); handleExportSingle(row as BlueprintRow); }}><Download size={16} /></button>
-      </span>}
+      action={(row: Record<string, unknown>) => (
+        <span className="icon-toggle-group">
+          <button className="icon-toggle-button danger" title="Delete" aria-label="Delete Blueprint" onClick={(event) => { event.stopPropagation(); handleDeleteSingle(row as BlueprintRow); }}><Trash2 size={16} /></button>
+          <button className="icon-toggle-button success" title="Download" aria-label="Download Blueprint" onClick={(event) => { event.stopPropagation(); handleExportSingle(row as BlueprintRow); }}><Download size={16} /></button>
+        </span>
+      )}
     />
   </section>;
 }
