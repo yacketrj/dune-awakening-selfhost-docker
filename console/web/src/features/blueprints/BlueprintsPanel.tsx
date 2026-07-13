@@ -132,18 +132,18 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     }
 
     // Check inventory capacity
-    let slotsWarning = "";
     try {
       const inv = await api<{ rows: Record<string,unknown>[]; maxSlots?: number; maxVolume?: number }>(`/api/players/${dbPlayerId}/inventory`);
       const itemCount = (inv.rows || []).length;
       const maxSlots = inv.maxSlots || 40;
       const available = maxSlots - itemCount;
       if (importFiles.length > available) {
-        slotsWarning = ` — WARNING: only ${available} inventory slots available (${itemCount}/${maxSlots} used). ${importFiles.length - available} will not fit.`;
+        setMessage(`Not enough inventory space. ${importFiles.length} blueprints need ${importFiles.length} slots, but only ${available} available (${itemCount}/${maxSlots} used).`);
+        return;
       }
     } catch { /* inventory check best-effort */ }
 
-    const confirmMsg = `Import ${importFiles.length} blueprint(s) for ${playerName || "this player"}?${slotsWarning} Player must be offline.`;
+    const confirmMsg = `Import ${importFiles.length} blueprint(s) for ${playerName || "this player"}? Player must be offline.`;
     if (!(await confirmAction(confirmMsg, {}))) return;
     setImporting(true);
     let ok = 0;
