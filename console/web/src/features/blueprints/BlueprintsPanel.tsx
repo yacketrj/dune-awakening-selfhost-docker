@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, Upload, Trash2 } from "lucide-react";
+import JSZip from "jszip";
 import { api } from "../../api/client";
 import { DataTable } from "../../components/common/DataTable";
 import { formatUiSentence } from "../../lib/display";
@@ -32,16 +33,32 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     }
   }
 
-  async function doExport(row: BlueprintRow) {
+  async function fetchBlueprintJson(row: BlueprintRow): Promise<{ name: string; blob: Blob }> {
     const id = Number(row.id || 0);
     const name = String(row.name || "");
     const response = await fetch(`/api/blueprints/${id}/export`);
     if (!response.ok) throw new Error(`Export failed: ${response.status}`);
     const blob = await response.blob();
+    return { name, blob };
+  }
+
+  function filenameFor(row: BlueprintRow): string {
+    const name = String(row.name || "").replace(/[^a-zA-Z0-9_-]/g, "_") || `blueprint_${row.id}`;
+    return `${name}.json`;
+  }
+
+  function zipFilename(): string {
+    const base = playerName ? playerName.replace(/[^a-zA-Z0-9_-]/g, "_") : "player";
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    return `${base}-blueprints-${ts}.zip`;
+  }
+
+  async function doExport(row: BlueprintRow) {
+    const { name, blob } = await fetchBlueprintJson(row);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = name ? `${name.replace(/[^a-zA-Z0-9_-]/g, "_")}.json` : `blueprint_${id}.json`;
+    a.download = name ? `${name.replace(/[^a-zA-Z0-9_-]/g, "_")}.json` : `blueprint_${row.id}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -50,15 +67,28 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     try { await doExport(row); } catch (error) { onError(error instanceof Error ? error.message : String(error)); }
   }
 
+  async function exportZip(rows: BlueprintRow[]) {
+    const zip = new JSZip();
+    for (const row of rows) {
+      const { blob } = await fetchBlueprintJson(row);
+      zip.file(filenameFor(row), blob);
+    }
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = zipFilename();
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleExportSelected() {
     const toExport = rows.filter((row) => selected.has(Number(row.id)));
     if (toExport.length === 0) return;
     setExporting(true);
     try {
-      for (const row of toExport) {
-        await doExport(row);
-        await new Promise((r) => setTimeout(r, 300));
-      }
+      if (toExport.length === 1) await doExport(toExport[0]);
+      else await exportZip(toExport);
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -67,13 +97,12 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
   }
 
   async function handleExportAll() {
+    if (rows.length === 0) return;
     setSelected(new Set(rows.map((r) => Number(r.id))));
     setExporting(true);
     try {
-      for (const row of rows) {
-        await doExport(row);
-        await new Promise((r) => setTimeout(r, 300));
-      }
+      if (rows.length === 1) await doExport(rows[0]);
+      else await exportZip(rows);
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
