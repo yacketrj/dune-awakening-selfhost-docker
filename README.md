@@ -21,6 +21,7 @@ Join our fast growing Discord: [Dune: Awakening Docker](https://discord.gg/9pQqy
 - Player tools for lookup, profile, inventory, crafting, progression, journey, skills, stats, history, and online activity views
 - Player actions for item grants, XP, skill points, water refill, teleport, kick, and vehicle spawn
 - **Blueprint Import/Export** — import, export, list, and delete player building blueprints. Multi-file import with inventory validation, name deduplication, progress tracking, and cascade delete. [Full report](docs/blueprints-report.md)
+- **Pre-Augmented Gear** — grant weapons and armor with pre-applied augments up to tier 5. Type-aware augment filtering, compatibility validation, offline-safe DB path, and live Console grant. [Full report](docs/augments-report.md)
 - Admin Tools with item, vehicle, skill, command history, and broadcast workflows
 - Care Packages with configurable kits and automatic grant rules
 - Live map marker/list view for online player and server activity
