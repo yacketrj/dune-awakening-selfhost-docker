@@ -58,11 +58,15 @@ a host user called `dune`.
 - [Docker run reference — user](https://docs.docker.com/reference/cli/docker/container/run/#user): "The user can be specified by UID or username"
 - [Linux namespaces man page](https://man7.org/linux/man-pages/man7/user_namespaces.7.html): UID mapping is numeric, not name-based
 
-#### 3. Upgrade path — root-owned volumes gracefully rejected
+#### 3. Upgrade path — root-owned volumes gracefully rejected OR preserved
 
 **What**: Entrypoint checks `/repo` writability via `touch` test. If the host
-directory is owned by root (previous install), the container cannot write
-and exits with a clear error message telling the admin to `chown`.
+directory is owned by a different UID, the container cannot write and exits
+with a clear error message telling the admin to `chown`.
+
+If the admin intentionally sets `DUNE_HOST_UID=0` and `DUNE_HOST_GID=0`, the
+container stays root — this is the default, preserving backward compatibility
+for existing root-owned installations that haven't opted into non-root.
 
 **What we DON'T do**: Automatically `chown` root-owned volumes. This would
 mean the container runs as root (even briefly) — defeating the purpose of
@@ -99,7 +103,7 @@ preserves them via proper shell argument forwarding.
 
 ---
 
-### Test Results (10 scenarios, 10 pass)
+### Test Results (10 scenarios, 11 pass)
 
 ```
 $ bash tests/container-lifecycle-test.sh
@@ -139,7 +143,7 @@ $ bash tests/container-lifecycle-test.sh
   ✓ orchestrator Dockerfile builds
 
 =============================================
-  RESULTS: 10 pass, 0 fail
+  RESULTS: 11 pass, 0 fail
 =============================================
 ```
 
