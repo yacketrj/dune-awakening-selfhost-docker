@@ -12,4 +12,5 @@
 - **Name dedupe** — Windows-style (1), (2), etc. suffixes when a blueprint name already exists for the player
 - **Inventory check** — warns before import if available slots are fewer than selected files
 - **UI polish** — Select All + Delete on same row, greyed-out Delete activates when any selected
+- **Name cleanup** — underscores and dots replaced with spaces (Hawks_Base → "Hawks Base")
 - **Column order** — Name | Actions (Delete+Download icon group) | Select checkbox

@@ -14,6 +14,7 @@
   - ✅ Blueprint delete API + UI (per-row + bulk selected)
   - ✅ Name derivation from file name (not building_type fallback)
   - ✅ Name deduplication — Windows-style (1), (2) suffixes
+  - ✅ Name cleanup — underscores and dots replaced with spaces (Hawks_Base → "Hawks Base")
   - ✅ Inventory capacity check before multi-file import
   - ✅ Select-all + Delete button on same row
   - ✅ Column order: Name | Actions (Delete+Download) | Select
