@@ -20,9 +20,9 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     onError("");
     try {
       const result = await api<BlueprintRow[] | { rows: BlueprintRow[] }>("/api/blueprints");
-      const data = Array.isArray(result) ? result : ((result as { rows: BlueprintRow[] }).rows || []);
-      if (dbPlayerId) {
-        setRows(data.filter((row) => String(row.owner_id ?? row.owner_name ?? row.player_id ?? "") === dbPlayerId));
+      const data = Array.isArray(result) ? result : ((result as { rows: BlueprintRow[] })?.rows || []);
+      if (data.length && dbPlayerId) {
+        setRows(data.filter((row) => row && String(row.owner_id ?? row.owner_name ?? row.player_id ?? "") === dbPlayerId));
       } else {
         setRows(data);
       }
