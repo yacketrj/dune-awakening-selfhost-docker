@@ -126,6 +126,10 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
 
   async function handleImport() {
     if (importFiles.length === 0 || !dbPlayerId) return;
+    if (importFiles.length > 10) {
+      setMessage(`Too many files (${importFiles.length}). Max 10 blueprints per import.`);
+      return;
+    }
 
     // Check inventory capacity
     let slotsWarning = "";
