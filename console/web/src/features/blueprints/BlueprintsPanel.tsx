@@ -134,12 +134,12 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     // Check inventory capacity
     let slotsWarning = "";
     try {
-      const inv = await api<{ rows: Record<string,unknown>[] }>(`/api/players/${dbPlayerId}/inventory`);
+      const inv = await api<{ rows: Record<string,unknown>[]; maxSlots?: number; maxVolume?: number }>(`/api/players/${dbPlayerId}/inventory`);
       const itemCount = (inv.rows || []).length;
-      const maxSlots = 200; // default backpack capacity
+      const maxSlots = inv.maxSlots || 40;
       const available = maxSlots - itemCount;
       if (importFiles.length > available) {
-        slotsWarning = ` — WARNING: only ${available} inventory slots available for ${importFiles.length} solido items. ${importFiles.length - available} will not fit.`;
+        slotsWarning = ` — WARNING: only ${available} inventory slots available (${itemCount}/${maxSlots} used). ${importFiles.length - available} will not fit.`;
       }
     } catch { /* inventory check best-effort */ }
 
