@@ -5,12 +5,18 @@
 - **Progress**:
   - ✅ BlueprintsPanel component with import/export UI
   - ✅ Multi-select export with checkbox column
-  - ✅ Multi-file import support
+  - ✅ Multi-file import support (append mode with file chips, batch sequential processing)
   - ✅ Integrated into Player tab (CharacterAdminUI sub-tab)
   - ✅ Offline + relog import support
   - ✅ Fixed readMultipartForm to parse form fields (player_id was lost)
   - ✅ Fixed player_id insertion on import + owner_id in list query
   - ✅ Added PlayerBaseBackupId to stats JSON to match live solido format
+  - ✅ Blueprint delete API + UI (per-row + bulk selected)
+  - ✅ Name derivation from file name (not building_type fallback)
+  - ✅ Name deduplication — Windows-style (1), (2) suffixes
+  - ✅ Inventory capacity check before multi-file import
+  - ✅ Select-all + Delete button on same row
+  - ✅ Column order: Name | Actions (Delete+Download) | Select
   - ⬜ Test in-game preview (P34 crash investigation)
   - ⬜ Create upstream PR
 - **Discovered**: 2026-07-12
