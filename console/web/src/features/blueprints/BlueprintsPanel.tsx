@@ -13,6 +13,7 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
   const [importFiles, setImportFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; name: string } | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -153,7 +154,9 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     if (!(await confirmAction(confirmMsg, {}))) { setImporting(false); return; }
     let ok = 0;
     let failed: string[] = [];
-    for (const file of importFiles) {
+    for (let i = 0; i < importFiles.length; i++) {
+      const file = importFiles[i];
+      setImportProgress({ current: i + 1, total: importFiles.length, name: file.name });
       const form = new FormData();
       form.append("file", file);
       form.append("player_id", dbPlayerId);
@@ -166,6 +169,7 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     }
     setMessage(failed.length ? `${ok} imported, ${failed.length} failed: ${failed.join(", ")}` : `${ok} blueprint(s) imported`);
     setImportFiles([]);
+    setImportProgress(null);
     load();
     setImporting(false);
   }
@@ -183,6 +187,15 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
       <button disabled={importFiles.length === 0 || !dbPlayerId || importing} onClick={handleImport}>
         <Upload size={16} /> {importing ? "..." : `Import ${importFiles.length || ""}`}
       </button>
+      {importing && importProgress && (
+        <span style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 6, minWidth: 140 }}>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 100 }}>{importProgress.name}</span>
+          <span style={{ flex: 1, background: "var(--surface-raised)", borderRadius: 3, height: 6, overflow: "hidden", minWidth: 40 }}>
+            <span style={{ display: "block", height: "100%", background: "var(--accent)", transition: "width 0.3s", width: `${(importProgress.current / importProgress.total) * 100}%` }} />
+          </span>
+          <span>{importProgress.current}/{importProgress.total}</span>
+        </span>
+      )}
       <button disabled={selCount === 0 || exporting} onClick={handleExportSelected}>
         <Download size={16} /> {exporting ? "..." : selCount > 0 ? `Export ${selCount}` : "Export"}
       </button>
