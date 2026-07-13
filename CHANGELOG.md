@@ -224,7 +224,3 @@ For every upstream PR review request:
 - Closed per reviewer request. Split into:
   - PR #78 (`feature/placeables-ui`): placeable resource catalog + DataTable + icon
   - PR #79 (`feature/ui-docs`): UI enhancements docs
-
-### Blueprint UI (feature/blueprints-ui)
-- BlueprintsPanel in Player tab — import/export with multi-select + bulk operations
-- Multipart form fix, PlayerBaseBackupId in stats, offline+relog support
