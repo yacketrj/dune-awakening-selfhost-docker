@@ -131,7 +131,8 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
       return;
     }
 
-    // Check inventory capacity
+    setMessage("");
+    setImporting(true);
     try {
       const inv = await api<{ rows: Record<string,unknown>[]; maxSlots?: number; maxVolume?: number }>(`/api/players/${dbPlayerId}/inventory`);
       const itemCount = (inv.rows || []).length;
@@ -139,13 +140,17 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
       const available = maxSlots - itemCount;
       if (importFiles.length > available) {
         setMessage(`Not enough inventory space. ${importFiles.length} blueprints need ${importFiles.length} slots, but only ${available} available (${itemCount}/${maxSlots} used).`);
+        setImporting(false);
         return;
       }
-    } catch { /* inventory check best-effort */ }
+    } catch {
+      setMessage("Could not check inventory. Try again.");
+      setImporting(false);
+      return;
+    }
 
     const confirmMsg = `Import ${importFiles.length} blueprint(s) for ${playerName || "this player"}? Player must be offline.`;
-    if (!(await confirmAction(confirmMsg, {}))) return;
-    setImporting(true);
+    if (!(await confirmAction(confirmMsg, {}))) { setImporting(false); return; }
     let ok = 0;
     let failed: string[] = [];
     for (const file of importFiles) {
