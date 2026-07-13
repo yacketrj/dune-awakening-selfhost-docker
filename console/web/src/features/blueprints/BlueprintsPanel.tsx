@@ -102,7 +102,7 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     } catch {
       setMessage("Delete failed.");
     }
-    load();
+    await load();
   }
 
   async function handleDeleteSelected() {
@@ -121,7 +121,7 @@ export function BlueprintsPanel({ onError, confirmAction, dbPlayerId = "", playe
     }
     setMessage(`${ok} deleted${failed ? `, ${failed} failed` : ""}`);
     setSelected(new Set());
-    load();
+    await load();
   }
 
   async function handleImport() {
