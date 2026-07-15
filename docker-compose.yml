@@ -6,6 +6,8 @@ services:
     container_name: dune-orchestrator
     restart: unless-stopped
     network_mode: host
+    group_add:
+      - "${DOCKER_SOCKET_GID:-0}"
     environment:
       SERVER_IP: "${SERVER_IP}"
       SERVER_TITLE: "${SERVER_TITLE}"
@@ -21,13 +23,19 @@ services:
       - dune-steam:/srv/dune/steam
       - dune-cache:/srv/dune/cache
       - dune-generated:/srv/dune/generated
-      - ./work:/work
+      - dune-work:/work
     stdin_open: true
     tty: true
-    command: ["daemon"]
+    command: ["dune", "daemon"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DUNE_DOCKER_LOG_MAX_SIZE:-50m}"
+        max-file: "${DUNE_DOCKER_LOG_MAX_FILES:-3}"
 
 volumes:
   dune-server:
   dune-steam:
   dune-cache:
   dune-generated:
+  dune-work:

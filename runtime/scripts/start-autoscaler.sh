@@ -3,14 +3,28 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+if [ "${DUNE_RUNTIME_PERMISSIONS_REPAIRED:-0}" != "1" ]; then
+  runtime/scripts/repair-host-runtime-permissions.sh
+  export DUNE_RUNTIME_PERMISSIONS_REPAIRED=1
+fi
+
 [ -f .env ] && . ./.env
 source runtime/scripts/host-paths.sh
 
 CONTAINER_NAME="dune-autoscaler"
 IMAGE="dune-orchestrator:dev"
-HOST_UID="${DUNE_HOST_UID:-$(id -u)}"
-HOST_GID="${DUNE_HOST_GID:-$(id -g)}"
+REPO_UID="$(stat -c '%u' .)"
+REPO_GID="$(stat -c '%g' .)"
+HOST_UID="${DUNE_HOST_UID:-$REPO_UID}"
+HOST_GID="${DUNE_HOST_GID:-$REPO_GID}"
 DOCKER_SOCK_GID="${DOCKER_SOCKET_GID:-}"
+
+if [ "$HOST_UID" = "0" ] && [ "$REPO_UID" != "0" ]; then
+  HOST_UID="$REPO_UID"
+fi
+if [ "$HOST_GID" = "0" ] && [ "$REPO_GID" != "0" ]; then
+  HOST_GID="$REPO_GID"
+fi
 
 if [ -z "$DOCKER_SOCK_GID" ] && [ -S /var/run/docker.sock ]; then
   DOCKER_SOCK_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
@@ -51,6 +65,7 @@ if [ -n "$DOCKER_SOCK_GID" ]; then
 fi
 
 docker run -d \
+  "${DUNE_DOCKER_LOG_ARGS[@]}" \
   --name "$CONTAINER_NAME" \
   --network host \
   --restart unless-stopped \

@@ -27,6 +27,58 @@ fail_msg() {
   fail=1
 }
 
+docker_size_bytes() {
+  awk '
+    function multiplier(unit) {
+      if (unit == "kB" || unit == "KB") return 1000
+      if (unit == "MB") return 1000000
+      if (unit == "GB") return 1000000000
+      if (unit == "TB") return 1000000000000
+      if (unit == "KiB") return 1024
+      if (unit == "MiB") return 1048576
+      if (unit == "GiB") return 1073741824
+      if (unit == "TiB") return 1099511627776
+      return 1
+    }
+    {
+      number = $0
+      sub(/[A-Za-z].*$/, "", number)
+      unit = $0
+      sub(/^[0-9.]+/, "", unit)
+      sub(/[[:space:]].*$/, "", unit)
+      if (number ~ /^[0-9]+([.][0-9]+)?$/) {
+        printf "%.0f\n", number * multiplier(unit)
+      }
+    }
+  '
+}
+
+check_docker_storage() {
+  local rows image_reclaim="0B" cache_reclaim="0B" image_bytes=0 cache_bytes=0
+  rows="$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null || true)"
+  [ -n "$rows" ] || { warn_msg "Docker storage usage could not be inspected"; return; }
+
+  image_reclaim="$(awk -F'|' '$1 == "Images" { print $2; exit }' <<<"$rows")"
+  cache_reclaim="$(awk -F'|' '$1 == "Build Cache" { print $2; exit }' <<<"$rows")"
+  image_bytes="$(docker_size_bytes <<<"${image_reclaim:-0B}")"
+  cache_bytes="$(docker_size_bytes <<<"${cache_reclaim:-0B}")"
+  image_bytes="${image_bytes:-0}"
+  cache_bytes="${cache_bytes:-0}"
+
+  if [ "$image_bytes" -ge 10000000000 ]; then
+    warn_msg "Docker has ${image_reclaim} of reclaimable images"
+    echo "     Preview project-owned cleanup: dune storage cleanup --dry-run"
+  else
+    ok "Reclaimable Docker images: ${image_reclaim:-0B}"
+  fi
+  if [ "$cache_bytes" -ge 10000000000 ]; then
+    warn_msg "Docker has ${cache_reclaim} of reclaimable build cache"
+    echo "     On a dedicated host: dune storage cleanup --build-cache"
+  else
+    ok "Reclaimable Docker build cache: ${cache_reclaim:-0B}"
+  fi
+}
+
 tcp_socket_listening() {
   local port="$1"
   local sockets
@@ -161,6 +213,14 @@ else
 fi
 
 echo
+echo "=== Docker storage ==="
+if docker info >/dev/null 2>&1; then
+  check_docker_storage
+else
+  warn_msg "Skipping Docker storage checks because the daemon is not reachable"
+fi
+
+echo
 echo "=== Local files ==="
 check_file .env ".env config" "Run: dune init"
 check_file runtime/secrets/funcom-token.txt "Funcom token file" "Run: dune init, or place the token in runtime/secrets/funcom-token.txt"
@@ -278,7 +338,7 @@ else
 fi
 
 director_logs="$(docker logs --since 15m dune-director 2>&1 || true)"
-if grep -q 'Battlegroups_SendBattlegroupHeartbeat.*Request successful' <<< "$director_logs"; then
+if grep -Eq 'Battlegroups_SendBattlegroupHeartbeat.*Request successful|RMQ connection successful.*Initiating heartbeat|Population declaration: .*"IsLocked":false' <<< "$director_logs"; then
   ok "Director heartbeat to Funcom/FLS"
 else
   warn_msg "Director heartbeat not seen in recent logs"

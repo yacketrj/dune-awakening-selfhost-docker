@@ -128,45 +128,26 @@ export function grantItemDurability() {
   return 1;
 }
 
-// Augment limits — match game config defaults from /Script/DuneSandbox.AugmentSettings:
-//   m_MaxRangedWeaponAugments (default 3), m_MaxMeleeWeaponAugments (default 3), m_MaxArmorAugments (default 2).
-export const MAX_RANGED_AUGMENTS = 3;
-export const MAX_MELEE_AUGMENTS = 3;
-export const MAX_ARMOR_AUGMENTS = 2;
-
-export function isWeapon(name: string) {
-  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
+export function catalogItemMinimumGrade(item?: { itemId?: string; id?: string; source?: string; category?: string } | null) {
+  const id = String(item?.itemId || item?.id || "");
+  const source = String(item?.source || "").toLowerCase();
+  const category = String(item?.category || "").toLowerCase();
+  return source.includes("augment") || category.includes("augment") || /^T\d+_Augment_/i.test(id) ? 1 : 0;
 }
 
-export function isArmor(name: string) {
-  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
+export function packageItemTextLine(item: { itemName?: string; itemId?: string; quantity?: unknown; quality?: unknown; grade?: unknown; durability?: unknown; augments?: string[]; augmentQuality?: unknown }) {
+  const augments = Array.isArray(item.augments) && item.augments.length ? item.augments.join("|") : "";
+  const augmentQuality = augments ? Math.max(1, Math.min(5, normalizeItemGrade(item.augmentQuality ?? 1) || 1)) : "";
+  return `${item.itemId || item.itemName || ""},${Number(item.quantity) || 1},${itemGrade(item)},${augments},${augmentQuality}`;
 }
 
-export function isMelee(name: string) {
-  return /melee|[Ss]word|blade|knife|fremen|Dirk|Rapier|Kindjal|Minotaur|DualBlades|CHOAMSword|Crysknife|DewReaper|Ghola|ScrapMetalKnife|UniqueSword|UniqueDirk|UniqueRapier/i.test(name);
-}
-
-export function augmentLimit(itemName: string, category?: string, itemId?: string) {
-  const cat = (category || "").toLowerCase();
-  const nameStr = String(itemName || "");
-  const idStr = String(itemId || "");
-  const combined = nameStr + " " + idStr;
-  if (cat === "schematics" || /_schematic$/i.test(combined) || /_Augment_/i.test(combined)) return 0;
-  const isT6 = /_06(?=_|$)|T6_/i.test(combined) || (/Unique/i.test(combined) && !/_(0[1-5])(?=_|$)/.test(combined));
-  if (!isT6) return 0;
-  if (cat === "clothing" || isArmor(combined)) return MAX_ARMOR_AUGMENTS;
-  if (cat === "weapons" || isMelee(combined)) return MAX_MELEE_AUGMENTS;
-  if (isWeapon(combined)) return MAX_RANGED_AUGMENTS;
-  return 0;
-}
-
-export function packageItemTextLine(item: { itemName?: string; itemId?: string; quantity?: unknown; quality?: unknown; grade?: unknown; durability?: unknown }) {
-  return `${item.itemId || item.itemName || ""},${Number(item.quantity) || 1},${itemGrade(item)}`;
-}
-
-export function ItemGradeSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return <select className="package-item-durability-input" value={String(normalizeItemGrade(value))} onChange={(event) => onChange(event.target.value)}>
-    {[0, 1, 2, 3, 4, 5].map((grade) => <option key={grade} value={grade}>{grade}</option>)}
+export function ItemGradeSelect({ value, onChange, minGrade = 0, disabled = false, emptyWhenDisabled = false }: { value: string; onChange: (value: string) => void; minGrade?: number; disabled?: boolean; emptyWhenDisabled?: boolean }) {
+  const min = Math.max(0, Math.min(5, Math.trunc(Number(minGrade) || 0)));
+  const selected = Math.max(min, normalizeItemGrade(value));
+  const selectedValue = disabled && emptyWhenDisabled ? "" : String(selected);
+  return <select className="package-item-durability-input" value={selectedValue} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+    {emptyWhenDisabled && <option value=""></option>}
+    {[0, 1, 2, 3, 4, 5].filter((grade) => grade >= min).map((grade) => <option key={grade} value={grade}>{grade}</option>)}
   </select>;
 }
 

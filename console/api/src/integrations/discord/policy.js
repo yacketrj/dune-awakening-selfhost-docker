@@ -17,84 +17,17 @@ export const DISCORD_CAPABILITIES = Object.freeze({
   // Population & Maps
   POPULATION_READ: "population:read",
   MAPS_READ: "maps:read",
-
-  // Logs & Diagnostics
-  LOGS_READ: "logs:read",
-  DIAGNOSTICS_READ: "diagnostics:read",
-
-  // Database & Backups
   BACKUPS_READ: "backups:read",
-  BACKUPS_MANAGE: "backups:manage",
-  DATABASE_READ: "database:read",
-  DATABASE_QUERY: "database:query",
-
-  // Player Management
-  PLAYERS_READ: "players:read",
-  PLAYERS_WRITE: "players:write",
-  PLAYERS_DELETE: "players:delete",
-
-  // Inventory & Storage
-  INVENTORY_READ: "inventory:read",
-  STORAGE_READ: "storage:read",
-
-  // Guild & Social
-  GUILD_READ: "guild:read",
-  GUILD_WRITE: "guild:write",
-
-  // Server Control
-  SERVER_CONTROL: "server:control",
-  BROADCAST_SEND: "broadcast:send",
-
-  // Administration
-  AUTH_MANAGE: "auth:manage"
+  BROADCAST_SEND: "broadcast:send"
 });
-
-// ── Capability Descriptions ──
-
-export const CAPABILITY_DESCRIPTIONS = Object.freeze({
-  "status:read":      "View server health, status, and adapter metadata",
-  "readiness:read":   "View server readiness and preflight state",
-  "services:read":    "View service containers, infrastructure routes, and version",
-  "population:read":  "View player population counts",
-  "maps:read":        "View active game maps, sietch, and deep desert state",
-  "logs:read":        "Stream and view capped, redacted server logs",
-  "diagnostics:read": "View system diagnostics, latency history, cooldowns, and incident log",
-  "backups:read":     "List and download backup metadata",
-  "backups:manage":   "Create, restore, and delete database backups",
-  "database:read":    "Browse database tables and schemas",
-  "database:query":   "Execute read-only SQL queries and export data",
-  "players:read":     "View player list, profiles, and inventory",
-  "players:write":    "Give items, XP, currency, augments, teleport players",
-  "players:delete":   "Delete characters and wipe inventories",
-  "inventory:read":   "View your linked character's personal inventory",
-  "storage:read":     "View owned and guild storage containers, search items",
-  "guild:read":       "View guild listings and member directories",
-  "guild:write":      "Edit guild descriptions and manage member roles",
-  "server:control":   "Start/stop services, trigger updates, spawn vehicles",
-  "broadcast:send":   "Send in-game broadcasts to all players"
-});
-
-// ── Write Capabilities (require DUNE_DISCORD_WRITES_ENABLED) ──
-
-export const DISCORD_WRITE_CAPABILITIES = Object.freeze(new Set([
-  DISCORD_CAPABILITIES.BROADCAST_SEND,
-  DISCORD_CAPABILITIES.BACKUPS_MANAGE,
-  DISCORD_CAPABILITIES.DATABASE_QUERY,
-  DISCORD_CAPABILITIES.PLAYERS_WRITE,
-  DISCORD_CAPABILITIES.PLAYERS_DELETE,
-  DISCORD_CAPABILITIES.GUILD_WRITE,
-  DISCORD_CAPABILITIES.SERVER_CONTROL
-]));
-
-// ── Read-Only Whitelist ──
 
 export const EXPERIMENTAL_READ_ONLY_CAPABILITIES = Object.freeze(
-  new Set(Object.values(DISCORD_CAPABILITIES).filter((c) => !DISCORD_WRITE_CAPABILITIES.has(c)))
+  new Set(Object.values(DISCORD_CAPABILITIES).filter((c) => c !== DISCORD_CAPABILITIES.BROADCAST_SEND))
 );
 
-// ── Tier → Capability Assignment ──
-// Owners and admins are exempt — they always get ALL capabilities.
-// These assignments are the fallback when dune.rbac_role_capabilities has no rows.
+export const DISCORD_WRITE_CAPABILITIES = Object.freeze(
+  new Set([DISCORD_CAPABILITIES.BROADCAST_SEND])
+);
 
 const CAPABILITY_BY_TIER = Object.freeze({
   public: new Set([
