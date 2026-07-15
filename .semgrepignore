@@ -10,3 +10,4 @@ runtime/scripts/start-rabbitmq.sh
 
 # Test fixtures containing synthetic JWT tokens and test secrets
 console/api/test/runner.test.js
+console/api/test/blueprints-security.test.js
