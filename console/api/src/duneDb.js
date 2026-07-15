@@ -2682,6 +2682,19 @@ function isStandaloneAugmentTemplate(templateId) {
   return Boolean(augmentCompatibilityCatalog().augments[id]) || /^T\d+_Augment_/i.test(id);
 }
 
+
+function isTemplateAugmentable(templateId) {
+  const name = String(templateId || "");
+  return isWeaponTemplate(name) || isArmorTemplate(name);
+}
+
+function isWeaponTemplate(name) {
+  return /lasgun|LongRifle|LogRifle|spitdart|jabal|disruptor|[Ss]mg|karpov|[Bb]attle.?[Rr]ifle|BR\b|HarkAr|drillshot|Shotgun|grda|Scattergun|vulcan|LMG|AtreLMG|pyrocket|Fireballer|Flamethrower|rocket|missile|pistol|snubnose|rafiq|maula|HeavyPistol|RocketLauncher|Dmr|Smug|Unique\w*(?:Rifle|Gun|Sword|Dirk|Rapier|Pistol|Shotgun|Launcher|Blade|Cross|Hark|Ar|Sda|Smug|Choam|Thumper|Flame)/i.test(name);
+}
+
+function isArmorTemplate(name) {
+  return /chest|armor|guard|garment|helmet|boots|gloves|suit/i.test(name);
+}
 function normalizeStandaloneAugmentQuality(templateId, qualityLevel) {
   return isStandaloneAugmentTemplate(templateId) && qualityLevel < 1 ? 1 : qualityLevel;
 }
@@ -4200,4 +4213,173 @@ export async function addonOpsEconomySummary(db) {
 
 function emptyEconomySummary() {
   return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
+}
+
+// ── Discord Player Links ──
+
+export async function discordPlayerLinksTableCreate(db) {
+  await db.query(`
+    create table if not exists dune.discord_player_links (
+      discord_user_id text primary key,
+      player_controller_id text not null,
+      faction text default 'fremen',
+      linked_at timestamp with time zone default now()
+    )`);
+  // Add faction column to existing tables (migration)
+  try { await db.query("alter table dune.discord_player_links add column if not exists faction text default 'fremen'"); } catch {}
+}
+
+export async function setPlayerFaction(db, discordUserId, faction) {
+  await discordPlayerLinksTableCreate(db);
+  await db.query(
+    "update dune.discord_player_links set faction = $2 where discord_user_id = $1",
+    [String(discordUserId), String(faction)]
+  );
+}
+
+export async function getPlayerFaction(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const result = await db.query(
+    "select coalesce(faction, 'fremen') as faction from dune.discord_player_links where discord_user_id = $1",
+    [String(discordUserId)]
+  );
+  return result.rows[0]?.faction || "fremen";
+}
+
+export async function resolvePlayerByName(db, characterName) {
+  const result = await db.query(`
+    select player_controller_id::text as player_controller_id,
+           character_name,
+           player_pawn_id::text as player_pawn_id,
+           coalesce(online_status::text, 'Offline') as online_status
+    from dune.player_state
+    where lower(character_name) = lower($1)
+    order by player_controller_id`, [String(characterName).trim()]);
+  return result.rows;
+}
+
+export async function getLinkedPlayer(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const result = await db.query(`
+    select dpl.discord_user_id,
+           dpl.player_controller_id,
+           coalesce(ps.character_name, '') as character_name,
+           coalesce(ps.player_pawn_id::text, '0') as player_pawn_id,
+           coalesce(ps.online_status::text, 'Offline') as online_status
+    from dune.discord_player_links dpl
+    join dune.player_state ps on ps.player_controller_id::text = dpl.player_controller_id
+    where dpl.discord_user_id = $1
+    limit 1`, [String(discordUserId)]);
+  return result.rows[0] || null;
+}
+
+export async function discordPlayerLink(db, discordUserId, playerControllerId) {
+  await discordPlayerLinksTableCreate(db);
+  await db.query("delete from dune.discord_player_links where player_controller_id = $1", [playerControllerId]);
+  await db.query(`
+    insert into dune.discord_player_links (discord_user_id, player_controller_id)
+    values ($1, $2)
+    on conflict (discord_user_id) do update
+      set player_controller_id = excluded.player_controller_id,
+          linked_at = now()`, [String(discordUserId), playerControllerId]);
+  return await getLinkedPlayer(db, discordUserId);
+}
+
+export async function discordPlayerUnlink(db, discordUserId) {
+  await discordPlayerLinksTableCreate(db);
+  const player = await getLinkedPlayer(db, discordUserId);
+  await db.query("delete from dune.discord_player_links where discord_user_id = $1", [String(discordUserId)]);
+  return Boolean(player);
+}
+
+// ── RBAC Tables ──
+
+export async function rbacTablesCreate(db) {
+  await db.query(`
+    create table if not exists dune.rbac_role_capabilities (
+      role_id    text not null,
+      capability text not null,
+      granted_by text,
+      granted_at timestamptz default now(),
+      primary key (role_id, capability)
+    )`);
+
+  await db.query(`
+    create table if not exists dune.rbac_audit_log (
+      id          serial primary key,
+      timestamp   timestamptz default now(),
+      actor_id    text not null,
+      actor_name  text,
+      action      text not null,
+      target_type text,
+      target_id   text,
+      route       text,
+      result      text not null,
+      detail      jsonb
+    )`);
+
+  try { await db.query("create index if not exists idx_rbac_audit_timestamp on dune.rbac_audit_log (timestamp desc)"); } catch {}
+  try { await db.query("create index if not exists idx_rbac_audit_actor on dune.rbac_audit_log (actor_id, timestamp desc)"); } catch {}
+}
+
+export async function rbacRoleCapabilities(db, roleId) {
+  const result = await db.query(
+    `select capability from dune.rbac_role_capabilities where role_id = $1 order by capability`,
+    [String(roleId)]
+  );
+  return result.rows.map(r => r.capability);
+}
+
+export async function rbacSetRoleCapabilities(db, roleId, capabilities, grantedBy = "system") {
+  await rbacTablesCreate(db);
+  await db.query("delete from dune.rbac_role_capabilities where role_id = $1", [String(roleId)]);
+  if (capabilities.length > 0) {
+    const values = capabilities.map((_, i) => `($1, $${i + 2}, $${capabilities.length + 2})`).join(", ");
+    await db.query(
+      `insert into dune.rbac_role_capabilities (role_id, capability, granted_by) values ${values}`,
+      [String(roleId), ...capabilities.map(c => String(c)), String(grantedBy)]
+    );
+  }
+}
+
+export async function rbacAuditLog(db, { actorId, actorName, action, targetType, targetId, route, result, detail }) {
+  await rbacTablesCreate(db);
+  await db.query(
+    `insert into dune.rbac_audit_log (actor_id, actor_name, action, target_type, target_id, route, result, detail)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [String(actorId), actorName || null, String(action), targetType || null, targetId || null, route || null, String(result), detail ? JSON.stringify(detail) : null]
+  );
+}
+
+export async function rbacAuditQuery(db, { limit = 50, actorId, action, since } = {}) {
+  await rbacTablesCreate(db);
+  const conditions = [];
+  const params = [];
+  let paramIdx = 1;
+
+  if (actorId) {
+    conditions.push(`actor_id = $${paramIdx++}`);
+    params.push(String(actorId));
+  }
+  if (action) {
+    conditions.push(`action = $${paramIdx++}`);
+    params.push(String(action));
+  }
+  if (since) {
+    conditions.push(`timestamp >= $${paramIdx++}`);
+    params.push(since);
+  }
+
+  const whereClause = conditions.length > 0 ? `where ${conditions.join(" and ")}` : "";
+  params.push(limit);
+
+  const result = await db.query(
+    `select id, timestamp, actor_id, actor_name, action, target_type, target_id, route, result, detail
+     from dune.rbac_audit_log
+     ${whereClause}
+     order by timestamp desc
+     limit $${paramIdx}`,
+    params
+  );
+  return result.rows;
 }

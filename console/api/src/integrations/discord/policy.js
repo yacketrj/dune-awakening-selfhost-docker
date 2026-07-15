@@ -18,7 +18,8 @@ export const DISCORD_CAPABILITIES = Object.freeze({
   POPULATION_READ: "population:read",
   MAPS_READ: "maps:read",
   BACKUPS_READ: "backups:read",
-  BROADCAST_SEND: "broadcast:send"
+  BROADCAST_SEND: "broadcast:send",
+  LOGS_READ: "logs:read",
 });
 
 export const EXPERIMENTAL_READ_ONLY_CAPABILITIES = Object.freeze(
