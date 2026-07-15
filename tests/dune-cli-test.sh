@@ -87,6 +87,27 @@ else
   pass "logs accessible (no permission errors)"
 fi
 
+# ── Test 7.5: Bridge smoke test (PRE-RESTART — validates bridge functionality) ──
+echo ""
+echo "7.5. Bridge smoke test (pre-restart)"
+if [ -x "$REPO_ROOT/tests/bridge-smoke-test.sh" ]; then
+  BRIDGE_PRE_RC=0
+  BRIDGE_PRE=$("$REPO_ROOT/tests/bridge-smoke-test.sh" 2>&1) || BRIDGE_PRE_RC=$?
+  if [ "$BRIDGE_PRE_RC" -eq 2 ]; then
+    skip "bridge pre-restart: addon not installed"
+  else
+    BRIDGE_PRE_PASS=$(echo "$BRIDGE_PRE" | grep -o "Passed:  *[0-9]*" | grep -o "[0-9]*" || echo "0")
+    BRIDGE_PRE_FAIL=$(echo "$BRIDGE_PRE" | grep -o "Failed:  *[0-9]*" | grep -o "[0-9]*" || echo "0")
+    if [ "$BRIDGE_PRE_FAIL" -gt 0 ]; then
+      fail "bridge pre-restart: $BRIDGE_PRE_PASS passed, $BRIDGE_PRE_FAIL failed"
+    else
+      pass "bridge pre-restart: $BRIDGE_PRE_PASS passed, 0 failed"
+    fi
+  fi
+else
+  skip "bridge-smoke-test.sh not found"
+fi
+
 # ── Test 8: Console restart (CRITICAL — was broken by PR #13) ──
 echo ""
 echo "8. Console restart"
@@ -102,6 +123,28 @@ if curl -s --max-time 5 http://localhost:8088/api/health 2>/dev/null | grep -q '
   pass "console came back online after restart"
 else
   fail "console did not come back online after restart"
+fi
+
+# ── Test 8.5: Bridge smoke test (POST-RESTART — validates session invalidation + re-auth) ──
+echo ""
+echo "8.5. Bridge smoke test (post-restart)"
+if [ -x "$REPO_ROOT/tests/bridge-smoke-test.sh" ]; then
+  BRIDGE_POST_RC=0
+  BRIDGE_POST=$("$REPO_ROOT/tests/bridge-smoke-test.sh" 2>&1) || BRIDGE_POST_RC=$?
+  if [ "$BRIDGE_POST_RC" -eq 2 ]; then
+    skip "bridge post-restart: addon not installed"
+  else
+    BRIDGE_POST_PASS=$(echo "$BRIDGE_POST" | grep -o "Passed:  *[0-9]*" | grep -o "[0-9]*" || echo "0")
+    BRIDGE_POST_FAIL=$(echo "$BRIDGE_POST" | grep -o "Failed:  *[0-9]*" | grep -o "[0-9]*" || echo "0")
+    BRIDGE_POST_SKIP=$(echo "$BRIDGE_POST" | grep -o "Skipped: *[0-9]*" | grep -o "[0-9]*" || echo "0")
+    if [ "$BRIDGE_POST_FAIL" -gt 0 ]; then
+      fail "bridge post-restart: $BRIDGE_POST_PASS passed, $BRIDGE_POST_FAIL failed, $BRIDGE_POST_SKIP skipped"
+    else
+      pass "bridge post-restart: $BRIDGE_POST_PASS passed, 0 failed, $BRIDGE_POST_SKIP skipped"
+    fi
+  fi
+else
+  skip "bridge-smoke-test.sh not found"
 fi
 
 # ── Test 9: Shutdown protection toggle ──
@@ -236,6 +279,58 @@ if [ -x "$REPO_ROOT/runtime/scripts/restart-schedule.sh" ]; then
   pass "restart-schedule.sh exists and executable"
 else
   fail "restart-schedule.sh missing"
+fi
+
+# ── Test 21: Migration script exists and is executable ──
+echo ""
+echo "21. Migration script"
+if [ -x "$REPO_ROOT/runtime/scripts/migrate.sh" ]; then
+  pass "migrate.sh exists and executable"
+else
+  fail "migrate.sh missing or not executable"
+fi
+
+# ── Test 22: Version jump detection function exists ──
+echo ""
+echo "22. Version jump detection"
+if grep -q "version_jump_distance" "$REPO_ROOT/runtime/scripts/self-update.sh"; then
+  pass "version_jump_distance function exists in self-update.sh"
+else
+  fail "version_jump_distance function missing from self-update.sh"
+fi
+
+# ── Test 23: Check version jump warning logic ──
+echo ""
+echo "23. Version jump warning"
+if grep -q "check_version_jump" "$REPO_ROOT/runtime/scripts/self-update.sh"; then
+  pass "check_version_jump function exists in self-update.sh"
+else
+  fail "check_version_jump function missing from self-update.sh"
+fi
+
+# ── Test 24: Migration script handles version arguments ──
+echo ""
+echo "24. Migration argument handling"
+MIGRATE_OUT=$("$REPO_ROOT/runtime/scripts/migrate.sh" 2>&1 || true)
+if echo "$MIGRATE_OUT" | grep -q "Usage:"; then
+  pass "migrate.sh shows usage when called without arguments"
+else
+  fail "migrate.sh doesn't show usage: $MIGRATE_OUT"
+fi
+
+# ── Test 25: Migration script runs with valid versions ──
+echo ""
+echo "25. Migration execution"
+CURRENT_VER=$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]')
+if [ -n "$CURRENT_VER" ]; then
+  MIGRATE_RUN=$("$REPO_ROOT/runtime/scripts/migrate.sh" "$CURRENT_VER" "$CURRENT_VER" 2>&1) || true
+  if echo "$MIGRATE_RUN" | grep -q "Starting migration"; then
+    pass "migrate.sh runs with valid version arguments"
+  else
+    fail "migrate.sh failed to run: $(echo "$MIGRATE_RUN" | head -3)"
+  fi
+else
+  skip "VERSION file not found"
 fi
 
 # ── Results ──

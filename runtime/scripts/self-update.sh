@@ -306,6 +306,63 @@ version_newer() {
   [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n1)" = "$latest" ]
 }
 
+version_jump_distance() {
+  local from="$1"
+  local to="$2"
+  from="${from#v}"
+  to="${to#v}"
+
+  local from_major from_minor from_patch to_major to_minor to_patch
+  IFS='.' read -r from_major from_minor from_patch <<< "$from"
+  IFS='.' read -r to_major to_minor to_patch <<< "$to"
+
+  from_major="${from_major:-0}"
+  from_minor="${from_minor:-0}"
+  from_patch="${from_patch:-0}"
+  to_major="${to_major:-0}"
+  to_minor="${to_minor:-0}"
+  to_patch="${to_patch:-0}"
+
+  echo $(( (to_major - from_major) * 10000 + (to_minor - from_minor) * 100 + (to_patch - from_patch) ))
+}
+
+check_version_jump() {
+  local from="$1"
+  local to="$2"
+  local distance
+
+  distance="$(version_jump_distance "$from" "$to")"
+
+  if [ "$distance" -gt 300 ]; then
+    echo
+    echo "WARNING: Large version jump detected (v$from → v$to)"
+    echo "This spans more than 3 minor versions."
+    echo
+    echo "Potential issues:"
+    echo "  - Config file format changes may not migrate cleanly"
+    echo "  - Database schema changes may require intermediate migrations"
+    echo "  - Compose file structure changes may cause volume conflicts"
+    echo
+    echo "Recommended: Update incrementally through intermediate versions"
+    echo "  Example: v$from → v1.3.$(( ${from#v1.3.} + 2 )) → v$to"
+    echo
+    read -r -p "Continue with direct update? [y/N] " response
+    case "$response" in
+      [yY][eE][sS]|[yY])
+        echo "Proceeding with direct update..."
+        ;;
+      *)
+        echo "Update cancelled. Run incremental updates instead."
+        exit 1
+        ;;
+    esac
+  elif [ "$distance" -gt 100 ]; then
+    echo
+    echo "NOTE: Moderate version jump (v$from → v$to)"
+    echo "Migration will run automatically to handle config changes."
+  fi
+}
+
 print_versions() {
   local latest="$1"
   echo "Current stack version: $CURRENT_VERSION"
@@ -1069,7 +1126,14 @@ case "$cmd" in
     print_versions "$latest"
     echo
     if version_newer "$CURRENT_VERSION" "$latest"; then
+      local distance
+      distance="$(version_jump_distance "$CURRENT_VERSION" "$latest")"
       echo "A newer stack version is available."
+      if [ "$distance" -gt 300 ]; then
+        echo
+        echo "WARNING: This is a large version jump (>$(( distance / 100 )) minor versions)."
+        echo "Run 'self-update.sh install' for migration details and options."
+      fi
       exit 100
     fi
 
@@ -1105,6 +1169,17 @@ case "$cmd" in
         esac
         exit 2
       fi
+    fi
+
+    check_version_jump "$CURRENT_VERSION" "$tag"
+
+    if [ -x runtime/scripts/migrate.sh ]; then
+      echo
+      echo "Running migration pre-flight checks..."
+      runtime/scripts/migrate.sh "$CURRENT_VERSION" "$tag" || {
+        echo "Migration pre-flight checks failed."
+        exit 5
+      }
     fi
 
     cache_latest_release_tag "$tag"

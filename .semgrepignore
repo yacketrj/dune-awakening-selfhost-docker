@@ -10,3 +10,6 @@ runtime/scripts/start-rabbitmq.sh
 
 # Test fixtures containing synthetic JWT tokens and test secrets
 console/api/test/runner.test.js
+
+# Upstream test files with known semgrep findings (not our code)
+console/api/test/operationsPermissionMatrix.test.js

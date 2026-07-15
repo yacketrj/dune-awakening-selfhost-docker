@@ -35,12 +35,13 @@ if [ "${1:-}" = "--skip-auth" ]; then SKIP_AUTH=true; fi
 SESSION=""; CSRF=""
 
 if ! $SKIP_AUTH && [ -n "$ADMIN_PASSWORD" ]; then
-  LOGIN_RESP="$($CURL -sS -X POST "$BASE_URL/api/login" \
+  LOGIN_HEADERS="$($CURL -sS -D - -X POST "$BASE_URL/api/auth/login" \
     -H "Content-Type: application/json" \
     -d "{\"password\":\"$ADMIN_PASSWORD\"}" 2>/dev/null)" || true
-  if echo "$LOGIN_RESP" | grep -q '"ok":true'; then
-    SESSION="$(echo "$LOGIN_RESP" | grep -o 'asc_session=[^";]*' | head -1 || true)"
-    CSRF="$(echo "$LOGIN_RESP" | grep -o '"csrf":"[^"]*"' | head -1 | sed 's/"csrf":"//;s/"//' || true)"
+  LOGIN_RESP="$(echo "$LOGIN_HEADERS" | tail -n +2)"
+  if echo "$LOGIN_RESP" | grep -q '"authenticated":true'; then
+    SESSION="$(echo "$LOGIN_HEADERS" | grep -i "set-cookie:" | grep -o 'asc_session=[^;]*' | head -1 || true)"
+    CSRF="$(echo "$LOGIN_RESP" | grep -o '"csrfToken":"[^"]*"' | head -1 | sed 's/"csrfToken":"//;s/"//' || true)"
     p "authenticated to Console"
   else
     w "auth failed — bridge tests will use unauthenticated path"
@@ -51,10 +52,22 @@ fi
 
 if [ -z "$SESSION" ]; then SKIP_AUTH=true; fi
 
-# ─── Auth headers ───
+# ─── Check if addon is installed ───
 AUTH_HEADERS=()
 if [ -n "$SESSION" ]; then AUTH_HEADERS+=(-H "Cookie: $SESSION"); fi
 if [ -n "$CSRF" ]; then AUTH_HEADERS+=(-H "X-CSRF-Token: $CSRF"); fi
+
+ADDON_CHECK="$($CURL -sS "$BASE_URL/api/addons/installed" "${AUTH_HEADERS[@]}" 2>/dev/null)" || true
+if ! echo "$ADDON_CHECK" | grep -q "dune-ops-observability"; then
+  echo
+  echo -e "${YELLOW}Addon 'dune-ops-observability' not installed — skipping bridge tests${NC}"
+  echo "This test requires the addon to be installed. Run: dune addons install dune-ops-observability"
+  echo
+  echo "========================================"
+  echo -e "${YELLOW}Skipped:  all (addon not installed)${NC}"
+  echo "========================================"
+  exit 2
+fi
 
 # ─── Helper: call bridge action ───
 bridge_call() {
