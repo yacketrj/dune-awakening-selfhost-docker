@@ -15,7 +15,8 @@ import {
   type CatalogItem
 } from "../../components/common/ItemCatalog";
 import { formatUiSentence } from "../../lib/display";
-import { augmentLimit, AugmentPicker } from "../../components/common/ItemCatalog";
+import { AugmentPicker } from "../../components/common/ItemCatalog";
+import { augmentLimitForItem } from "../../lib/augmentEligibility";
 import { titleCaseWords } from "../players/playerAdminUtils";
 
 type HomeTaskResult = { status: "running" | "succeeded" | "failed" | "stopped"; title: string; message?: string; details?: string };
