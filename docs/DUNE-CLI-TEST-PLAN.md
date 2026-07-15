@@ -41,7 +41,7 @@ Generated after PR #13 broke `self-update`, `console` restart, and other privile
 | # | Command | What to test |
 |---|---------|-------------|
 | 20 | `dune db` | DB interactive access |
-| 21 | `dune db-manage` | DB backup/restore | 
+| 21 | `dune db-manage` | DB backup/restore |
 | 22 | `dune database` | DB maintenance tools |
 
 ### Configuration

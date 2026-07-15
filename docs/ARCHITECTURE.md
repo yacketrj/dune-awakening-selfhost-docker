@@ -1,8 +1,8 @@
 # Dune Awakening Selfhost Docker - Comprehensive Architecture & Design Document
 
-**Version:** 1.0  
-**Last Updated:** 2026-07-15  
-**Branch:** feature/blueprints-ui  
+**Version:** 1.0
+**Last Updated:** 2026-07-15
+**Branch:** feature/blueprints-ui
 **Status:** Production Ready
 
 ---
@@ -399,7 +399,7 @@ const unlockedPieces = await db.query(`
 `, [characterId]);
 
 const unlockedSet = new Set(unlockedPieces.rows.map(r => r.piece));
-const missingPieces = blueprint.instances.filter(instance => 
+const missingPieces = blueprint.instances.filter(instance =>
   !unlockedSet.has(instance.building_type)
 );
 
@@ -452,7 +452,7 @@ dune admin specialization-max Sihaya --grant-keystones --unlock-faction Harkonne
 
 2. **Grant Solari for building set:**
 ```sql
-INSERT INTO dune.player_virtual_currency_balances 
+INSERT INTO dune.player_virtual_currency_balances
 (player_controller_id, currency_id, balance)
 VALUES (355, 1, 180000)
 ON CONFLICT (player_controller_id, currency_id)
@@ -663,15 +663,15 @@ The encrypted_player_state is the **authoritative source** for player state. Whe
 ### Common Security Issues
 
 #### Issue: Admin changes lost on player login
-**Cause:** Encrypted player state is authoritative, overwrites regular tables on login  
+**Cause:** Encrypted player state is authoritative, overwrites regular tables on login
 **Solution:** Make admin changes while player is offline, restart game server
 
 #### Issue: Blueprint placement fails
-**Cause:** Building pieces not unlocked in building_progression table  
+**Cause:** Building pieces not unlocked in building_progression table
 **Solution:** Unlock building pieces via research or admin command
 
 #### Issue: Faction alignment fails
-**Cause:** Player not aligned with faction or not at required level  
+**Cause:** Player not aligned with faction or not at required level
 **Solution:** Use admin command to align player with faction
 
 ---

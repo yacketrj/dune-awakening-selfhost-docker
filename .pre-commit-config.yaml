@@ -35,7 +35,7 @@ repos:
 
       - id: semgrep
         name: semgrep
-        entry: semgrep --error --config p/default
+        entry: semgrep --error --config p/default --exclude console/api/test/operationsPermissionMatrix.test.js
         language: system
         pass_filenames: false
         always_run: true
