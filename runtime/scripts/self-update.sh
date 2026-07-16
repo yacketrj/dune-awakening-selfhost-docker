@@ -348,16 +348,22 @@ check_version_jump() {
     local intermediate_patch=$(( from_patch + 2 ))
     echo "  Example: v$from → v${from%.*}.$intermediate_patch → v$to"
     echo
-    read -r -p "Continue with direct update? [y/N] " response
-    case "$response" in
-      [yY][eE][sS]|[yY])
-        echo "Proceeding with direct update..."
-        ;;
-      *)
-        echo "Update cancelled. Run incremental updates instead."
-        exit 1
-        ;;
-    esac
+
+    # Only prompt if running interactively (stdin is a terminal)
+    if [ -t 0 ]; then
+      read -r -p "Continue with direct update? [y/N] " response
+      case "$response" in
+        [yY][eE][sS]|[yY])
+          echo "Proceeding with direct update..."
+          ;;
+        *)
+          echo "Update cancelled. Run incremental versions instead."
+          exit 1
+          ;;
+      esac
+    else
+      echo "Non-interactive mode: proceeding with direct update..."
+    fi
   elif [ "$distance" -gt 100 ]; then
     echo
     echo "NOTE: Moderate version jump (v$from → v$to)"
