@@ -220,13 +220,17 @@ fi
 # ── Test 15: Orchestrator runs as non-root ──
 echo ""
 echo "15. Orchestrator user"
-ORCH_USER=$(docker exec dune-orchestrator id -un 2>/dev/null || echo "unknown")
-if [ "$ORCH_USER" = "dune" ]; then
-  pass "orchestrator running as dune (non-root)"
-elif [ "$ORCH_USER" = "root" ]; then
-  skip "orchestrator running as root (expected if DUNE_HOST_UID=0)"
+if docker ps --format "{{.Names}}" | grep -q "^dune-orchestrator$"; then
+  ORCH_USER=$(docker exec dune-orchestrator id -un 2>/dev/null || echo "unknown")
+  if [ "$ORCH_USER" = "dune" ]; then
+    pass "orchestrator running as dune (non-root)"
+  elif [ "$ORCH_USER" = "root" ]; then
+    skip "orchestrator running as root (expected if DUNE_HOST_UID=0)"
+  else
+    fail "orchestrator running as unknown user: $ORCH_USER"
+  fi
 else
-  fail "orchestrator running as unknown user: $ORCH_USER"
+  skip "orchestrator container not running (web UI only deployment)"
 fi
 
 # ── Test 16: Console runs as non-root ──
