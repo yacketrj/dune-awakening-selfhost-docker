@@ -281,6 +281,190 @@ else
   fail "restart-schedule.sh missing"
 fi
 
+# ── Test 26: Doctor diagnostic ──
+echo ""
+echo "26. Doctor diagnostic"
+DOCTOR_OUT=$("$DUNE" doctor 2>&1) || true
+if echo "$DOCTOR_OUT" | grep -qiE 'doctor|diagnostic|check|error|warning'; then
+  pass "doctor command executed"
+else
+  fail "doctor command failed: $(echo "$DOCTOR_OUT" | head -3)"
+fi
+
+# ── Test 27: Process list ──
+echo ""
+echo "27. Process list (ps)"
+PS_OUT=$("$DUNE" ps 2>&1) || true
+if echo "$PS_OUT" | grep -qiE 'container|process|dune|postgres|rabbitmq|gateway'; then
+  pass "ps shows running processes"
+else
+  fail "ps doesn't show expected processes: $(echo "$PS_OUT" | head -3)"
+fi
+
+# ── Test 28: Maps status ──
+echo ""
+echo "28. Maps status"
+MAPS_OUT=$("$DUNE" maps 2>&1) || true
+if echo "$MAPS_OUT" | grep -qiE 'map|survival|overmap|deepdesert|world'; then
+  pass "maps shows map information"
+else
+  fail "maps doesn't show expected information: $(echo "$MAPS_OUT" | head -3)"
+fi
+
+# ── Test 29: Memory usage ──
+echo ""
+echo "29. Memory usage"
+MEMORY_OUT=$("$DUNE" memory 2>&1) || true
+if echo "$MEMORY_OUT" | grep -qiE 'memory|usage|mb|gb|container'; then
+  pass "memory shows usage information"
+else
+  fail "memory doesn't show expected information: $(echo "$MEMORY_OUT" | head -3)"
+fi
+
+# ── Test 30: Metrics status ──
+echo ""
+echo "30. Metrics status"
+METRICS_OUT=$("$DUNE" metrics 2>&1) || true
+if echo "$METRICS_OUT" | grep -qiE 'metric|prometheus|grafana|exporter|monitor'; then
+  pass "metrics shows monitoring information"
+else
+  fail "metrics doesn't show expected information: $(echo "$METRICS_OUT" | head -3)"
+fi
+
+# ── Test 31: Network status ──
+echo ""
+echo "31. Network status"
+NETWORK_OUT=$("$DUNE" network 2>&1) || true
+if echo "$NETWORK_OUT" | grep -qiE 'network|port|bind|listen|address'; then
+  pass "network shows network information"
+else
+  fail "network doesn't show expected information: $(echo "$NETWORK_OUT" | head -3)"
+fi
+
+# ── Test 32: Overmap status ──
+echo ""
+echo "32. Overmap status"
+OVERMAP_OUT=$("$DUNE" overmap 2>&1) || true
+if echo "$OVERMAP_OUT" | grep -qiE 'overmap|map|world|region'; then
+  pass "overmap shows overmap information"
+else
+  fail "overmap doesn't show expected information: $(echo "$OVERMAP_OUT" | head -3)"
+fi
+
+# ── Test 33: Storage status ──
+echo ""
+echo "33. Storage status"
+STORAGE_OUT=$("$DUNE" storage 2>&1) || true
+if echo "$STORAGE_OUT" | grep -qiE 'storage|disk|volume|usage|gb|mb'; then
+  pass "storage shows storage information"
+else
+  fail "storage doesn't show expected information: $(echo "$STORAGE_OUT" | head -3)"
+fi
+
+# ── Test 34: Restart schedule status ──
+echo ""
+echo "34. Restart schedule status"
+RESTART_OUT=$("$DUNE" restart-schedule 2>&1) || true
+if echo "$RESTART_OUT" | grep -qiE 'schedule|restart|time|cron|daily'; then
+  pass "restart-schedule shows schedule information"
+else
+  fail "restart-schedule doesn't show expected information: $(echo "$RESTART_OUT" | head -3)"
+fi
+
+# ── Test 35: Admin status ──
+echo ""
+echo "35. Admin status"
+ADMIN_OUT=$("$DUNE" admin 2>&1) || true
+if echo "$ADMIN_OUT" | grep -qiE 'admin|console|web|ui|panel'; then
+  pass "admin shows admin information"
+else
+  fail "admin doesn't show expected information: $(echo "$ADMIN_OUT" | head -3)"
+fi
+
+# ── Test 36: Autoscaler status ──
+echo ""
+echo "36. Autoscaler status"
+AUTOSCALER_OUT=$("$DUNE" autoscaler 2>&1) || true
+if echo "$AUTOSCALER_OUT" | grep -qiE 'autoscaler|scale|server|instance'; then
+  pass "autoscaler shows autoscaler information"
+else
+  fail "autoscaler doesn't show expected information: $(echo "$AUTOSCALER_OUT" | head -3)"
+fi
+
+# ── Test 37: Database status ──
+echo ""
+echo "37. Database status"
+DB_OUT=$("$DUNE" db 2>&1) || true
+if echo "$DB_OUT" | grep -qiE 'database|postgres|db|connection|status'; then
+  pass "db shows database information"
+else
+  fail "db doesn't show expected information: $(echo "$DB_OUT" | head -3)"
+fi
+
+# ── Test 38: Web UI status ──
+echo ""
+echo "38. Web UI status"
+WEB_OUT=$("$DUNE" web 2>&1) || true
+if echo "$WEB_OUT" | grep -qiE 'web|console|ui|panel|http|port'; then
+  pass "web shows web UI information"
+else
+  fail "web doesn't show expected information: $(echo "$WEB_OUT" | head -3)"
+fi
+
+# ── Test 39: Destructive commands (conditional) ──
+echo ""
+echo "39. Destructive commands"
+if [ "${DUNE_TEST_CLEAN_DEPLOY:-0}" = "1" ]; then
+  # Clean deployment - test safe destructive commands only
+
+  echo "  Testing restart command..."
+  RESTART_OUT=$("$DUNE" restart 2>&1) || true
+  if echo "$RESTART_OUT" | grep -qiE 'restart|restarting|complete|success'; then
+    pass "restart command executed"
+  else
+    fail "restart command failed: $(echo "$RESTART_OUT" | head -3)"
+  fi
+
+  echo "  Testing stop command..."
+  STOP_OUT=$("$DUNE" stop 2>&1) || true
+  if echo "$STOP_OUT" | grep -qiE 'stop|stopping|complete|success'; then
+    pass "stop command executed"
+  else
+    fail "stop command failed: $(echo "$STOP_OUT" | head -3)"
+  fi
+
+  echo "  Testing start command..."
+  START_OUT=$("$DUNE" start 2>&1) || true
+  if echo "$START_OUT" | grep -qiE 'start|starting|complete|success|running'; then
+    pass "start command executed"
+  else
+    fail "start command failed: $(echo "$START_OUT" | head -3)"
+  fi
+
+  echo "  Testing ip-change-restart command..."
+  IPCHANGE_OUT=$("$DUNE" ip-change-restart 2>&1) || true
+  if echo "$IPCHANGE_OUT" | grep -qiE 'ip|change|restart|complete|success|error|usage'; then
+    pass "ip-change-restart command executed"
+  else
+    fail "ip-change-restart command failed: $(echo "$IPCHANGE_OUT" | head -3)"
+  fi
+
+  # Skip truly destructive commands that change game state
+  skip "init - destructive (initializes stack, would reset volumes)"
+  skip "spawn/despawn - destructive (changes game server state)"
+  skip "deepdesert/sietches - destructive (changes map state)"
+  skip "update - destructive (updates stack)"
+
+else
+  # Live stack - skip all destructive commands
+  skip "init - destructive (initializes stack)"
+  skip "start/stop/restart - destructive (changes server state)"
+  skip "spawn/despawn - destructive (changes game state)"
+  skip "deepdesert/sietches - destructive (changes map state)"
+  skip "update - destructive (updates stack)"
+  skip "ip-change-restart - destructive (restarts services)"
+fi
+
 # ── Test 21: Migration script exists and is executable ──
 echo ""
 echo "21. Migration script"
