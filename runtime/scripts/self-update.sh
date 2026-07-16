@@ -344,7 +344,9 @@ check_version_jump() {
     echo "  - Compose file structure changes may cause volume conflicts"
     echo
     echo "Recommended: Update incrementally through intermediate versions"
-    echo "  Example: v$from → v1.3.$(( ${from#v1.3.} + 2 )) → v$to"
+    local from_patch="${from##*.}"
+    local intermediate_patch=$(( from_patch + 2 ))
+    echo "  Example: v$from → v${from%.*}.$intermediate_patch → v$to"
     echo
     read -r -p "Continue with direct update? [y/N] " response
     case "$response" in
