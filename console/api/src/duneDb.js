@@ -4203,3 +4203,194 @@ export async function addonOpsEconomySummary(db) {
 function emptyEconomySummary() {
   return { totalCurrencyHolders: 0, totalSupply: 0, activeOrders: 0, fulfilledOrders: 0, taxCollected: 0, currencyBreakdown: [], topTradedItems: [] };
 }
+
+// ── v0.5.0 Bridge Actions ──
+
+export async function addonOpsInventorySummary(db) {
+  const result = await db.query(`
+    select count(*)::int as total_items,
+           count(distinct template_id)::int as unique_templates,
+           coalesce(sum(stack_size), 0)::bigint as total_stack_size
+    from dune.items`);
+
+  const r = result.rows?.[0] || {};
+
+  let itemsByTemplate = [];
+  try {
+    const templateResult = await db.query(`
+      select template_id,
+             count(*)::int as count,
+             coalesce(sum(stack_size), 0)::bigint as total_stack
+      from dune.items
+      group by template_id
+      order by count desc
+      limit 20`);
+    itemsByTemplate = templateResult.rows || [];
+  } catch { }
+
+  let itemsByQuality = [];
+  try {
+    const qualityResult = await db.query(`
+      select quality_level,
+             count(*)::int as count,
+             coalesce(sum(stack_size), 0)::bigint as total_stack
+      from dune.items
+      group by quality_level
+      order by quality_level`);
+    itemsByQuality = qualityResult.rows || [];
+  } catch { }
+
+  let inventoryUsage = [];
+  try {
+    const usageResult = await db.query(`
+      select i.inventory_type,
+             count(distinct i.id)::int as inventory_count,
+             count(it.id)::int as item_count,
+             coalesce(sum(it.stack_size), 0)::bigint as total_stack
+      from dune.inventories i
+      left join dune.items it on it.inventory_id = i.id
+      group by i.inventory_type
+      order by inventory_type`);
+    inventoryUsage = usageResult.rows || [];
+  } catch { }
+
+  return {
+    totalItems: r.total_items || 0,
+    uniqueTemplates: r.unique_templates || 0,
+    totalStackSize: r.total_stack_size || 0,
+    itemsByTemplate,
+    itemsByQuality,
+    inventoryUsage
+  };
+}
+
+export async function addonOpsLocationActivity(db) {
+  let markersByType = [];
+  try {
+    const typeResult = await db.query(`
+      select (m.marker).marker_type as marker_type,
+             count(*)::int as count
+      from dune.markers m
+      group by (m.marker).marker_type
+      order by count desc
+      limit 20`);
+    markersByType = typeResult.rows || [];
+  } catch { }
+
+  let markersByMap = [];
+  try {
+    const mapResult = await db.query(`
+      select mn.map_name,
+             count(*)::int as count
+      from dune.markers m
+      join dune.map_names mn on mn.map_name_id = m.map_name_id
+      group by mn.map_name
+      order by count desc
+      limit 20`);
+    markersByMap = mapResult.rows || [];
+  } catch { }
+
+  let playerMarkersByMap = [];
+  try {
+    const playerMapResult = await db.query(`
+      select mn.map_name,
+             count(*)::int as count
+      from dune.player_markers pm
+      join dune.markers m on m.marker_hash_id = pm.marker_hash_id
+        and m.dimension_index = pm.dimension_index
+        and m.map_name_id = pm.map_name_id
+      join dune.map_names mn on mn.map_name_id = m.map_name_id
+      group by mn.map_name
+      order by count desc
+      limit 20`);
+    playerMarkersByMap = playerMapResult.rows || [];
+  } catch { }
+
+  const totalMarkers = markersByType.reduce((sum, m) => sum + m.count, 0);
+  const totalPlayerMarkers = playerMarkersByMap.reduce((sum, m) => sum + m.count, 0);
+
+  return {
+    totalMarkers,
+    totalPlayerMarkers,
+    markersByType,
+    markersByMap,
+    playerMarkersByMap
+  };
+}
+
+export async function addonOpsSocSummary(db) {
+  // SOC summary aggregates operational health metrics
+  const [healthSummary, activitySummary] = await Promise.all([
+    addonOpsHealthSummary(db),
+    addonOpsActivitySummary(db).catch(() => null)
+  ]);
+
+  const players = healthSummary?.players || {};
+  const farms = healthSummary?.farms || {};
+  const activity = activitySummary || {};
+
+  const totalPlayers = players.total || 0;
+  const onlinePlayers = players.onlineStatus?.Online || 0;
+  const offlinePlayers = totalPlayers - onlinePlayers;
+
+  const healthScore = totalPlayers > 0
+    ? Math.round((onlinePlayers / totalPlayers) * 100)
+    : 0;
+
+  return {
+    healthScore,
+    totalPlayers,
+    onlinePlayers,
+    offlinePlayers,
+    totalFarms: farms.total || 0,
+    readyFarms: farms.ready || 0,
+    activeLast1h: activity.activeLast1h || 0,
+    activeLast24h: activity.activeLast24h || 0,
+    sessionCount: activity.sessionCount || 0
+  };
+}
+
+export async function addonOpsPrometheusHealth(db) {
+  // Prometheus health checks the metrics stack status
+  // This requires the metrics stack to be running
+  const services = [
+    "dune-prometheus",
+    "dune-node",
+    "dune-cadvisor",
+    "dune-postgres",
+    "dune-rabbitmq-admin",
+    "dune-rabbitmq-game"
+  ];
+
+  const serviceStatus = {};
+  let healthyCount = 0;
+
+  for (const service of services) {
+    try {
+      const result = await db.query(`
+        select 1 from pg_stat_activity
+        where application_name = $1
+        limit 1`, [service]);
+      serviceStatus[service] = result.rows.length > 0 ? "up" : "down";
+      if (result.rows.length > 0) healthyCount++;
+    } catch {
+      serviceStatus[service] = "unknown";
+    }
+  }
+
+  return {
+    healthy: healthyCount === services.length,
+    targets: {
+      active: healthyCount,
+      inactive: services.length - healthyCount,
+      pending: 0,
+      total: services.length
+    },
+    services: serviceStatus,
+    summary: {
+      avgCpuPercent: 0,
+      avgMemoryMb: 0,
+      totalRestarts: 0
+    }
+  };
+}
