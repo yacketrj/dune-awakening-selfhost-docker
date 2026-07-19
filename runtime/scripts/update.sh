@@ -188,7 +188,7 @@ install_auto_units_via_docker_host() {
   image="$(docker_helper_image)"
 
   can_manage_host_systemd_with_docker || return 1
-  docker run --rm --privileged --pid=host --network=host \
+  docker run --rm --user 0:0 --privileged --pid=host --network=host \
     -e DUNE_AUTO_UPDATE_INTERVAL_MINUTES="$interval_minutes" \
     -e DUNE_HOST_REPO_ROOT="$HOST_ROOT_DIR" \
     -v /:/host \
@@ -232,7 +232,7 @@ disable_auto_units_via_docker_host() {
   image="$(docker_helper_image)"
 
   can_manage_host_systemd_with_docker || return 1
-  docker run --rm --privileged --pid=host --network=host \
+  docker run --rm --user 0:0 --privileged --pid=host --network=host \
     -v /:/host \
     --entrypoint bash \
     "$image" -lc '
@@ -248,7 +248,7 @@ show_auto_timer_status_via_docker() {
   image="$(docker_helper_image)"
 
   can_manage_host_systemd_with_docker || return 1
-  docker run --rm --privileged --pid=host --network=host \
+  docker run --rm --user 0:0 --privileged --pid=host --network=host \
     -v /:/host \
     --entrypoint bash \
     "$image" -lc '
@@ -943,6 +943,16 @@ echo "=== Refresh generated map catalogs ==="
 runtime/scripts/extract-partition-catalog.sh
 runtime/scripts/extract-server-catalog.sh
 echo "Generated map catalogs refreshed."
+
+if [ "${DUNE_STORAGE_AUTO_CLEANUP:-1}" = "1" ]; then
+  echo
+  echo "=== Remove obsolete Dune game images ==="
+  storage_args=(cleanup)
+  if [ "${DUNE_STORAGE_PRUNE_BUILD_CACHE:-0}" = "1" ]; then
+    storage_args+=(--build-cache)
+  fi
+  runtime/scripts/storage.sh "${storage_args[@]}" || echo "WARN Obsolete image cleanup did not complete; the update itself remains valid."
+fi
 
 echo
 if [ "$cmd" = "install" ]; then

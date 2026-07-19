@@ -338,6 +338,7 @@ check_dirty_git_tree() {
 }
 
 self_update_repair_command() {
+  # shellcheck disable=SC2016
   printf 'sudo chown -R "$USER:$USER" %q\n' "$HOST_ROOT_DIR"
 }
 
@@ -447,7 +448,9 @@ backup_current_stack() {
     --exclude='./runtime/generated' \
     --exclude='./runtime/secrets' \
     --exclude='./runtime/backups' \
+    --exclude='./runtime/addons' \
     --exclude='./runtime/game' \
+    --exclude='./runtime/logs' \
     --exclude='./runtime/text-router' \
     --exclude='./work' \
     .
@@ -458,6 +461,37 @@ backup_current_stack() {
   } > "$backup_dir/meta.env"
 
   backup_local_state "$backup_dir"
+}
+
+remove_backed_up_project_files() {
+  local backup_dir="$1"
+  local manifest path relative target unsafe_path
+
+  [ -s "$backup_dir/project-files.tgz" ] || return 0
+  unsafe_path=""
+  manifest="$(mktemp)"
+  tar -tzf "$backup_dir/project-files.tgz" > "$manifest"
+
+  while IFS= read -r path; do
+    relative="${path#./}"
+    [ -n "$relative" ] || continue
+    case "/$relative/" in
+      *"/../"*|*"/./"*)
+        unsafe_path="$path"
+        break
+        ;;
+    esac
+    target="$ROOT_DIR/$relative"
+    if [ -f "$target" ] || [ -L "$target" ]; then
+      rm -f "$target"
+    fi
+  done < "$manifest"
+
+  rm -f "$manifest"
+  if [ -n "$unsafe_path" ]; then
+    echo "Refusing unsafe path from project backup: $unsafe_path"
+    return 1
+  fi
 }
 
 backup_local_state() {
@@ -478,6 +512,8 @@ backup_local_state() {
     runtime/generated/message-of-the-day-state.json \
     runtime/generated/player-announcements.json \
     runtime/generated/player-announcements-state.json \
+    runtime/generated/public-directory-status.json \
+    runtime/generated/public-probe.env \
     runtime/generated/restart-schedule.env \
     runtime/generated/shutdown-protection.env \
     runtime/generated/sietch-config.json \
@@ -489,7 +525,8 @@ backup_local_state() {
     runtime/generated/care-package-grants.jsonl \
     runtime/generated/care-package-pending-returns.json \
     runtime/addons/state.json \
-    runtime/secrets/funcom-token.txt
+    runtime/secrets/funcom-token.txt \
+    runtime/secrets/public-directory.json
   do
     [ -e "$path" ] || continue
     printf '%s\n' "$path" >> "$manifest"
@@ -610,6 +647,8 @@ restore_local_state_after_install() {
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/message-of-the-day-state.json
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/player-announcements.json
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/player-announcements-state.json
+  restore_local_state_file_if_needed "$backup_dir" runtime/generated/public-directory-status.json
+  restore_local_state_file_if_needed "$backup_dir" runtime/generated/public-probe.env
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/restart-schedule.env
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/shutdown-protection.env
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/sietch-config.json
@@ -622,6 +661,7 @@ restore_local_state_after_install() {
   restore_local_state_file_if_needed "$backup_dir" runtime/generated/care-package-pending-returns.json
   restore_local_state_file_if_needed "$backup_dir" runtime/addons/state.json
   restore_local_state_file_if_needed "$backup_dir" runtime/secrets/funcom-token.txt
+  restore_local_state_file_if_needed "$backup_dir" runtime/secrets/public-directory.json
   merge_env_keys_from_backup "$backup_dir" .env
   merge_env_keys_from_backup "$backup_dir" runtime/generated/battlegroup.env
 }
@@ -753,6 +793,8 @@ restore_local_state_ownership() {
     runtime/generated/message-of-the-day-state.json \
     runtime/generated/player-announcements.json \
     runtime/generated/player-announcements-state.json \
+    runtime/generated/public-directory-status.json \
+    runtime/generated/public-probe.env \
     runtime/generated/restart-schedule.env \
     runtime/generated/shutdown-protection.env \
     runtime/generated/sietch-config.json \
@@ -768,6 +810,7 @@ restore_local_state_ownership() {
     runtime/addons/installed \
     runtime/addons/staging \
     runtime/addons/state.json \
+    runtime/secrets/public-directory.json \
     runtime/secrets/funcom-token.txt \
     2>/dev/null || true
 }
@@ -818,7 +861,8 @@ rebuild_web_console_now() {
 
 rebuild_web_console_with_helper() {
   local service="$1"
-  local helper_name="dune-console-self-update-$(date +%s)"
+  local helper_name
+  helper_name="dune-console-self-update-$(date +%s)"
   local compose_project="${DUNE_COMPOSE_PROJECT_NAME:-dune-awakening-selfhost-docker}"
   local helper_image="${DUNE_SYSTEMD_HELPER_IMAGE:-redblink-dune-docker-console:dev}"
 
@@ -826,12 +870,16 @@ rebuild_web_console_with_helper() {
 
   docker run --rm -d \
     --name "$helper_name" \
+    --user "${DUNE_HOST_UID:-0}:${DUNE_HOST_GID:-0}" \
+    --group-add "${DOCKER_SOCKET_GID:-0}" \
     --network host \
     -v "$HOST_ROOT_DIR:/repo" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -e "DUNE_HOST_REPO_ROOT=$HOST_ROOT_DIR" \
     -e "COMPOSE_PROJECT_NAME=$compose_project" \
     -e "DUNE_COMPOSE_PROJECT_NAME=$compose_project" \
+    -e "DUNE_HOST_UID=${DUNE_HOST_UID:-0}" \
+    -e "DUNE_HOST_GID=${DUNE_HOST_GID:-0}" \
     -e "DOCKER_SOCKET_GID=${DOCKER_SOCKET_GID:-0}" \
     -w /repo \
     "$helper_image" \
@@ -953,6 +1001,8 @@ install_release_tag_from_archive() {
 
   echo "Installing stack release into:"
   echo "  $ROOT_DIR"
+  echo "Removing project-managed files from the current release..."
+  remove_backed_up_project_files "$backup_dir"
   (
     cd "$src"
     tar --exclude='.git' -cf - .

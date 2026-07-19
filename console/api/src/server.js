@@ -7,7 +7,7 @@ import { loadConfig, publicConfig, parseAllowedIps } from "./config.js";
 import { createAuth, setSessionCookie, clearSessionCookie, json, withSecurityHeaders } from "./auth.js";
 import { createLoginRateLimiter, createMutationRateLimiter } from "./rateLimit.js";
 import { createBridgeRateLimiter } from "./bridgeRateLimit.js";
-import { TaskManager, publicTask } from "./tasks.js";
+import { buildSelfUpdateHelperDockerArgs, detectDockerSocketGid, TaskManager, publicTask } from "./tasks.js";
 import { preflight } from "./preflight.js";
 import { buildDuneArgs, isDynamicServerService, isReadOnlySql, parseVehicleList, runDockerLogs, runDune, validateServiceName } from "./runner.js";
 import { createDb, quoteIdentifier } from "./db.js";
@@ -25,6 +25,7 @@ import { serveStatic, contentTypeForPath } from "./http/staticFiles.js";
 import { discoverServices } from "./services/serviceDiscovery.js";
 import { createBackupDownloadArchive, enrichBackupRows, nextImportedBackupName, normalizeImportedBackupMetadata, validBackupDownloadName } from "./services/backups.js";
 import { createMemoryBalancer } from "./services/memoryBalancer.js";
+import { createDeathPoller } from "./deathPoller.js";
 import { updateEnvFileValue as updateEnvValue } from "./services/envFile.js";
 import { funcomAuthMismatchDetected, matchingFuncomAuthLines, saveFuncomTokenValue as writeFuncomToken, validDockerSince } from "./services/funcomAuth.js";
 import { readCharacterTransferSettings, saveCharacterTransferSettings } from "./services/characterTransferSettings.js";
@@ -33,7 +34,10 @@ import { liveItemGrantOk, liveItemGrantWarning } from "./grantResults.js";
 import { primeMessageOfTheDayOnlineState, readMessageOfTheDay, restoreMessageOfTheDay, runMessageOfTheDayScan, saveMessageOfTheDay } from "./services/messageOfTheDay.js";
 import { primePlayerAnnouncementOnlineState, readPlayerAnnouncements, restorePlayerAnnouncements, runPlayerAnnouncementScan, savePlayerAnnouncements } from "./services/playerAnnouncements.js";
 import { persistSpicefieldOverride } from "./services/spicefieldOverrides.js";
-import { exportBlueprint, importBlueprint, listBlueprints } from "./blueprints.js";
+import { exportBlueprint, importBlueprint, listBlueprints, deleteBlueprint } from "./blueprints.js";
+import { createZipArchive } from "./services/zipArchive.js";
+import { grantAddonItem } from "./addonItemGrants.js";
+import { createPublicDirectoryReporter, normalizeDiscordInvite, readDirectorySettings } from "./services/publicDirectory.js";
 
 const config = loadConfig();
 const auth = createAuth(config);
@@ -42,6 +46,7 @@ const mutationRateLimiter = createMutationRateLimiter();
 const bridgeRateLimiter = createBridgeRateLimiter();
 const tasks = new TaskManager(config);
 let db = createDb(config);
+const publicDirectory = createPublicDirectoryReporter(config, { getDb: () => db });
 let carePackageAutoRunning = false;
 let carePackageAutoLastRun = 0;
 let carePackageAutoNextAllowedRun = 0;
@@ -53,6 +58,7 @@ let playerAnnouncementsAutoLastRun = 0;
 let playerAnnouncementsAutoNextAllowedRun = 0;
 const journeyTagsData = loadJourneyTagsData();
 const memoryBalancer = createMemoryBalancer(config);
+const deathPoller = createDeathPoller(config);
 const POSTGRES_UNAVAILABLE_MESSAGE = "Postgres is not running or is restarting. Wait for the database service to come back online, then refresh.";
 const DEFAULT_ALWAYS_ON_STARTUP_PARALLELISM = 1;
 const MAX_ALWAYS_ON_STARTUP_PARALLELISM = 16;
@@ -91,6 +97,7 @@ createServer(async (req, res) => {
     console.log("Initial admin password is stored in runtime/secrets/admin-web-password.txt");
   }
   scheduleBootAutoStart();
+  publicDirectory.start();
 });
 
 setInterval(() => {
@@ -103,6 +110,12 @@ setInterval(() => {
   if (!memoryBalancer.publicState().enabled) return;
   runBackgroundTick("Memory balancer", () => memoryBalancer.tick());
 }, memoryBalancer.intervalMs).unref?.();
+
+setInterval(() => {
+  if (deathPoller.enabled && deathPoller.tick) runBackgroundTick("Death poller", () => deathPoller.tick());
+}, deathPoller.intervalMs).unref?.();
+
+if (deathPoller.enabled) deathPoller.init(db, config.repoRoot).catch(() => {});
 
 function runBackgroundTick(label, fn) {
   Promise.resolve()
@@ -268,6 +281,7 @@ async function handleApi(req, res) {
   if (path === "/api/setup/save-token" && req.method === "POST") return saveToken(req, res);
   if (path === "/api/setup/init" && req.method === "POST") return task(req, res, "setup", "init", {});
   if (path === "/api/setup/tasks") return json(res, 200, { tasks: tasks.list().map(publicTask) });
+  if (path === "/api/public-directory/status") return json(res, 200, publicDirectory.publicState());
   if (path.startsWith("/api/setup/tasks/")) return taskRoute(req, res, path);
 
   if (path === "/api/server/status") return commandJson(res, "status");
@@ -277,6 +291,12 @@ async function handleApi(req, res) {
   if (path === "/api/server/services") return commandJson(res, "services");
   if (path === "/api/server/doctor") return safeCommandJson(res, "doctor");
   if (path === "/api/server/network-bind/fix" && req.method === "POST") return task(req, res, "server", "networkBindFix", {});
+  if (path === "/api/server/storage/cleanup-images" && req.method === "POST") {
+    return confirmedTask(req, res, "storage", "storageCleanupImages", {}, "CLEAN OBSOLETE DUNE IMAGES");
+  }
+  if (path === "/api/server/storage/cleanup-build-cache" && req.method === "POST") {
+    return confirmedTask(req, res, "storage", "storageCleanupBuildCache", {}, "CLEAN DOCKER BUILD CACHE");
+  }
   if (path === "/api/server/start" && req.method === "POST") return task(req, res, "server", "start", {});
   if (path === "/api/server/stop" && req.method === "POST") return task(req, res, "server", "stop", {});
   if (path === "/api/server/restart" && req.method === "POST") return task(req, res, "server", "restartAll", {});
@@ -438,7 +458,7 @@ async function handleApi(req, res) {
   if (path.match(/^\/api\/players\/[^/]+\/repair-gear$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.repair-gear", "REPAIR GEAR", (playerId) => duneDb.repairGear(db, playerId));
   if (path.match(/^\/api\/players\/[^/]+\/repair-vehicle-decay$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.repair-vehicle-decay", "REPAIR VEHICLE DECAY", (playerId, body) => duneDb.repairVehicleDecay(db, playerId, body));
   if (path.match(/^\/api\/players\/[^/]+\/refuel-vehicle$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.refuel-vehicle", "REFUEL VEHICLE", (playerId, body) => duneDb.refuelVehicle(db, playerId, body));
-  if (path.match(/^\/api\/players\/[^/]+\/augment-item$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.augment-item", "APPLY AUGMENTS", (playerId, body) => duneDb.augmentInventoryItem(db, playerId, body.itemId, { augments: body.augments }));
+  if (path.match(/^\/api\/players\/[^/]+\/augment-item$/) && req.method === "POST") return playerDbMutation(req, res, path, "players.augment-item", "APPLY AUGMENTS", (playerId, body) => duneDb.augmentInventoryItem(db, playerId, body.itemId, { augments: body.augments, augmentQuality: body.augmentQuality }));
   if (path.match(/^\/api\/players\/[^/]+\/inventory\/[^/]+$/) && req.method === "DELETE") return inventoryDeleteRoute(req, res, path);
   if (path.match(/^\/api\/players\/[^/]+\/inventory\/[^/]+$/) && req.method === "PATCH") return inventoryUpdateRoute(req, res, path);
   if (path.match(/^\/api\/players\/[^/]+\/crafting-recipes$/)) return dbPlayerRoute(res, path, duneDb.playerCraftingRecipes);
@@ -461,8 +481,10 @@ async function handleApi(req, res) {
   if (path.match(/^\/api\/storage\/[^/]+\/give-item$/) && req.method === "POST") return storageGiveItemRoute(req, res, path);
   if (path.match(/^\/api\/storage\/[^/]+\/export$/)) return exportJson(res, `storage-${decodeURIComponent(path.split("/")[3])}.json`, () => duneDb.storageItems(db, decodeURIComponent(path.split("/")[3])));
   if (path === "/api/blueprints" && req.method === "GET") return dbJson(res, () => listBlueprints(db));
+  if (path === "/api/blueprints/export" && req.method === "POST") return blueprintBulkExportRoute(req, res);
   if (path.match(/^\/api\/blueprints\/([^/]+)\/export$/) && req.method === "GET") return blueprintExportRoute(req, res, path);
   if (path === "/api/blueprints/import" && req.method === "POST") return blueprintImportRoute(req, res);
+  if (path.match(/^\/api\/blueprints\/([^/]+)$/) && req.method === "DELETE") return blueprintsDeleteRoute(req, res, path);
   if (path === "/api/care-package/capabilities") return json(res, 200, carePackageCapabilities());
   if (path === "/api/care-package/config" && req.method === "POST") return carePackageConfigRoute(req, res);
   if (path === "/api/care-package/config") return json(res, 200, carePackageConfig(config));
@@ -522,6 +544,7 @@ async function handleApi(req, res) {
   if (path === "/api/sietches/update" && req.method === "POST") return sietchesUpdateRoute(req, res);
   if (path === "/api/deepdesert") return commandJson(res, "deepdesertStatus");
   if (path === "/api/deepdesert/update" && req.method === "POST") return deepDesertUpdateRoute(req, res);
+  if (path === "/api/settings/public-directory" && req.method === "POST") return publicDirectorySettingsRoute(req, res);
   if (path === "/api/settings" && req.method === "POST") return writeConfig(req, res);
   if (path === "/api/settings") return json(res, 200, await setupState());
 
@@ -554,6 +577,53 @@ async function addonBridgeRoute(req, res, path) {
         : await duneDb.addonOpsHealthSummary(db);
     audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
     return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.activity.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsActivitySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.resources.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsResourcesSummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.combat.deaths") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsCombatDeaths(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "ops.economy.summary") {
+    const addon = assertInstalledAddonPermission(config, id, "ops:read");
+    const result = await duneDb.addonOpsEconomySummary(db);
+    audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, ok: true });
+    return json(res, 200, { ok: true, result });
+  }
+  if (action === "admin.items.grant") {
+    const addon = assertInstalledAddonPermission(config, id, "admin:grant-items");
+    if (!applyMutationRateLimit(req, res, `addon:${id}:admin.items.grant`)) return;
+    try {
+      const result = await grantAddonItem(config, addon.id, body);
+      audit(config, req, "addons.bridge", {
+        id: addon.id,
+        action,
+        permission: addon.permission,
+        requestId: result.requestId,
+        playerId: result.playerId,
+        itemId: result.itemId,
+        quantity: result.quantity,
+        quality: result.quality,
+        duplicate: result.duplicate,
+        ok: true
+      });
+      return json(res, 200, { ok: true, result });
+    } catch (error) {
+      audit(config, req, "addons.bridge", { id: addon.id, action, permission: addon.permission, requestId: String(body.requestId || ""), ok: false, error: redact(error.message || error) });
+      return json(res, 400, { ok: false, error: redact(error.message || error) });
+    }
   }
   if (action === "database.query" || action === "database.execute") {
     const query = String(body.query || "");
@@ -927,6 +997,9 @@ function scheduleConsoleRestart(port) {
     const helperName = `redblink-dune-console-restart-${Date.now()}`;
     const hostRepoRoot = process.env.DUNE_HOST_REPO_ROOT || config.repoRoot;
     const composeProjectName = process.env.DUNE_COMPOSE_PROJECT_NAME || process.env.COMPOSE_PROJECT_NAME || "dune-awakening-selfhost-docker";
+    const hostUid = process.env.DUNE_HOST_UID || String(process.getuid?.() ?? 0);
+    const hostGid = process.env.DUNE_HOST_GID || String(process.getgid?.() ?? 0);
+    const dockerSocketGid = process.env.DOCKER_SOCKET_GID || detectDockerSocketGid();
     const script = [
       "set -eu",
       "mkdir -p runtime/generated",
@@ -937,23 +1010,17 @@ function scheduleConsoleRestart(port) {
       "docker compose -f docker-compose.web.yml up -d redblink-dune-docker-console >> runtime/generated/console-restart.log 2>&1",
       `echo "[$(date -Is)] Dune Docker Console restart command finished" >> runtime/generated/console-restart.log`
     ].join("\n");
-    const child = spawn("docker", [
-      "run",
-      "--rm",
-      "-d",
-      "--name", helperName,
-      "--network", "host",
-      "-v", `${hostRepoRoot}:/repo`,
-      "-v", "/var/run/docker.sock:/var/run/docker.sock",
-      "-e", `ADMIN_BIND_PORT=${port}`,
-      "-e", `DUNE_HOST_REPO_ROOT=${hostRepoRoot}`,
-      "-e", `COMPOSE_PROJECT_NAME=${composeProjectName}`,
-      "-e", `DUNE_COMPOSE_PROJECT_NAME=${composeProjectName}`,
-      "-e", `DOCKER_SOCKET_GID=${process.env.DOCKER_SOCKET_GID || ""}`,
-      "-w", "/repo",
-      "redblink-dune-docker-console:dev",
-      "sh", "-lc", script
-    ], {
+    const child = spawn("docker", buildSelfUpdateHelperDockerArgs({
+      helperName,
+      hostRepoRoot,
+      composeProjectName,
+      helperImage: "redblink-dune-docker-console:dev",
+      hostUid,
+      hostGid,
+      dockerSocketGid,
+      extraEnv: [`ADMIN_BIND_PORT=${port}`],
+      command: script
+    }), {
       cwd: config.repoRoot,
       detached: true,
       stdio: "ignore",
@@ -1243,9 +1310,15 @@ async function userSettingsSchemaRoute(res) {
 
 async function userSettingsRawRoute(res, url) {
   const kind = String(url.searchParams.get("kind") || "engine");
-  const map = url.searchParams.get("map") || "Survival_1";
+  const map = kind === "client-game" ? (url.searchParams.get("map") || "") : (url.searchParams.get("map") || "Survival_1");
   const partitionId = url.searchParams.get("partitionId") || "";
-  const operation = kind === "profile" ? "userSettingsProfileRaw" : kind === "engine" ? "userSettingsRawEngine" : "userSettingsRawGame";
+  const operation = kind === "profile"
+    ? "userSettingsProfileRaw"
+    : kind === "client-game"
+      ? "userSettingsClientGameIni"
+      : kind === "engine"
+        ? "userSettingsRawEngine"
+        : "userSettingsRawGame";
   try {
     const result = await runDune(config, buildDuneArgs(operation, { map, partitionId }), { timeoutMs: 8000, redactOutput: false });
     return json(res, 200, { content: result.stdout || "" });
@@ -1330,8 +1403,8 @@ function restartPayload(scope, map, partitionId) {
 
 async function liveMapMemoryRoute(res) {
   try {
-    const rows = await memoryBalancer.readLiveRows();
-    return json(res, 200, { rows, sampledAt: new Date().toISOString() });
+    const snapshot = await memoryBalancer.readLiveSnapshot();
+    return json(res, 200, { rows: snapshot.rows, sampledAt: snapshot.sampledAt });
   } catch (error) {
     return json(res, 200, { rows: [], sampledAt: new Date().toISOString(), error: redact(error.message || error) });
   }
@@ -1599,15 +1672,48 @@ async function blueprintExportRoute(req, res, path) {
   }
 }
 
+async function blueprintBulkExportRoute(req, res) {
+  try {
+    const body = await readJson(req);
+    const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number))];
+    if (!ids.length || ids.some((id) => !Number.isSafeInteger(id) || id < 1)) return json(res, 400, { error: "Select at least one valid blueprint to export." });
+    if (ids.length > 500) return json(res, 400, { error: "A maximum of 500 blueprints can be exported at once." });
+
+    const usedNames = new Set();
+    const entries = [];
+    for (const id of ids) {
+      const data = await exportBlueprint(db, id);
+      const baseName = sanitizeBlueprintFilename(data.name || `blueprint_${id}`).replace(/\.json$/i, "") || `blueprint_${id}`;
+      let filename = `${baseName}.json`;
+      let suffix = 2;
+      while (usedNames.has(filename.toLowerCase())) filename = `${baseName}_${suffix++}.json`;
+      usedNames.add(filename.toLowerCase());
+      entries.push({ name: filename, content: Buffer.from(`${JSON.stringify(data, null, 2)}\n`, "utf8") });
+    }
+
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/T/, "-").slice(0, 15);
+    const archive = createZipArchive(entries);
+    res.writeHead(200, withSecurityHeaders({
+      "content-type": "application/zip",
+      "content-length": String(archive.length),
+      "content-disposition": `attachment; filename="blueprints-${stamp}.zip"`
+    }));
+    res.end(archive);
+  } catch (error) {
+    const status = error.unsupported ? 501 : 500;
+    return json(res, status, { ok: false, error: redact(error.message || error) });
+  }
+}
+
 async function blueprintImportRoute(req, res) {
   try {
     const { fields, files } = await readMultipartForm(req, 32 << 20);
     const playerIdStr = String(fields.player_id || "");
     const playerPawnId = Number(playerIdStr);
     if (!Number.isFinite(playerPawnId) || playerPawnId < 1) return json(res, 400, { error: "Invalid player_id" });
-    const fileEntry = Array.isArray(files.file) ? files.file[0] : files.file;
+    const fileEntry = Array.isArray(files) ? files.find((f) => f.fieldName === "file" && f.fileName) : files;
     if (!fileEntry) return json(res, 400, { error: "Blueprint file required" });
-    const fileContent = typeof fileEntry === "string" ? fileEntry : fileEntry.toString("utf-8");
+    const fileContent = typeof fileEntry.content !== "undefined" ? fileEntry.content : (typeof fileEntry === "string" ? fileEntry : fileEntry.toString("utf-8"));
     let blueprintFile;
     try {
       blueprintFile = JSON.parse(fileContent);
@@ -1620,7 +1726,7 @@ async function blueprintImportRoute(req, res) {
     if (!hasInstances && !hasPlaceables && !hasPentashields) {
       return json(res, 400, { error: "Blueprint has no instances, placeables, or pentashields" });
     }
-    const result = await importBlueprint(db, playerPawnId, blueprintFile);
+    const result = await importBlueprint(db, playerPawnId, blueprintFile, fileEntry.fileName || "");
     audit(config, req, "blueprints.import", { playerPawnId, result });
     return json(res, 200, result);
   } catch (error) {
@@ -1631,6 +1737,20 @@ async function blueprintImportRoute(req, res) {
 
 function sanitizeBlueprintFilename(s) {
   return String(s).replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, "_").trim() || "blueprint";
+}
+
+async function blueprintsDeleteRoute(req, res, path) {
+  const match = path.match(/^\/api\/blueprints\/([^/]+)$/);
+  const id = Number(match[1]);
+  if (!Number.isFinite(id) || id < 1) return json(res, 400, { ok: false, error: "Invalid blueprint ID" });
+  try {
+    const result = await deleteBlueprint(db, id);
+    audit(config, req, "blueprints.delete", { blueprintId: id, result });
+    return json(res, result.ok ? 200 : 404, result);
+  } catch (error) {
+    if (error.unsupported) return json(res, 501, { supported: false, error: redact(error.message || error) });
+    return json(res, 500, { ok: false, error: redact(error.message || error) });
+  }
 }
 
 async function directDbMutation(req, res, action, phrase, fn, meta = {}) {
@@ -1691,8 +1811,8 @@ async function giveSingleItemRoute(req, res, path, operation) {
     }
   }
   const item = operation === "adminGiveItemId"
-    ? { itemId: body.itemId, quantity: body.quantity, quality: body.quality, grade: body.grade, durability: body.durability, augments: body.augments }
-    : { itemName: body.itemName, quantity: body.quantity, quality: body.quality, grade: body.grade, durability: body.durability, augments: body.augments };
+    ? { itemId: body.itemId, quantity: body.quantity, quality: body.quality, grade: body.grade, durability: body.durability, augments: body.augments, augmentQuality: body.augmentQuality }
+    : { itemName: body.itemName, quantity: body.quantity, quality: body.quality, grade: body.grade, durability: body.durability, augments: body.augments, augmentQuality: body.augmentQuality };
   try {
     const target = await resolvePlayerGrantTarget(playerId);
     const result = await grantPlayerItem(playerId, item, target);
@@ -1709,7 +1829,8 @@ async function grantPlayerItem(playerId, item, target) {
   const operation = resolved.itemId ? "adminGiveItemId" : "adminGiveItem";
   const hasExplicitGrade = item.quality !== undefined || item.grade !== undefined;
   const selectedGrade = hasExplicitGrade ? validateGrantGrade(item.quality ?? item.grade) : undefined;
-  const usesDatabaseGrant = (selectedGrade !== undefined && selectedGrade > 0) || itemRequiresDatabaseGrant(resolved) || (item.augments && item.augments.length > 0);
+  const selectedAugmentGrade = item.augmentQuality === undefined ? 1 : validateAugmentGrantGrade(item.augmentQuality);
+  const usesDatabaseGrant = !target.online || (selectedGrade !== undefined && selectedGrade > 0) || itemRequiresDatabaseGrant(resolved) || (item.augments && item.augments.length > 0);
   const databaseGrade = hasExplicitGrade ? selectedGrade : 0;
   const payload = {
     playerId: target.actionId || playerId,
@@ -1718,10 +1839,15 @@ async function grantPlayerItem(playerId, item, target) {
     quantity: item.quantity ?? 1,
     quality: hasExplicitGrade ? selectedGrade : undefined,
     durability: 1,
-    augments: item.augments || []
+    augments: item.augments || [],
+    augmentQuality: selectedAugmentGrade
   };
+  const liveAugmentRefreshWarning = "Augments were written to the database. If the player was online, the weapon may need a relog before the augment slots appear in-game.";
   if (usesDatabaseGrant) {
     if (!config.mockMode && !target.actorId) throw new Error("A database actor ID is required to grant graded items, schematics, and augments");
+    if (!config.mockMode && payload.augments.length > 0 && target.online) {
+      throw new Error("Pre-augmented item grants require the player to be offline. Grade 0 items with no augments can be granted while the player is online. Item Grades 1-5 or Augment Grades 1-5 require the player to be offline.");
+    }
     const result = config.mockMode
       ? { ok: true, inserted: { template_id: resolved.itemId || payload.itemName, stack_size: payload.quantity, quality_level: databaseGrade } }
       : await duneDb.giveItemToPlayer(db, target.actorId, {
@@ -1729,9 +1855,16 @@ async function grantPlayerItem(playerId, item, target) {
           itemName: payload.itemName,
           quantity: payload.quantity,
           quality: databaseGrade,
-          augments: payload.augments
+          augments: payload.augments,
+          augmentQuality: payload.augmentQuality
         });
-    return { ok: true, operation: "dbGiveItemToPlayer", item: { ...payload, quality: databaseGrade }, result };
+    return {
+      ok: true,
+      operation: "dbGiveItemToPlayer",
+      item: { ...payload, quality: databaseGrade },
+      result,
+      warning: target.online && payload.augments.length > 0 ? liveAugmentRefreshWarning : undefined
+    };
   }
   const command = buildDuneArgs(operation, payload);
   if (config.mockMode) return { ok: true, operation, command };
@@ -1748,9 +1881,33 @@ async function grantPlayerItem(playerId, item, target) {
   };
 }
 
+async function augmentNewestPlayerItemWithRetry(actorId, templateId, options) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const result = await duneDb.augmentNewestPlayerItem(db, actorId, templateId, options);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 650));
+      const state = await duneDb.playerItemAugmentState(db, actorId, result.itemId, options.augments || []);
+      if (state.ok) return { ...result, verified: true };
+      lastError = new Error(`${templateId} augment patch was overwritten or incomplete; retrying`);
+    } catch (error) {
+      lastError = error;
+      if (!/new inventory row was not found/i.test(String(error?.message || error))) throw error;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+  }
+  throw lastError;
+}
+
 function validateGrantGrade(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 0 || n > 5) throw new Error("Expected item grade 0-5");
+  return n;
+}
+
+function validateAugmentGrantGrade(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 1 || n > 5) throw new Error("Expected augment grade 1-5");
   return n;
 }
 
@@ -1906,14 +2063,24 @@ async function logsRoute(req, res, path) {
   }
   if (parts[4] === "stream") {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    const controller = new AbortController();
+    const disconnected = () => controller.abort();
+    res.once("close", disconnected);
     try {
       await readLogs(service, {
         follow: true,
         timeoutMs: 30 * 60 * 1000,
-        onLine: (line) => res.write(`data: ${JSON.stringify({ line })}\n\n`)
+        captureOutput: false,
+        signal: controller.signal,
+        onLine: (line) => {
+          if (!res.destroyed) res.write(`data: ${JSON.stringify({ line })}\n\n`);
+        }
       });
     } catch (error) {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: redact(error.message) })}\n\n`);
+      if (!res.destroyed) res.write(`event: error\ndata: ${JSON.stringify({ error: redact(error.message) })}\n\n`);
+    } finally {
+      res.off("close", disconnected);
+      if (!res.destroyed && !res.writableEnded) res.end();
     }
     return;
   }
@@ -1945,6 +2112,7 @@ async function setupState() {
   return {
     config: publicConfig(config),
     serverConfig: readSetupConfigValues(),
+    publicDirectory: publicDirectorySettings(),
     files: {
       env,
       token,
@@ -1953,6 +2121,23 @@ async function setupState() {
       initialized,
       duneScript: existsSync(config.duneScript)
     }
+  };
+}
+
+function publicDirectorySettings() {
+  const settings = readDirectorySettings(config.repoRoot);
+  const reporter = publicDirectory.publicState();
+  return {
+    available: settings.mode === "public",
+    enabled: settings.mode === "public" && settings.enabled,
+    discordInvite: settings.discordInvite,
+    mode: settings.mode,
+    state: reporter.state || (settings.mode === "public" ? "pending" : "local-only"),
+    lastSuccessAt: reporter.lastSuccessAt || null,
+    error: reporter.error || null,
+    probeEndpoint: reporter.probeEndpoint || null,
+    probeState: reporter.probeState || (settings.enabled ? "pending" : "disabled"),
+    probeError: reporter.probeError || null
   };
 }
 
@@ -2130,6 +2315,39 @@ async function writeConfig(req, res) {
   }
   audit(config, req, "setup.write-config", { keys: Object.keys(body).filter((key) => allowed.includes(key)) });
   return json(res, 200, { ok: true });
+}
+
+async function publicDirectorySettingsRoute(req, res) {
+  const body = await readJson(req);
+  const hasEnabled = Object.hasOwn(body, "enabled");
+  const hasDiscordInvite = Object.hasOwn(body, "discordInvite");
+  if (!hasEnabled && !hasDiscordInvite) {
+    return json(res, 400, { error: "No public listing setting was provided." });
+  }
+  if (hasEnabled && typeof body.enabled !== "boolean") {
+    return json(res, 400, { error: "Server listing enabled must be true or false." });
+  }
+  const current = readDirectorySettings(config.repoRoot);
+  if (current.mode !== "public") {
+    return json(res, 409, { error: "Server listing is available only when the server is running in public mode." });
+  }
+  let discordInvite = current.discordInvite;
+  if (hasDiscordInvite) {
+    discordInvite = normalizeDiscordInvite(body.discordInvite);
+    if (discordInvite === null) {
+      return json(res, 400, { error: "Enter a valid discord.gg or discord.com/invite link." });
+    }
+    updateEnvFileValue("DUNE_PUBLIC_DIRECTORY_DISCORD_INVITE", discordInvite);
+  }
+  if (hasEnabled) {
+    updateEnvFileValue("DUNE_PUBLIC_DIRECTORY_ENABLED", body.enabled ? "true" : "false");
+  }
+  audit(config, req, "settings.public-directory", {
+    enabled: hasEnabled ? body.enabled : current.enabled,
+    discordInviteConfigured: Boolean(discordInvite)
+  });
+  await publicDirectory.tick();
+  return json(res, 200, { ok: true, publicDirectory: publicDirectorySettings() });
 }
 
 async function saveToken(req, res) {

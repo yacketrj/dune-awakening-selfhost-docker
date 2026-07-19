@@ -1,5 +1,5 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { Archive, Database, FileText, Gift, Heart, Home, Landmark, Map as MapIcon, MessageCircle, PackagePlus, RefreshCw, Server, Settings, Shield, Sparkles, Users } from "lucide-react";
+import { Archive, Database, ExternalLink, FileText, Gift, Heart, Home, Landmark, Map as MapIcon, MessageCircle, PackagePlus, RefreshCw, Server, Settings, Shield, Sparkles, Users } from "lucide-react";
 import { api, post, setCsrfToken } from "./api/client";
 import { serverApi } from "./api/server";
 import { updatesApi } from "./api/updates";
@@ -124,6 +124,7 @@ const navGroups: { title: string; items: { tab: Tab; icon: React.ReactNode }[] }
 ];
 
 const COMMUNITY_CONTRIBUTORS_URL = "https://github.com/Red-Blink/dune-awakening-selfhost-docker/graphs/contributors";
+const DUNE_DOCKER_WEBSITE_URL = "https://dunedocker.app/";
 const REDBLINK_DISCORD_URL = "https://discord.gg/9pQqytu6BU";
 const REDBLINK_KOFI_URL = "https://ko-fi.com/redblink";
 
@@ -142,11 +143,17 @@ function KofiLogo({ size = 18 }: { size?: number }) {
 function AppFooter() {
   return (
     <footer className="app-footer">
-      <Heart size={16} fill="currentColor" />
-      <span>
-        Created with love by RedBlink ·{" "}
-        <a href={COMMUNITY_CONTRIBUTORS_URL} target="_blank" rel="noreferrer">Community Contributors</a>
-      </span>
+      <div className="app-footer-credit">
+        <Heart size={16} fill="currentColor" />
+        <span>
+          Created with love by RedBlink ·{" "}
+          <a href={COMMUNITY_CONTRIBUTORS_URL} target="_blank" rel="noreferrer">Community Contributors</a>
+        </span>
+      </div>
+      <a className="app-footer-directory" href={DUNE_DOCKER_WEBSITE_URL} target="_blank" rel="noreferrer">
+        <span>DuneDocker.app · Public Server Directory</span>
+        <ExternalLink size={14} aria-hidden="true" />
+      </a>
     </footer>
   );
 }
@@ -353,7 +360,7 @@ export function App() {
       }
       const restartReady = isRestartLifecycleReady(homeRunningAction, stackRestartLifecycle.current);
       if (homeRunningAction === "stop" && isHomeStopComplete(statusText, readinessText)) {
-        setHomeTaskResult({ status: "stopped", title: "Server Stopped" });
+        setHomeTaskResult({ status: "stopped", title: "Battlegroup Stopped" });
         setHomeRunningAction("");
       } else if (homeRunningAction === "restart" && restartReady) {
         setHomeRestartStarted(true);
@@ -365,7 +372,7 @@ export function App() {
       } else if (homeRunningAction === "start" && elapsedMs >= 8000 && isHomeActionComplete(statusText, readinessText)) {
         stackActionReadyPolls.current += 1;
         if (stackActionReadyPolls.current >= 2) {
-          setHomeTaskResult({ status: "succeeded", title: "Server Started Successfully" });
+          setHomeTaskResult({ status: "succeeded", title: "Battlegroup Started Successfully" });
           setHomeRunningAction("");
         } else {
           setHomeTaskResult(stackActionPendingResult(homeRunningAction, "confirming"));
@@ -417,7 +424,8 @@ export function App() {
       <main className="login-screen">
         <form className="login-panel" onSubmit={(event) => { event.preventDefault(); void safe(login); }}>
           <h1>Dune Docker Console</h1>
-          <p>Spice Clearance Required</p>
+          <img className="login-logo" src="/dune-docker-logo.png" alt="Dune Docker Console logo" />
+          <p>Beyond the Dunes, Every Choice Shapes the Future</p>
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Admin Password" />
           <button type="submit">Sign In</button>
           {error && <p className="error">{error}</p>}

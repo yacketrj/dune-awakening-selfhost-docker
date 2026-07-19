@@ -85,6 +85,7 @@ function repairRootOwnedHostState(repoRoot) {
     resolve(repoRoot, "runtime/generated/message-of-the-day-state.json"),
     resolve(repoRoot, "runtime/generated/player-announcements.json"),
     resolve(repoRoot, "runtime/generated/player-announcements-state.json"),
+    resolve(repoRoot, "runtime/generated/public-directory-status.json"),
     resolve(repoRoot, "runtime/generated/restart-schedule.env"),
     resolve(repoRoot, "runtime/generated/shutdown-protection.env"),
     resolve(repoRoot, "runtime/generated/sietch-config.json"),
@@ -97,10 +98,12 @@ function repairRootOwnedHostState(repoRoot) {
     resolve(repoRoot, "runtime/generated/care-package-pending-returns.json"),
     resolve(repoRoot, "runtime/addons"),
     resolve(repoRoot, "runtime/addons/downloads"),
+    resolve(repoRoot, "runtime/addons/grant-receipts"),
     resolve(repoRoot, "runtime/addons/installed"),
     resolve(repoRoot, "runtime/addons/staging"),
     resolve(repoRoot, "runtime/addons/state.json"),
-    resolve(repoRoot, "runtime/secrets/funcom-token.txt")
+    resolve(repoRoot, "runtime/secrets/funcom-token.txt"),
+    resolve(repoRoot, "runtime/secrets/public-directory.json")
   ]) {
     try {
       if (existsSync(path)) chownSync(path, owner.uid, owner.gid);

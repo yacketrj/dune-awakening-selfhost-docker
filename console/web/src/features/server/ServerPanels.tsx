@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { Play } from "lucide-react";
+import { Play, Trash2 } from "lucide-react";
 import { serverApi, type PerformanceSnapshot } from "../../api/server";
 import { setupApi, type Task } from "../../api/setup";
 import { PortChecklist } from "../../components/PortChecklist";
@@ -135,21 +135,21 @@ export function HomePanel({ status, readiness, taskResult, setTaskResult, funcom
         } else if (runningAction === "start" && isHomeActionComplete(statusText, readinessText)) {
           homeActionReadyPolls.current += 1;
           if (homeActionReadyPolls.current >= 2) {
-            setTaskResult({ status: "succeeded", title: "Server Started Successfully" });
+            setTaskResult({ status: "succeeded", title: "Battlegroup Started Successfully" });
             setHomeAction("");
           } else {
             setTaskResult(stackActionPendingResult(runningAction, "confirming"));
           }
         } else if (runningAction === "stop" && loadedState.stopped) {
-          setTaskResult({ status: "stopped", title: "Server Stopped" });
+          setTaskResult({ status: "stopped", title: "Battlegroup Stopped" });
           setHomeAction("");
         } else if (runningAction === "start" || runningAction === "restart") {
           homeActionReadyPolls.current = 0;
         }
         if (taskResult?.status === "failed" && (!/restart/i.test(taskResult.title) || restartReady) && isHomeActionComplete(statusText, readinessText)) {
-          setTaskResult({ status: "succeeded", title: /restart/i.test(taskResult.title) ? "Battlegroup Restarted Successfully" : "Server Started Successfully" });
+          setTaskResult({ status: "succeeded", title: /restart/i.test(taskResult.title) ? "Battlegroup Restarted Successfully" : "Battlegroup Started Successfully" });
         } else if (taskResult?.status === "failed" && loadedState.stopped && /stop/i.test(taskResult.title)) {
-          setTaskResult({ status: "stopped", title: "Server Stopped" });
+          setTaskResult({ status: "stopped", title: "Battlegroup Stopped" });
         }
       } else {
         setLocalError(friendlyHomeStatusError(result.statusError || result.readinessError || "Server status and readiness checks failed."));
@@ -162,14 +162,14 @@ export function HomePanel({ status, readiness, taskResult, setTaskResult, funcom
   }
 
   async function runServerAction(action: "start" | "stop" | "restart") {
-    if (action === "stop" && !(await confirmAction("Stop the Dune server console?"))) return;
+    if (action === "stop" && !(await confirmAction("Stop the battlegroup?"))) return;
     if (action === "restart" && !(await confirmAction("Restart the battlegroup?"))) return;
     const actionRunId = ++homeActionRunId.current;
     homeActionStartedAt.current = Date.now();
     let commandAction = action;
     const copy = {
-      start: { running: "Starting", success: "Server Started Successfully", failure: "Start Failed" },
-      stop: { running: "Stopping", success: "Server Stopped", failure: "Server stop failed." },
+      start: { running: "Starting", success: "Battlegroup Started Successfully", failure: "Battlegroup Start Failed" },
+      stop: { running: "Stopping", success: "Battlegroup Stopped", failure: "Battlegroup stop failed." },
       restart: { running: "Restarting Battlegroup", success: "Battlegroup Restarted Successfully", failure: "Battlegroup Restart Failed" }
     }[action];
     setLocalError("");
@@ -280,14 +280,14 @@ export function HomePanel({ status, readiness, taskResult, setTaskResult, funcom
       const restartReady = isRestartLifecycleReady(currentAction, homeRestartLifecycle.current);
       const elapsedMs = Date.now() - homeActionStartedAt.current;
       if (currentAction === "stop" && isHomeStopComplete(statusText, readinessText)) {
-        setTaskResult({ status: "stopped", title: "Server Stopped" });
+        setTaskResult({ status: "stopped", title: "Battlegroup Stopped" });
         setHomeAction("");
       } else if (currentAction === "restart" && restartReady) {
         if (isHomeActionComplete(statusText, readinessText)) setHomeAction("");
       } else if (currentAction === "start" && elapsedMs >= 8000 && isHomeActionComplete(statusText, readinessText)) {
         homeActionReadyPolls.current += 1;
         if (homeActionReadyPolls.current >= 2) {
-          setTaskResult({ status: "succeeded", title: "Server Started Successfully" });
+          setTaskResult({ status: "succeeded", title: "Battlegroup Started Successfully" });
           setHomeAction("");
         } else {
           setTaskResult(stackActionPendingResult(currentAction, "confirming"));
@@ -412,7 +412,7 @@ export function HomePanel({ status, readiness, taskResult, setTaskResult, funcom
         <p>Use this dashboard for setup, service health, logs, backups, updates, and player admin actions.</p>
         <div className="action-row">
           <button className={loading ? "refresh-status-button refreshing" : "refresh-status-button"} disabled={refreshDisabled} onClick={() => refresh()}>{loading ? <span className="loading-dots">Refreshing</span> : "Refresh Status"}</button>
-          <button disabled={startDisabled} title={controlsState.running ? "Server is already running." : ""} onClick={() => runServerAction("start")}><Play size={16} /> Start</button>
+          <button disabled={startDisabled} title={controlsState.running ? "Battlegroup is already running." : ""} onClick={() => runServerAction("start")}><Play size={16} /> Start</button>
           <button disabled={stopDisabled} onClick={() => runServerAction("stop")}>Stop</button>
           <button disabled={restartDisabled} onClick={() => runServerAction("restart")}>Restart Battlegroup</button>
         </div>
@@ -528,6 +528,8 @@ export function ServerPanel(props: {
   const [serviceRestartResult, setServiceRestartResult] = useState<HomeTaskResult | null>(null);
   const [serviceRestartingService, setServiceRestartingService] = useState("");
   const [networkBindResult, setNetworkBindResult] = useState<HomeTaskResult | null>(null);
+  const [storageCleanupResult, setStorageCleanupResult] = useState<HomeTaskResult | null>(null);
+  const [storageCleanupOperation, setStorageCleanupOperation] = useState<"" | "images" | "build-cache">("");
   const [doctorLoading, setDoctorLoading] = useState(!props.doctor);
   const [doctorError, setDoctorError] = useState("");
   const controlActionRunId = useRef(0);
@@ -535,6 +537,7 @@ export function ServerPanel(props: {
   const controlActionReadyPolls = useRef(0);
   const controlRestartLifecycle = useRef<RestartLifecycleState>(createRestartLifecycleState());
   const serviceRestartRunId = useRef(0);
+  const doctorRequestId = useRef(0);
   const { taskResult, setTaskResult, funcomTokenResult, setFuncomTokenResult, runningAction, setRunningAction, confirmAction } = props;
   const activeControlAction = useRef<"start" | "stop" | "restart" | "">(runningAction);
   const actionRunning = Boolean(runningAction);
@@ -542,6 +545,7 @@ export function ServerPanel(props: {
   const titleSaving = titleResult?.status === "running";
   const funcomTokenSaving = funcomTokenResult?.status === "running";
   const scheduleSaving = scheduleResult?.status === "running";
+  const storageCleanupRunning = storageCleanupResult?.status === "running";
   const restartScheduleValues = parseKeyValueText(restartSchedule?.stdout || "");
   const scheduleTimerValue = restartScheduleValues.systemd_timer || "";
   const scheduleTimerLabel = scheduleTimerValue ? formatTimerStatus(scheduleTimerValue) : "Not Installed";
@@ -564,6 +568,7 @@ export function ServerPanel(props: {
     setRunningAction(action);
   }
   async function loadControlStatus(includeDiagnostics = false): Promise<HomeLoadResult> {
+    const currentDoctorRequestId = includeDiagnostics ? ++doctorRequestId.current : 0;
     if (includeDiagnostics) {
       setDoctorLoading(true);
       setDoctorError("");
@@ -591,10 +596,10 @@ export function ServerPanel(props: {
       result.readinessError = nextReadiness.reason instanceof Error ? nextReadiness.reason.message : String(nextReadiness.reason);
     }
     if (nextPorts?.status === "fulfilled") props.setPorts(nextPorts.value.stdout);
-    if (nextDoctor?.status === "fulfilled") {
+    if (nextDoctor?.status === "fulfilled" && currentDoctorRequestId === doctorRequestId.current) {
       props.setDoctor(nextDoctor.value.stdout || nextDoctor.value.stderr || "");
       setDoctorLoading(false);
-    } else if (nextDoctor) {
+    } else if (nextDoctor?.status === "rejected" && currentDoctorRequestId === doctorRequestId.current) {
       setDoctorError(nextDoctor.reason instanceof Error ? nextDoctor.reason.message : String(nextDoctor.reason));
       setDoctorLoading(false);
     }
@@ -679,21 +684,71 @@ export function ServerPanel(props: {
       setNetworkBindResult({ status: "failed", title: "Fix Failed", details: error instanceof Error ? error.message : String(error) });
     }
   }
+  async function cleanupDockerStorage(operation: "images" | "build-cache") {
+    const buildCache = operation === "build-cache";
+    const confirmed = await confirmAction(
+      buildCache
+        ? "Remove all unused Docker build cache? This does not remove running containers, images, volumes, databases, game files, or backups. Docker protects cache used by active builds. Build cache is shared across this Docker host, and future image rebuilds may take longer after cleanup."
+        : "Remove obsolete Dune/Funcom and old Dune Docker Console images? Current images, images used by any container, volumes, databases, game files, and backups are protected. Unrelated Docker images are not removed.",
+      {
+        title: buildCache ? "Clean Docker Build Cache?" : "Clean Obsolete Dune Images?",
+        confirmLabel: buildCache ? "Clean Build Cache" : "Clean Images",
+        cancelLabel: "Cancel",
+        danger: true
+      }
+    );
+    if (!confirmed) return;
+
+    setStorageCleanupOperation(operation);
+    setStorageCleanupResult({
+      status: "running",
+      title: buildCache ? "Cleaning Docker Build Cache" : "Cleaning Obsolete Dune Images",
+      message: buildCache ? "Removing unused Docker build cache." : "Removing obsolete project-owned images while protecting current and in-use images."
+    });
+    props.onError("");
+    try {
+      const response = buildCache ? await serverApi.cleanupDockerBuildCache() : await serverApi.cleanupDockerImages();
+      const final = await waitForTaskSilently(response.task);
+      const details = taskTechnicalDetails(final);
+      await loadControlStatus(true).catch(() => null);
+      setStorageCleanupResult(final.status === "succeeded"
+        ? {
+            status: "succeeded",
+            title: buildCache ? "Build Cache Cleaned" : "Obsolete Images Cleaned",
+            message: buildCache ? "Unused Docker build cache was cleaned." : "Obsolete Dune images were cleaned. Protected and unrelated images were left intact.",
+            details
+          }
+        : {
+            status: "failed",
+            title: buildCache ? "Build Cache Cleanup Failed" : "Image Cleanup Failed",
+            message: "Review the task details before trying again.",
+            details
+          });
+    } catch (error) {
+      setStorageCleanupResult({
+        status: "failed",
+        title: buildCache ? "Build Cache Cleanup Failed" : "Image Cleanup Failed",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setStorageCleanupOperation("");
+    }
+  }
   async function loadControlVisibleSections() {
     const [statusResult, portsResult] = await Promise.allSettled([loadControlStatus(false), serverApi.ports()]);
     if (portsResult.status === "fulfilled") props.setPorts(portsResult.value.stdout);
     if (statusResult.status === "rejected") throw statusResult.reason;
   }
   async function runServerAction(action: "start" | "stop" | "restart") {
-    if (action === "stop" && !(await confirmAction("Stop the Dune server console?"))) return;
+    if (action === "stop" && !(await confirmAction("Stop the battlegroup?"))) return;
     if (action === "restart" && !(await confirmAction("Restart the battlegroup?"))) return;
     serviceRestartRunId.current += 1;
     setServiceRestartingService("");
     const actionRunId = ++controlActionRunId.current;
     controlActionStartedAt.current = Date.now();
     const copy = {
-      start: { running: "Starting", success: "Server Started Successfully", failure: "Start Failed" },
-      stop: { running: "Stopping", success: "Server Stopped", failure: "Server stop failed." },
+      start: { running: "Starting", success: "Battlegroup Started Successfully", failure: "Battlegroup Start Failed" },
+      stop: { running: "Stopping", success: "Battlegroup Stopped", failure: "Battlegroup stop failed." },
       restart: { running: "Restarting Battlegroup", success: "Battlegroup Restarted Successfully", failure: "Battlegroup Restart Failed" }
     }[action];
     props.onError("");
@@ -845,14 +900,14 @@ export function ServerPanel(props: {
       const restartReady = isRestartLifecycleReady(currentAction, controlRestartLifecycle.current);
       const elapsedMs = Date.now() - controlActionStartedAt.current;
       if (currentAction === "stop" && isHomeStopComplete(statusText, readinessText)) {
-        setTaskResult({ status: "stopped", title: "Server Stopped" });
+        setTaskResult({ status: "stopped", title: "Battlegroup Stopped" });
         setControlAction("");
       } else if (currentAction === "restart" && restartReady) {
         if (isHomeActionComplete(statusText, readinessText)) setControlAction("");
       } else if (currentAction === "start" && elapsedMs >= 8000 && isHomeActionComplete(statusText, readinessText)) {
         controlActionReadyPolls.current += 1;
         if (controlActionReadyPolls.current >= 2) {
-          setTaskResult({ status: "succeeded", title: "Server Started Successfully" });
+          setTaskResult({ status: "succeeded", title: "Battlegroup Started Successfully" });
           setControlAction("");
         } else {
           setTaskResult(stackActionPendingResult(currentAction, "confirming"));
@@ -909,8 +964,9 @@ export function ServerPanel(props: {
     let active = true;
     const id = window.setInterval(async () => {
       if (!active) return;
+      const currentDoctorRequestId = ++doctorRequestId.current;
       const result = await serverApi.doctor().catch(() => null);
-      if (!active) return;
+      if (!active || currentDoctorRequestId !== doctorRequestId.current) return;
       if (result) {
         props.setDoctor(result.stdout || result.stderr || "");
         setDoctorError("");
@@ -971,6 +1027,11 @@ export function ServerPanel(props: {
     const id = window.setTimeout(() => setNetworkBindResult(null), 14000);
     return () => window.clearTimeout(id);
   }, [networkBindResult?.status, networkBindResult?.title]);
+  useEffect(() => {
+    if (!storageCleanupResult || storageCleanupResult.status === "running") return;
+    const id = window.setTimeout(() => setStorageCleanupResult(null), 10400);
+    return () => window.clearTimeout(id);
+  }, [storageCleanupResult?.status, storageCleanupResult?.title]);
   return (
     <section className="panel server-control-panel">
       <h2>Server Controls</h2>
@@ -1023,10 +1084,14 @@ export function ServerPanel(props: {
         loading={doctorLoading}
         error={doctorError}
         onFixBinding={fixNetworkBinding}
+        onCleanupImages={() => { void cleanupDockerStorage("images"); }}
+        onCleanupBuildCache={() => { void cleanupDockerStorage("build-cache"); }}
         fixingBinding={networkBindResult?.status === "running"}
-        fixDisabled={actionRunning || serviceRestartRunning || titleSaving || funcomTokenSaving || scheduleSaving}
+        cleanupOperation={storageCleanupOperation}
+        fixDisabled={actionRunning || serviceRestartRunning || titleSaving || funcomTokenSaving || scheduleSaving || storageCleanupRunning}
       />
       {networkBindResult && <HomeTaskResultCard result={networkBindResult} />}
+      {storageCleanupResult && <HomeTaskResultCard result={storageCleanupResult} />}
     </section>
   );
 }
@@ -1230,13 +1295,16 @@ function HomeHealthCards({ status, readiness, readinessWarning, loading, running
   </div>;
 }
 
-function DoctorSummary({ text, readiness, loading, error, onFixBinding, fixingBinding, fixDisabled }: {
+function DoctorSummary({ text, readiness, loading, error, onFixBinding, onCleanupImages, onCleanupBuildCache, fixingBinding, cleanupOperation, fixDisabled }: {
   text: string;
   readiness: string;
   loading: boolean;
   error: string;
   onFixBinding: () => void;
+  onCleanupImages: () => void;
+  onCleanupBuildCache: () => void;
   fixingBinding: boolean;
+  cleanupOperation: "" | "images" | "build-cache";
   fixDisabled: boolean;
 }) {
   const readinessHealthy = /^READY:/m.test(readiness);
@@ -1251,6 +1319,8 @@ function DoctorSummary({ text, readiness, loading, error, onFixBinding, fixingBi
     {issues.length > 0 && <div className="check-grid">{issues.map((issue, index) => {
       const advice = doctorAdvice(issue);
       const canFixBinding = isPublicIpBindIssue(issue);
+      const canCleanupImages = isDockerImageCleanupIssue(issue);
+      const canCleanupBuildCache = isDockerBuildCacheCleanupIssue(issue);
       return <article className="check-card" key={`${issue}-${index}`}>
         <div>
           <strong>{advice.title}</strong>
@@ -1258,6 +1328,12 @@ function DoctorSummary({ text, readiness, loading, error, onFixBinding, fixingBi
           {advice.nextStep && <span className="muted">{advice.nextStep}</span>}
           {canFixBinding && <div className="action-row compact-action-row">
             <button disabled={fixingBinding || fixDisabled} onClick={onFixBinding}>{fixingBinding ? "Fixing..." : "Fix Binding"}</button>
+          </div>}
+          {canCleanupImages && <div className="action-row compact-action-row">
+            <button disabled={Boolean(cleanupOperation) || fixDisabled} onClick={onCleanupImages}><Trash2 size={15} /> {cleanupOperation === "images" ? "Cleaning..." : "Clean Images"}</button>
+          </div>}
+          {canCleanupBuildCache && <div className="action-row compact-action-row">
+            <button disabled={Boolean(cleanupOperation) || fixDisabled} onClick={onCleanupBuildCache}><Trash2 size={15} /> {cleanupOperation === "build-cache" ? "Cleaning..." : "Clean Build Cache"}</button>
           </div>}
         </div>
         <StatusPill value="WARN" />
@@ -1296,6 +1372,18 @@ function doctorAdvice(issue: string) {
     nextStep: "Review Setup -> Server Identity and Network/Ports for Local vs Public mode.",
     status: "WARN"
   };
+  if (isDockerImageCleanupIssue(issue)) return {
+    title: "Obsolete Docker images can be cleaned",
+    message: clean,
+    nextStep: "Clean Images removes obsolete project-owned images while protecting current, in-use, and unrelated images.",
+    status: "WARN"
+  };
+  if (isDockerBuildCacheCleanupIssue(issue)) return {
+    title: "Unused Docker build cache can be cleaned",
+    message: clean,
+    nextStep: "Clean Build Cache removes unused build cache. Docker protects active builds, containers, images, volumes, databases, game files, and backups.",
+    status: "WARN"
+  };
   return {
     title: "Diagnostic Warning",
     message: clean,
@@ -1306,6 +1394,14 @@ function doctorAdvice(issue: string) {
 
 function isPublicIpBindIssue(issue: string) {
   return /public ip bind risk|ip_nonlocal_bind=1/i.test(issue);
+}
+
+function isDockerImageCleanupIssue(issue: string) {
+  return /Docker has .*reclaimable images|obsolete project-owned image/i.test(issue);
+}
+
+function isDockerBuildCacheCleanupIssue(issue: string) {
+  return /Docker has .*reclaimable build cache/i.test(issue);
 }
 
 function parseKeyValueText(text: string) {

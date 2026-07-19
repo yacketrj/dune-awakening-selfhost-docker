@@ -3,10 +3,12 @@ WORKDIR /app/web
 COPY console/web/package.json ./
 COPY console/web/package-lock.json ./
 RUN npm ci
+COPY runtime/data/augment-compatibility.json /runtime/data/augment-compatibility.json
 COPY console/web ./
 RUN npm run build
 
 FROM node:20-bookworm
+LABEL io.github.red-blink.dune-selfhost.component="console"
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -46,5 +48,12 @@ COPY console/api/package-lock.json ./
 RUN npm ci --omit=dev
 COPY console/api/src ./src
 COPY --from=web-build /app/web/dist /app/web-dist
+COPY console/api/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && useradd -m -s /bin/bash dune \
+    && mkdir -p /repo /app \
+    && chmod 755 /app /repo
+USER dune
 WORKDIR /repo
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", "/app/src/server.js"]

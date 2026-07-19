@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Grid2X2, List, Lock } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Grid2X2, List, Lock } from "lucide-react";
 import { mapsApi, type LiveMapMemoryRow, type MapRuntimeSettings, type MemoryBalancerState, type SpicefieldTypeRow, type UserSettingField, type UserSettingsSchema } from "../../api/maps";
 import { setupApi, type Task } from "../../api/setup";
 import { SecretInput } from "../../components/SecretInput";
@@ -9,6 +9,7 @@ import { titleCaseWords } from "../players/playerAdminUtils";
 
 type HomeTaskResult = { status: "running" | "succeeded" | "failed" | "stopped"; title: string; message?: string; details?: string };
 type MapsResultScope = "maps" | "modifiers";
+type MapsTaskQueueState = { phase: "queued" | "running"; title: string };
 type MapsTaskOptions = {
   memoryUpdates?: Array<{ map: string; partitionId?: string; memory: string }>;
   resultScope?: MapsResultScope;
@@ -33,7 +34,7 @@ type MapsPanelProps = {
   taskTechnicalDetails: (task: Task) => string;
 };
 const LIVE_MEMORY_STALE_GRACE_MS = 20000;
-const LIVE_MEMORY_REFRESH_MS = 5000;
+const LIVE_MEMORY_REFRESH_MS = 15000;
 const MAP_RUNTIME_REFRESH_MS = 15000;
 type CachedLiveMemoryRow = { row: LiveMapMemoryRow; sampledAt: number };
 
@@ -261,9 +262,13 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
   const [mapsResult, setMapsResult] = useState<HomeTaskResult | null>(() => loadPersistedMapsResult());
   const [mapsResultScope, setMapsResultScope] = useState<MapsResultScope>(() => loadPersistedMapsResultScope());
   const [mapsResultTarget, setMapsResultTarget] = useState("");
+  const [mapsTaskQueueStates, setMapsTaskQueueStates] = useState<Record<string, MapsTaskQueueState>>({});
   const mapsLoadRef = useRef<Promise<void> | null>(null);
   const mapsRuntimeRefreshRef = useRef<Promise<void> | null>(null);
   const mapsDisplayedTerminalTaskRef = useRef<Set<string>>(new Set());
+  const mapsTaskQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const mapsQueuedTargetsRef = useRef<Set<string>>(new Set());
+  const mapsAnonymousTaskIdRef = useRef(0);
   const liveMemoryCacheRef = useRef<Map<string, CachedLiveMemoryRow>>(new globalThis.Map());
   async function run(action: () => Promise<unknown>) {
     onError("");
@@ -273,7 +278,40 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
     if (!updates.length) return;
     setMemoryText((current) => updateMemoryStatusText(current, updates));
   }
+  async function enqueueMapsTask(resultTarget: string, title: string, action: () => Promise<void>) {
+    const trackedTarget = resultTarget.trim();
+    if (trackedTarget && mapsQueuedTargetsRef.current.has(trackedTarget)) return;
+    const queueId = trackedTarget || `task:${++mapsAnonymousTaskIdRef.current}`;
+    mapsQueuedTargetsRef.current.add(queueId);
+    if (trackedTarget) {
+      setMapsTaskQueueStates((current) => ({ ...current, [trackedTarget]: { phase: "queued", title } }));
+    }
+    const queuedTask = mapsTaskQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (trackedTarget) {
+          setMapsTaskQueueStates((current) => ({ ...current, [trackedTarget]: { phase: "running", title } }));
+        }
+        try {
+          await action();
+        } finally {
+          mapsQueuedTargetsRef.current.delete(queueId);
+          if (trackedTarget) {
+            setMapsTaskQueueStates((current) => {
+              const next = { ...current };
+              delete next[trackedTarget];
+              return next;
+            });
+          }
+        }
+      });
+    mapsTaskQueueRef.current = queuedTask.then(() => undefined, () => undefined);
+    await queuedTask;
+  }
   async function runTaskAndRefresh(action: () => Promise<{ task: Task }>, runningTitle = "Applying Map Changes", successTitle = "Map Changes Applied", options: MapsTaskOptions = {}) {
+    await enqueueMapsTask(options.resultTarget || "", runningTitle, () => runTaskAndRefreshNow(action, runningTitle, successTitle, options));
+  }
+  async function runTaskAndRefreshNow(action: () => Promise<{ task: Task }>, runningTitle: string, successTitle: string, options: MapsTaskOptions) {
     const resultScope = options.resultScope || "maps";
     const resultTarget = options.resultTarget || "";
     const response = await action();
@@ -326,6 +364,9 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
   }
   async function runTaskSequenceAndRefresh(actions: Array<{ label: string; run: () => Promise<{ task: Task }> }>, runningTitle = "Applying Map Changes", successTitle = "Map Changes Applied", options: MapsTaskSequenceOptions = {}) {
     if (!actions.length) return;
+    await enqueueMapsTask(options.resultTarget || "", runningTitle, () => runTaskSequenceAndRefreshNow(actions, runningTitle, successTitle, options));
+  }
+  async function runTaskSequenceAndRefreshNow(actions: Array<{ label: string; run: () => Promise<{ task: Task }> }>, runningTitle: string, successTitle: string, options: MapsTaskSequenceOptions) {
     const resultScope = options.resultScope || "maps";
     const resultTarget = options.resultTarget || "";
     const savingMessage = "Saving settings.";
@@ -658,11 +699,18 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
     return () => window.clearTimeout(id);
   }, [spicefieldResult]);
   useEffect(() => {
-    const id = window.setInterval(() => { void loadLiveMemory().catch(() => {}); }, LIVE_MEMORY_REFRESH_MS);
+    const refreshLiveMemory = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadLiveMemory().catch(() => {});
+    };
+    const id = window.setInterval(refreshLiveMemory, LIVE_MEMORY_REFRESH_MS);
     return () => window.clearInterval(id);
   }, []);
   useEffect(() => {
-    const id = window.setInterval(() => { void loadMemoryBalancer().catch(() => {}); }, 5000);
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadMemoryBalancer().catch(() => {});
+    }, LIVE_MEMORY_REFRESH_MS);
     return () => window.clearInterval(id);
   }, []);
   useEffect(() => {
@@ -1193,6 +1241,12 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
     const name = kind === "engine" ? "UserEngine.ini" : "UserGame.ini";
     downloadText(name, text);
   }
+  async function downloadClientGameIni() {
+    const map = !userGameName || isUserGameGlobal ? undefined : userGameName;
+    const partitionId = !userGameName || isUserGameGlobal ? undefined : effectiveUserGamePartitionId;
+    const result = await mapsApi.rawUserSettings("client-game", map, partitionId);
+    downloadText("Game.ini", result.content || "");
+  }
   async function toggleAdvanced() {
     if (!mapsLoaded) return;
     if (advancedOpen) {
@@ -1260,7 +1314,9 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
           ? [displayStatus, ...dynamicDeepDesertRows.map((deepRow) => partitionStatusById.get(String(deepRow.partitionId || "")) || String(deepRow.status || ""))].some((status) => mapCanForceDespawn({ status }))
           : mapCanForceDespawn({ ...row, status: displayStatus });
         const dualDeepDesertResultActive = Boolean(mapsResult && mapsResultScope === "maps" && isDeepDesertDualResult(mapsResult));
-        const rowResultActive = mapsResultTarget === mapResultTarget(rowName);
+        const rowTarget = mapResultTarget(rowName);
+        const rowTaskQueueState = mapsTaskQueueStates[rowTarget];
+        const rowResultActive = mapsResultTarget === rowTarget;
         const rowMapSettingsResultActive = Boolean(rowResultActive && mapsResult && mapsResultScope === "maps" && isMapSettingsResult(mapsResult));
         const rowForceDespawnResultActive = Boolean(rowResultActive && mapsResult && mapsResultScope === "maps" && isForceDespawnResult(mapsResult) && !isDeepDesertDualResult(mapsResult));
         return <Fragment key={rowName}><tr><td>{isSurvivalRow ? <SietchMapName name={rowName} sietch={primarySurvivalSietch} draft={primaryDraft} /> : rowName}</td><td><MapRuntimeStatus value={displayStatus} /></td><td>{String(row.mode || "Not Available")}</td><td><MemoryUsageBar row={memoryRow} fallback={liveMemoryFallback(row)} configuredLimit={row.memory} /></td><td className="actions-column"><button className="stable-action-button" onClick={() => selectMap(row)}>{isSelected ? "Close" : "Edit"}</button></td></tr>
@@ -1276,7 +1332,7 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
                 {isSurvivalRow && <label className="memory-number-field">Active Sietches<input type="number" min="1" max="64" step="1" value={activeSietches} onChange={(event) => setActiveSietches(event.target.value)} /></label>}
                 {isSurvivalRow && primarySurvivalSietch && primarySietchDraft && <label>Name<input value={primarySietchDraft.displayName} placeholder="Default name" onChange={(event) => setSietchDrafts({ ...sietchDrafts, [primarySurvivalSietch.partitionId]: { ...primarySietchDraft, displayName: event.target.value } })} /></label>}
                 {isSurvivalRow && primarySurvivalSietch && primarySietchDraft && <label>Password<SecretInput value={sietchPasswordInputValue(primarySurvivalSietch, primarySietchDraft, Boolean(sietchPasswordTouched[primarySurvivalSietch.partitionId]))} placeholder={passwordPlaceholder(sietchHasPassword(primarySurvivalSietch, primarySietchDraft))} onFocus={(event) => { if (!sietchPasswordTouched[primarySurvivalSietch.partitionId] && primarySurvivalSietch.passwordSet) event.currentTarget.select(); }} onChange={(event) => { setSietchPasswordTouched({ ...sietchPasswordTouched, [primarySurvivalSietch.partitionId]: true }); setSietchDrafts({ ...sietchDrafts, [primarySurvivalSietch.partitionId]: { ...primarySietchDraft, password: event.target.value } }); }} /></label>}
-                <button disabled={!mapSettingsDirty} onClick={() => run(() => saveSelectedMapSettings(row))}>Save Map Settings</button>
+                <button disabled={!mapSettingsDirty || Boolean(rowTaskQueueState)} onClick={() => run(() => saveSelectedMapSettings(row))}>{rowTaskQueueState?.phase === "queued" ? "Queued" : rowTaskQueueState?.phase === "running" ? "Saving..." : "Save Map Settings"}</button>
                 {rowName !== "Survival_1" && rowName !== "Overmap" && <button className="danger" disabled={!canForceDespawn} title={canForceDespawn ? "Force despawn this running map" : "Map is not running"} onClick={() => run(() => forceDespawnMap(row))}>Force Despawn</button>}
                 {rowMapSettingsResultActive && mapsResult ? <span className={`inline-task-result map-action-result result-${inlineTaskResultClass(mapsResult)}`}>
                   <strong className={mapsResult.status === "running" ? "loading-dots" : ""}>{formatResultTitle(mapsResult.title, mapsResult.status === "running")}</strong>
@@ -1307,7 +1363,9 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
             const childStatus = deepDesertDualConfiguring ? "Configuring" : statusWithLiveMemory(partitionStatusById.get(String(deepRow.partitionId || "")) || String(deepRow.status || "Not Available"), childMemoryRow, row.mode);
             const childMemoryDirty = childSelected && memory !== memoryInputValue(deepMemory);
             const childCanForceDespawn = mapCanForceDespawn({ ...deepRow, status: childStatus });
-            const childResultActive = mapsResultTarget === mapResultTarget("DeepDesert_1", String(deepRow.partitionId || ""));
+            const childTarget = mapResultTarget("DeepDesert_1", String(deepRow.partitionId || ""));
+            const childTaskQueueState = mapsTaskQueueStates[childTarget];
+            const childResultActive = mapsResultTarget === childTarget;
             const childMapSettingsResultActive = Boolean(childResultActive && mapsResult && mapsResultScope === "maps" && isMapSettingsResult(mapsResult));
             const childForceDespawnResultActive = Boolean(childResultActive && mapsResult && mapsResultScope === "maps" && isForceDespawnResult(mapsResult) && !isDeepDesertDualResult(mapsResult));
             return <Fragment key={`deepdesert-${String(deepRow.partitionId || deepRow.dimension || "")}`}><tr className="sietch-child-row"><td><span className="sietch-child-name">{deepDesertPartitionName(deepRow)}</span><span className="sietch-child-meta">Partition {String(deepRow.partitionId || "Unknown")} / Dimension {String(deepRow.dimension || "Unknown")}</span></td><td><MapRuntimeStatus value={childStatus} /></td><td>Dual</td><td><MemoryUsageBar row={childMemoryRow} fallback={liveMemoryFallback({ ...row, status: childStatus })} configuredLimit={deepMemory} /></td><td className="actions-column"><button className="stable-action-button" onClick={() => selectDeepDesertPartition(deepRow)}>{childSelected ? "Close" : "Edit"}</button></td></tr>
@@ -1317,7 +1375,7 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
                 <div className="action-line">
                   <label className="memory-number-field">Memory<input type="number" min="0.01" step="0.01" inputMode="decimal" value={memory} onChange={(event) => setMemory(event.target.value)} placeholder="8" /></label>
                   <span className="unit-label">GB</span>
-                  <button disabled={!childMemoryDirty} onClick={() => run(() => saveDeepDesertPartitionSettings(deepRow))}>Save</button>
+                  <button disabled={!childMemoryDirty || Boolean(childTaskQueueState)} onClick={() => run(() => saveDeepDesertPartitionSettings(deepRow))}>{childTaskQueueState?.phase === "queued" ? "Queued" : childTaskQueueState?.phase === "running" ? "Saving..." : "Save"}</button>
                   <button className="danger" disabled={!childCanForceDespawn} title={childCanForceDespawn ? "Force despawn this Deep Desert instance" : "Deep Desert instance is not running"} onClick={() => run(() => forceDespawnDeepDesertPartition(deepRow))}>Force Despawn</button>
                   {childMapSettingsResultActive && mapsResult ? <span className={`inline-task-result map-action-result result-${inlineTaskResultClass(mapsResult)}`}>
                     <strong className={mapsResult.status === "running" ? "loading-dots" : ""}>{formatResultTitle(mapsResult.title, mapsResult.status === "running")}</strong>
@@ -1340,7 +1398,9 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
             const childDirty = childMemoryDirty || draft.displayName !== sietch.displayName || sietchPasswordDraftChanged(sietch, draft, passwordTouched);
             const childMemoryRow = memoryForMap(liveMemory, "Survival_1", { ...row, partitionId: sietch.partitionId });
             const childStatus = statusWithLiveMemory(partitionStatusById.get(sietch.partitionId) || readinessStatusByPartitionId.get(sietch.partitionId) || (sietch.active ? String(row.status || "Not Available") : "Not Running"), childMemoryRow, row.mode);
-            const childResultActive = mapsResultTarget === mapResultTarget("Survival_1", sietch.partitionId);
+            const childTarget = mapResultTarget("Survival_1", sietch.partitionId);
+            const childTaskQueueState = mapsTaskQueueStates[childTarget];
+            const childResultActive = mapsResultTarget === childTarget;
             const childMapSettingsResultActive = Boolean(childResultActive && mapsResult && mapsResultScope === "maps" && isMapSettingsResult(mapsResult));
             return <Fragment key={`sietch-${sietch.partitionId}`}><tr className="sietch-child-row"><td><span className="sietch-child-name"><SietchName sietch={sietch} draft={draft} /></span><span className="sietch-child-meta">Partition {sietch.partitionId} / Dimension {sietch.dimension}</span></td><td><MapRuntimeStatus value={childStatus} /></td><td>Sietch</td><td>{sietch.active ? <MemoryUsageBar row={childMemoryRow} fallback={liveMemoryFallback(row)} configuredLimit={sietchMemory} /> : <span className="muted">Unallocated</span>}</td><td className="actions-column"><button className="stable-action-button" onClick={() => selectSietch(sietch)}>{childSelected ? "Close" : "Edit"}</button></td></tr>
               {childSelected && <tr className="inline-edit-row"><td colSpan={5}><section className="inline-edit-panel">
@@ -1351,7 +1411,7 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
                   <span className="unit-label">GB</span>
                   <label>Name<input value={draft.displayName} placeholder="Default name" onChange={(event) => setSietchDrafts({ ...sietchDrafts, [sietch.partitionId]: { ...draft, displayName: event.target.value } })} /></label>
                   <label>Password<SecretInput value={sietchPasswordInputValue(sietch, draft, Boolean(sietchPasswordTouched[sietch.partitionId]))} placeholder={passwordPlaceholder(sietchHasPassword(sietch, draft))} onFocus={(event) => { if (!sietchPasswordTouched[sietch.partitionId] && sietch.passwordSet) event.currentTarget.select(); }} onChange={(event) => { setSietchPasswordTouched({ ...sietchPasswordTouched, [sietch.partitionId]: true }); setSietchDrafts({ ...sietchDrafts, [sietch.partitionId]: { ...draft, password: event.target.value } }); }} /></label>
-                  <button disabled={!childDirty} onClick={() => run(() => saveSietchSettings(sietch))}>Save Sietch Settings</button>
+                  <button disabled={!childDirty || Boolean(childTaskQueueState)} onClick={() => run(() => saveSietchSettings(sietch))}>{childTaskQueueState?.phase === "queued" ? "Queued" : childTaskQueueState?.phase === "running" ? "Saving..." : "Save Sietch Settings"}</button>
                   {childMapSettingsResultActive && mapsResult ? <span className={`inline-task-result map-action-result result-${inlineTaskResultClass(mapsResult)}`}>
                     <strong className={mapsResult.status === "running" ? "loading-dots" : ""}>{formatResultTitle(mapsResult.title, mapsResult.status === "running")}</strong>
                     {mapsResult.message && <span className="inline-task-message">{formatResultMessage(mapsResult.message)}</span>}
@@ -1372,10 +1432,13 @@ export function MapsPanel({ onError, confirmAction, confirmSettingsRestart, wait
     <div className={`playerAdmin_toggle maps-modifiers-toggle ${modifiersOpen && modifiersAvailable ? "open" : ""}`}>
       <button className="playerAdmin_toggleHeader" disabled={!modifiersAvailable} aria-label={modifiersOpen && modifiersAvailable ? "Collapse Interactive Modifiers" : "Expand Interactive Modifiers"} onClick={toggleModifiers}>{modifiersOpen && modifiersAvailable ? <ChevronUp size={18} /> : <ChevronDown size={18} />}<span>Interactive Modifiers</span></button>
       {modifiersOpen && modifiersAvailable && <div className="playerAdmin_toggleBody">
-      <div className="settings-tabs" role="tablist" aria-label="Interactive modifier editor">
-        <button className={settingsTab === "engine" ? "active" : ""} role="tab" aria-selected={settingsTab === "engine"} onClick={() => setSettingsTab("engine")}>UserEngine</button>
-        <button className={settingsTab === "game" ? "active" : ""} role="tab" aria-selected={settingsTab === "game"} onClick={() => setSettingsTab("game")}>UserGame</button>
-        <button className={settingsTab === "spicefields" ? "active" : ""} role="tab" aria-selected={settingsTab === "spicefields"} onClick={() => { setSettingsTab("spicefields"); void loadSpicefields({ preserveDrafts: true }).catch(() => undefined); }}>Spice Fields</button>
+      <div className="settings-tabs-row">
+        <div className="settings-tabs" role="tablist" aria-label="Interactive modifier editor">
+          <button className={settingsTab === "engine" ? "active" : ""} role="tab" aria-selected={settingsTab === "engine"} onClick={() => setSettingsTab("engine")}>UserEngine</button>
+          <button className={settingsTab === "game" ? "active" : ""} role="tab" aria-selected={settingsTab === "game"} onClick={() => setSettingsTab("game")}>UserGame</button>
+          <button className={settingsTab === "spicefields" ? "active" : ""} role="tab" aria-selected={settingsTab === "spicefields"} onClick={() => { setSettingsTab("spicefields"); void loadSpicefields({ preserveDrafts: true }).catch(() => undefined); }}>Spice Fields</button>
+        </div>
+        <button className="settings-download-button" type="button" title={userGameName && !isUserGameGlobal ? "Download client Game.ini for the selected UserGame target" : "Download client Game.ini for global UserGame values"} onClick={() => run(downloadClientGameIni)}><Download size={16} /> Game.ini</button>
       </div>
       {settingsTab === "engine" ? <>
         <SettingsEditor fields={engineFields} values={engineDraft} onChange={(id, value) => setEngineDraft({ ...engineDraft, [id]: value })} />
