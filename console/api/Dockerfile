@@ -1,4 +1,4 @@
-FROM node:20-bookworm AS web-build
+FROM node:26-bookworm AS web-build
 WORKDIR /app/web
 COPY console/web/package.json ./
 COPY console/web/package-lock.json ./
@@ -7,7 +7,7 @@ COPY runtime/data/augment-compatibility.json /runtime/data/augment-compatibility
 COPY console/web ./
 RUN npm run build
 
-FROM node:20-bookworm
+FROM node:26-bookworm
 LABEL io.github.red-blink.dune-selfhost.component="console"
 WORKDIR /app
 ENV NODE_ENV=production
