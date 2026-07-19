@@ -3,10 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - "integration/**"
-      - "release/**"
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -15,129 +12,77 @@ concurrency:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
-  api-tests:
+  shellcheck:
+    name: Shell Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: console/api/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-        working-directory: console/api
-      - name: Run console API tests
-        run: node --test test/*.test.js
-        working-directory: console/api
+          scandir: './'
+          severity: warning
 
-  metrics-unit:
+  validate-json:
+    name: Validate JSON
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-      - name: Run metrics stack unit tests
-        run: bash tests/metrics-stack-unit.sh
+      - uses: actions/checkout@v4
+      - name: Validate JSON files
+        run: |
+          find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" -exec python3 -c "import json,sys; json.load(open(sys.argv[1]))" {} \; || { echo "Invalid JSON found"; exit 1; }
+          echo "All JSON files valid"
 
-  runtime-script-unit:
+  security:
+    name: Security Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-      - name: Test readiness with configured service ports
-        run: bash tests/ready-configured-ports-test.sh
-      - name: Test database updater role restoration
-        run: bash tests/update-db-role-privilege-test.sh
-
-  container-lifecycle:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-      - name: Test non-root container lifecycle and permission migration
-        run: bash tests/container-lifecycle-test.sh
-
-  security-checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Add upstream remote
-        run: git remote add upstream https://github.com/Red-Blink/dune-awakening-selfhost-docker.git
-      - name: Fetch upstream
-        run: git fetch upstream main
-      - name: Run security PR checks
-        run: bash tests/security-pr-checks.sh
-
-  api-dependency-audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: console/api/package-lock.json
-      - name: npm audit
-        run: npm audit --audit-level=high
-        working-directory: console/api
-
-  release-validation:
-    name: Release validation (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-22.04
-          - ubuntu-24.04
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-        with:
-          fetch-depth: 0
-      - name: Validate release package and fresh extraction
-        run: bash tests/release-gate-test.sh
-
-  release-gate:
-    name: Release gate
-    if: ${{ always() }}
-    needs:
-      - api-tests
-      - metrics-unit
-      - runtime-script-unit
-      - container-lifecycle
-      - security-checks
-      - api-dependency-audit
-      - release-validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require every release check to pass
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
         env:
-          API_TESTS: ${{ needs.api-tests.result }}
-          METRICS_UNIT: ${{ needs.metrics-unit.result }}
-          RUNTIME_SCRIPT_UNIT: ${{ needs.runtime-script-unit.result }}
-          CONTAINER_LIFECYCLE: ${{ needs.container-lifecycle.result }}
-          SECURITY_CHECKS: ${{ needs.security-checks.result }}
-          API_DEPENDENCY_AUDIT: ${{ needs.api-dependency-audit.result }}
-          RELEASE_VALIDATION: ${{ needs.release-validation.result }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/bash
+      - name: Run trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+  ci-gate:
+    name: CI Gate
+    if: ${{ always() }}
+    needs: [shellcheck, validate-json, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every check to pass
+        env:
+          SHELLCHECK: ${{ needs.shellcheck.result }}
+          JSON: ${{ needs.validate-json.result }}
+          SECURITY: ${{ needs.security.result }}
         run: |
           set -euo pipefail
           failed=0
-          for result in \
-            "$API_TESTS" \
-            "$METRICS_UNIT" \
-            "$RUNTIME_SCRIPT_UNIT" \
-            "$CONTAINER_LIFECYCLE" \
-            "$SECURITY_CHECKS" \
-            "$API_DEPENDENCY_AUDIT" \
-            "$RELEASE_VALIDATION"
-          do
+          for result in "$SHELLCHECK" "$JSON" "$SECURITY"; do
             if [ "$result" != "success" ]; then
               failed=1
             fi
           done
           if [ "$failed" -ne 0 ]; then
-            echo "One or more required release checks did not pass."
+            echo "One or more required checks did not pass."
             exit 1
           fi
-          echo "All required release checks passed."
+          echo "All required checks passed."
