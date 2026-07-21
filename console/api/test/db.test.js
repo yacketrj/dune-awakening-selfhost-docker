@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { assertIdentifier, discoverDbConfig, isReadOnlySql, quoteQualified, redactDbError, rowsResult } from "../src/db.js";
-import { addCurrency, addFactionReputation, addIntel, addonLeadershipPlayers, addonOpsHealthFarms, addonOpsHealthPlayers, addonOpsHealthSummary, addonOpsHealthSummaryV2, augmentInventoryItem, augmentNewestPlayerItem, changeDunePassword, completeJourneyNode, completeTutorial, deleteInventoryItem, giveItemToPlayer, giveItemToStorage, guildMembers, landsraadOverview, listGuilds, listPlayers, listSpicefieldTypes, listTables, liveMapPlayers, liveMapServices, playerCraftingRecipes, playerInventory, playerJourney, playerPosition, playerProfile, playerResearchItems, repairVehicleDecay, resetJourneyNode, resetTutorial, runSql, setLandsraadPlayerContribution, tablePreview, teleportOfflinePlayerToCoords, unlockCraftingRecipe, unlockResearchItem, updateInventoryItem, updateLandsraadRewardTier, updateLandsraadTaskGoal, updateLandsraadTermTaskGoals, updateSpicefieldType, updateTableRow, UnsupportedCapabilityError } from "../src/duneDb.js";
+import { addCurrency, addFactionReputation, addIntel, addonLeadershipPlayers, addonOpsHealthFarms, addonOpsHealthPlayers, addonOpsHealthSummary, addonOpsHealthSummaryV2, augmentInventoryItem, augmentNewestPlayerItem, changeDunePassword, completeJourneyNode, completeTutorial, deleteInventoryItem, exportBaseAsBlueprint, giveItemToPlayer, giveItemToStorage, guildMembers, landsraadOverview, listBases, listGuilds, listPlayers, listSpicefieldTypes, listTables, liveMapPlayers, liveMapServices, playerCraftingRecipes, playerInventory, playerJourney, playerPosition, playerProfile, playerResearchItems, repairVehicleDecay, resetJourneyNode, resetTutorial, runSql, setLandsraadPlayerContribution, tablePreview, teleportOfflinePlayerToCoords, unlockCraftingRecipe, unlockResearchItem, updateInventoryItem, updateLandsraadRewardTier, updateLandsraadTaskGoal, updateLandsraadTermTaskGoals, updateSpicefieldType, updateTableRow, UnsupportedCapabilityError } from "../src/duneDb.js";
 
 test("discovers RedBlink Postgres defaults and env overrides", () => {
   assert.deepEqual(discoverDbConfig({}), {
@@ -243,7 +243,7 @@ test("landsraad overview reads current term tasks and rewards", async () => {
         return { rows: [{ task_id: "42", board_index: 1, display_name: "Alexin", goal_amount: 1000, faction_progress: 250, completed: false }] };
       }
       if (text.includes("from dune.landsraad_task_rewards")) {
-        return { rows: [{ task_id: "42", threshold: 500, template_id: "Reward", amount: 1 }] };
+        return { rows: [{ row_locator: "(7,1)", task_id: "42", threshold: 500, template_id: "Reward", amount: 1 }] };
       }
       return { rows: [] };
     }
@@ -253,6 +253,7 @@ test("landsraad overview reads current term tasks and rewards", async () => {
   assert.equal(result.term.term_id, 7);
   assert.equal(result.tasks[0].task_id, "42");
   assert.equal(result.rewards[0].threshold, 500);
+  assert.equal(result.rewards[0].row_locator, "(7,1)");
   assert.ok(calls.some((call) => String(call.text).includes("where t.term_id = $1") && call.values[0] === 7));
   const taskQuery = calls.find((call) => String(call.text).includes("from dune.landsraad_tasks t") && String(call.text).includes("group by"));
   assert.ok(taskQuery);
@@ -267,17 +268,18 @@ test("landsraad goal and reward mutations validate and target explicit rows", as
       if (text.includes("to_regclass")) return { rows: [{ exists: true }] };
       if (text.includes("update dune.landsraad_tasks") && text.includes("where id = $2")) return { rows: [{ task_id: "42", goal_amount: 7500 }], rowCount: 1 };
       if (text.includes("update dune.landsraad_tasks") && text.includes("where term_id = $2")) return { rows: [], rowCount: 4 };
-      if (text.includes("update dune.landsraad_task_rewards")) return { rows: [{ task_id: "42", threshold: 2000, template_id: "Template", amount: 3 }], rowCount: 1 };
+      if (text.includes("update dune.landsraad_task_rewards")) return { rows: [{ row_locator: "(8,2)", task_id: "42", threshold: 2000, template_id: "Template", amount: 3 }], rowCount: 1 };
       return { rows: [] };
     }
   };
   await updateLandsraadTaskGoal(db, 42, 7500);
   await updateLandsraadTermTaskGoals(db, 7, 8000);
-  await updateLandsraadRewardTier(db, { taskId: 42, threshold: 1000, newThreshold: 2000, templateId: "Template", amount: 3 });
+  await updateLandsraadRewardTier(db, { rowLocator: "(8,1)", taskId: 42, threshold: 1000, newThreshold: 2000, templateId: "Template", amount: 3 });
   assert.ok(calls.some((call) => String(call.text).includes("where id = $2") && call.values.join(",") === "7500,42"));
   assert.ok(calls.some((call) => String(call.text).includes("where term_id = $2") && call.values.join(",") === "8000,7"));
-  assert.ok(calls.some((call) => String(call.text).includes("threshold = $5") && call.values.join(",") === "2000,Template,3,42,1000"));
-  await assert.rejects(() => updateLandsraadRewardTier(db, { taskId: 42, threshold: 1000, newThreshold: 1000, templateId: "", amount: 1 }), /Reward template id/);
+  assert.ok(calls.some((call) => String(call.text).includes("ctid = $4::tid") && call.values.join(",") === "2000,Template,3,(8,1),42,1000"));
+  await assert.rejects(() => updateLandsraadRewardTier(db, { rowLocator: "(8,1)", taskId: 42, threshold: 1000, newThreshold: 1000, templateId: "", amount: 1 }), /Reward template id/);
+  await assert.rejects(() => updateLandsraadRewardTier(db, { rowLocator: "invalid", taskId: 42, threshold: 1000, newThreshold: 1000, templateId: "Template", amount: 1 }), /valid Landsraad reward row locator/);
 });
 
 test("landsraad player contribution recalculates faction and guild totals in one transaction", async () => {
@@ -814,6 +816,351 @@ test("guild members falls back to a direct account-id join when dune.actors is u
   assert.ok(memberQuery);
   assert.doesNotMatch(memberQuery.text, /dune\.actors/);
   assert.match(memberQuery.text, /left join dune\.player_state ps_by_account on ps_by_account\.account_id = coalesce\(null, gm\."player_id"\)/);
+});
+
+const BASE_REQUIRED_TABLES = ["dune.buildings", "dune.building_instances", "dune.actor_fgl_entities", "dune.actors"];
+
+test("list bases returns capability response when required tables are missing", async () => {
+  const db = {
+    query: async () => ({ rows: [{ exists: false }] })
+  };
+  const result = await listBases(db, {});
+  assert.equal(result.capabilities.bases, false);
+  assert.match(result.reason, /dune\.buildings/);
+});
+
+test("list bases returns rows with piece and placeable counts and a total count", async () => {
+  const db = {
+    query: async (text, values = []) => {
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      if (text.includes("total_bases")) {
+        return { rows: [{ total_bases: "5", total_pieces: "700", total_placeables: "140" }] };
+      }
+      if (text.includes("from paged p")) {
+        return { rows: [
+          { base_id: "1006", name: "Sietch One", base_type: "Sub-Fief", owner_name: "Leader One", map: "TheDeepDesert", x: "100", y: "200", z: "30", total_count: "1", piece_count: "589", placeable_count: "126", shared_with: [{ name: "Ally Two", rank: 2 }] }
+        ] };
+      }
+      return { rows: [] };
+    }
+  };
+  const result = await listBases(db, {});
+  assert.equal(result.capabilities.bases, true);
+  assert.equal(result.totalCount, 1);
+  assert.equal(result.totalBases, 5);
+  assert.equal(result.totalPieces, 700);
+  assert.equal(result.totalPlaceables, 140);
+  assert.deepEqual(result.rows, [
+    { base_id: "1006", name: "Sietch One", base_type: "Sub-Fief", owner_name: "Leader One", map: "TheDeepDesert", x: 100, y: 200, z: 30, piece_count: 589, placeable_count: 126, shared_with: [{ name: "Ally Two", rank: 2, label: "Co-Owner" }] }
+  ]);
+});
+
+test("list bases excludes the owner from shared_with, coalesces missing entries, and labels unmapped ranks", async () => {
+  const db = {
+    query: async (text, values = []) => {
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      if (text.includes("total_bases")) {
+        return { rows: [{ total_bases: "2", total_pieces: "601", total_placeables: "126" }] };
+      }
+      if (text.includes("from paged p")) {
+        return { rows: [
+          { base_id: "1006", name: "Sietch One", base_type: "Sub-Fief", owner_name: "Leader One", map: "TheDeepDesert", x: "100", y: "200", z: "30", total_count: "2", piece_count: "589", placeable_count: "126", shared_with: [{ name: "Ally Two", rank: 2 }, { name: "Ally Three", rank: 7 }] },
+          { base_id: "1007", name: "Sietch Two", base_type: "Advanced Sub-Fief", owner_name: "Leader Two", map: "TheDeepDesert", x: "10", y: "20", z: "3", total_count: "2", piece_count: "12", placeable_count: "0", shared_with: null }
+        ] };
+      }
+      return { rows: [] };
+    }
+  };
+  const result = await listBases(db, {});
+  assert.equal(result.totalCount, 2);
+  assert.equal(result.totalBases, 2);
+  assert.deepEqual(result.rows[0].shared_with, [
+    { name: "Ally Two", rank: 2, label: "Co-Owner" },
+    { name: "Ally Three", rank: 7, label: "Rank 7" }
+  ]);
+  assert.ok(!result.rows[0].shared_with.some((entry) => entry.name === "Leader One"), "owner_name must not appear in shared_with");
+  assert.deepEqual(result.rows[1].shared_with, [], "null shared_with from the mock must coalesce to an empty array");
+  assert.ok(!("total_count" in result.rows[0]), "total_count must not leak onto individual rows");
+});
+
+test("list bases filters by name, type, or owner via a having clause and paginates with limit/offset", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      return { rows: [] };
+    }
+  };
+  await listBases(db, { q: "Sietch", page: 2, pageSize: 25 });
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  assert.match(baseQuery.text, /like '%totemsmall%' then 'Sub-Fief'/);
+  assert.match(baseQuery.text, /then 'Totem_Small_Patent'/);
+  assert.match(baseQuery.text, /then 'Totem_Patent'/);
+  assert.match(baseQuery.text, /having \(case[\s\S]+end\) ilike \$1 or coalesce\(owner\.character_name, ''\) ilike \$1/);
+  assert.match(baseQuery.text, /limit \$2 offset \$3/);
+  assert.deepEqual(baseQuery.values, ["%Sietch%", 25, 50]);
+  assert.ok(baseQuery.text.includes("order by lower(coalesce(name, '')) asc, id asc"), "paged CTE must sort the resolved base name before pagination");
+});
+
+test("list bases applies requested sorting before pagination", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      return { rows: [] };
+    }
+  };
+  await listBases(db, { page: 1, pageSize: 25, sortColumn: "piece_count", sortDirection: "desc" });
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  assert.match(baseQuery.text, /as piece_count/);
+  assert.match(baseQuery.text, /row_number\(\) over \(order by piece_count desc, id desc\)/);
+  assert.match(baseQuery.text, /limit \$1 offset \$2/);
+  assert.deepEqual(baseQuery.values, [25, 25]);
+});
+
+test("list bases falls back to safe sorting for unsupported input", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      return { rows: [] };
+    }
+  };
+  await listBases(db, { sortColumn: "name desc; drop table dune.buildings", sortDirection: "sideways" });
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  assert.match(baseQuery.text, /row_number\(\) over \(order by lower\(coalesce\(name, ''\)\) asc, id asc\)/);
+  assert.doesNotMatch(baseQuery.text, /drop table/i);
+});
+
+test("list bases resolves shared_with via the base's actor id, not its building id", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      if (text.includes("total_bases")) {
+        return { rows: [{ total_bases: "1", total_pieces: "1", total_placeables: "0" }] };
+      }
+      return { rows: [] };
+    }
+  };
+  await listBases(db, {});
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  // matched CTE must carry the actor id through (a.id, distinct from the building id b.id)...
+  assert.ok(baseQuery.text.includes("a.id as actor_id"), "matched CTE must select the actor id");
+  assert.ok(baseQuery.text.includes("group by b.id, a.id, a.class, pa.actor_name"), "actor id and stable base class must be in matched's GROUP BY");
+  // ...and the shared-with LATERAL must filter on that actor id, never the building id.
+  assert.ok(baseQuery.text.includes("par.permission_actor_id = p.actor_id"), "shared LATERAL must join on the actor id");
+  assert.ok(!baseQuery.text.includes("par.permission_actor_id = p.id"), "shared LATERAL must not regress to the building id");
+});
+
+test("list bases resolves the owner via the base's actor id, not its building id (no search)", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      if (text.includes("total_bases")) {
+        return { rows: [{ total_bases: "1", total_pieces: "1", total_placeables: "0" }] };
+      }
+      return { rows: [] };
+    }
+  };
+  // Without a search term, owner resolution is deferred to the final SELECT (only run for
+  // the displayed page) instead of the matched CTE (run for every base) — see the fan-out/
+  // scaling fix in listBases. The final SELECT's owner LATERAL references p.actor_id, since
+  // `a` isn't in scope there.
+  await listBases(db, {});
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  assert.match(baseQuery.text, /\) owner on true/);
+  const ownerLateral = baseQuery.text.slice(baseQuery.text.indexOf("left join lateral"), baseQuery.text.indexOf(") owner on true"));
+  assert.ok(ownerLateral.includes("where par.permission_actor_id = p.actor_id"), "owner LATERAL must resolve via the base's actor id");
+  assert.ok(ownerLateral.includes("order by par.rank asc"), "owner must be the lowest-rank (rank 1) member, not an arbitrary one");
+  assert.ok(!ownerLateral.includes("par.permission_actor_id = p.id"), "owner LATERAL must not regress to the building id");
+});
+
+test("list bases resolves the owner via the base's actor id, not its building id (searching)", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      if (text.includes("total_bases")) {
+        return { rows: [{ total_bases: "1", total_pieces: "1", total_placeables: "0" }] };
+      }
+      return { rows: [] };
+    }
+  };
+  // With a search term, the `having` clause needs the resolved owner name, so the owner
+  // LATERAL must still run inside the matched CTE (before pagination), referencing a.id.
+  await listBases(db, { q: "Sietch" });
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  assert.match(baseQuery.text, /\) owner on true/);
+  const ownerLateral = baseQuery.text.slice(baseQuery.text.indexOf("left join lateral"), baseQuery.text.indexOf(") owner on true"));
+  assert.ok(ownerLateral.includes("where par.permission_actor_id = a.id"), "owner LATERAL must resolve via the base's actor id");
+  assert.ok(ownerLateral.includes("order by par.rank asc"), "owner must be the lowest-rank (rank 1) member, not an arbitrary one");
+  assert.ok(!ownerLateral.includes("par.permission_actor_id = b.id"), "owner LATERAL must not regress to the building id");
+});
+
+test("list bases totals query uses the same base-inclusion criterion and placeable join as the main query", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      return { rows: [] };
+    }
+  };
+  await listBases(db, {});
+  const totalsQuery = calls.find((call) => call.text.includes("total_bases"));
+  assert.ok(totalsQuery);
+  assert.ok(totalsQuery.text.includes("where a.transform is not null"), "totals must use the same base-inclusion criterion as the paginated query");
+  assert.ok(totalsQuery.text.includes("with valid_bases as"), "totals must dedup base/owner pairs before counting to avoid fan-out");
+  assert.ok(!totalsQuery.text.includes("left join dune.placeables pl on pl.owner_entity_id = bi.owner_entity_id"), "totals must not directly cross-join building_instances to placeables (causes fan-out)");
+  assert.ok(totalsQuery.text.includes("join valid_bases vb on vb.owner_entity_id = pl.owner_entity_id"), "placeable totals must count via the dedup'd owner_entity_id join, not a direct bi-to-pl join");
+  assert.ok(totalsQuery.text.includes("count(distinct pl.id)"), "placeable totals must stay deduped in case two bases ever share an owner entity");
+});
+
+test("list bases rejects invalid page or pageSize values", async () => {
+  const db = {
+    query: async (text, values = []) => {
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: BASE_REQUIRED_TABLES.includes(name) }] };
+      }
+      return { rows: [] };
+    }
+  };
+  // Matches the tablePreview convention: intParam validation throws before the query runs,
+  // so it's caught by the HTTP layer's dbJson wrapper (server.js), not swallowed into a
+  // capabilities-false response here.
+  await assert.rejects(() => listBases(db, { pageSize: 0 }), /Invalid pageSize/);
+  await assert.rejects(() => listBases(db, { page: -1 }), /Invalid page/);
+});
+
+test("export base throws an unsupported error when required tables are missing", async () => {
+  const db = {
+    query: async () => ({ rows: [{ exists: false }] })
+  };
+  await assert.rejects(() => exportBaseAsBlueprint(db, 1006), UnsupportedCapabilityError);
+});
+
+test("export base resolves the owner via the base's actor id", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: [...BASE_REQUIRED_TABLES, "dune.placeables"].includes(name) }] };
+      }
+      return { rows: [] };
+    }
+  };
+  // No matching base row in this mock, so exportBaseAsBlueprint throws after issuing the identity
+  // query below — that's fine, we only need to inspect the query text it sent.
+  await assert.rejects(() => exportBaseAsBlueprint(db, 1006), UnsupportedCapabilityError);
+  const baseQuery = calls.find((call) => call.text.includes("from dune.buildings b"));
+  assert.ok(baseQuery);
+  assert.ok(baseQuery.text.includes("where par.permission_actor_id = a.id"), "exportBaseAsBlueprint owner LATERAL must resolve via the base's actor id");
+});
+
+test("export base returns instances and placeables in blueprint-importable relative coordinates", async () => {
+  const anchor = { x: -165708.2808275, y: -220414.81625525, z: 23473.653477859374 };
+  const pieceTransform = [-167075.33, -217459.17, 22768.473, 0, 0, 0.81915206, 0.57357645];
+  const placeablePos = { x: -168670.68727685622, y: -218687.5419278533, z: 23154.388368606567, qz: 0.17364818, qw: 0.9848077 };
+  const ownerEntityId = "918273645";
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("to_regclass")) {
+        const name = String(values[0] || "");
+        return { rows: [{ exists: [...BASE_REQUIRED_TABLES, "dune.placeables"].includes(name) }] };
+      }
+      if (text.includes("from dune.buildings b")) {
+        return { rows: [
+          { base_id: "1006", name: "Sietch One", base_type: "Sub-Fief", owner_name: "Leader One", map: "HaggaBasin", x: String(anchor.x), y: String(anchor.y), z: String(anchor.z), owner_entity_id: ownerEntityId }
+        ] };
+      }
+      if (text.includes("select instance_id, building_type, transform")) {
+        return { rows: [{ instance_id: 2486, building_type: "Harkonnen_Outpost_Foundation", transform: pieceTransform }] };
+      }
+      if (text.includes("select p.id as placeable_id")) {
+        return { rows: [{ placeable_id: 2582, building_type: "Hark_Deco_Plate_02_Placeable", x: placeablePos.x, y: placeablePos.y, z: placeablePos.z, qz: placeablePos.qz, qw: placeablePos.qw }] };
+      }
+      return { rows: [] };
+    }
+  };
+  const result = await exportBaseAsBlueprint(db, 1006);
+  const placeableQuery = calls.find((call) => call.text.includes("select p.id as placeable_id"));
+  assert.deepEqual(placeableQuery.values, [ownerEntityId]);
+  assert.ok(placeableQuery.text.includes("join dune.actors a on a.id = p.id"), "placeables share the actors id space directly, not via owner_entity_id");
+  assert.equal(result.base_id, "1006");
+  assert.equal(result.name, "Sietch One");
+  assert.equal(result.base_type, "Sub-Fief");
+  assert.equal(result.owner_name, "Leader One");
+  assert.equal(result.map, "HaggaBasin");
+  assert.equal(result.piece_count, 1);
+  assert.equal(result.placeable_count, 1);
+  assert.equal(result.pentashields, undefined);
+
+  const instance = result.instances[0];
+  assert.equal(instance.instance_id, 2486);
+  assert.equal(instance.building_type, "Harkonnen_Outpost_Foundation");
+  assert.equal(instance.provides_stability, undefined);
+  assert.ok(Math.abs(instance.x - (pieceTransform[0] - anchor.x)) < 1e-6);
+  assert.ok(Math.abs(instance.y - (pieceTransform[1] - anchor.y)) < 1e-6);
+  assert.ok(Math.abs(instance.z - (pieceTransform[2] - anchor.z)) < 1e-6);
+  const expectedInstanceRotation = 2 * Math.atan2(pieceTransform[5], pieceTransform[6]) * (180 / Math.PI);
+  assert.equal(instance.rotation, expectedInstanceRotation);
+  assert.ok(Math.abs(instance.rotation - 110) < 1);
+
+  const placeable = result.placeables[0];
+  assert.equal(placeable.placeable_id, 2582);
+  assert.equal(placeable.building_type, "Hark_Deco_Plate_02_Placeable");
+  assert.equal(placeable.rx, 0);
+  assert.equal(placeable.ry, 0);
+  assert.ok(Math.abs(placeable.x - (placeablePos.x - anchor.x)) < 1e-6);
+  const expectedPlaceableRotation = 2 * Math.atan2(placeablePos.qz, placeablePos.qw) * (180 / Math.PI);
+  assert.equal(placeable.rz, expectedPlaceableRotation);
+  assert.ok(Math.abs(placeable.rz - 20) < 1);
 });
 
 test("player profile includes faction and guild when addon tables are present", async () => {
