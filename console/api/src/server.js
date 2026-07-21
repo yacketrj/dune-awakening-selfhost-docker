@@ -14,7 +14,7 @@ import { createDb, quoteIdentifier } from "./db.js";
 import * as duneDb from "./duneDb.js";
 import { audit, recordAdminHistory } from "./audit.js";
 import { redact } from "./redact.js";
-import { itemRequiresDatabaseGrant, listCatalogItems, resolveCatalogItem } from "./adminCatalog.js";
+import { itemIsSchematic, itemRequiresDatabaseGrant, listCatalogItems, resolveCatalogItem } from "./adminCatalog.js";
 import { buildBroadcastCommand, buildShutdownBroadcastCommand, publishMapChat, publishServerCommand } from "./rmq.js";
 import { clearCarePackageHistory, enableCarePackage, ensureCarePackageServerPersona, grantEligibleCarePackages, grantCarePackage, retryCarePackageGrant, runCarePackageAutoScan, saveCarePackageConfig, carePackageCapabilities, carePackageConfig, carePackageEligiblePlayers, carePackageHistory } from "./carePackage.js";
 import { readJsonBody, readMultipartForm } from "./httpSafety.js";
@@ -30,6 +30,8 @@ import { updateEnvFileValue as updateEnvValue } from "./services/envFile.js";
 import { funcomAuthMismatchDetected, matchingFuncomAuthLines, saveFuncomTokenValue as writeFuncomToken, validDockerSince } from "./services/funcomAuth.js";
 import { readCharacterTransferSettings, saveCharacterTransferSettings } from "./services/characterTransferSettings.js";
 import { handleDiscordAdapterRoute, isDiscordAdapterRoute } from "./integrations/discord/routes.js";
+import { discordAdapterEnabled } from "./integrations/discord/adapter.js";
+import { initializeDiscordAdapterSchema } from "./integrations/discord/schema.js";
 import { liveItemGrantOk, liveItemGrantWarning } from "./grantResults.js";
 import { primeMessageOfTheDayOnlineState, readMessageOfTheDay, restoreMessageOfTheDay, runMessageOfTheDayScan, saveMessageOfTheDay } from "./services/messageOfTheDay.js";
 import { primePlayerAnnouncementOnlineState, readPlayerAnnouncements, restorePlayerAnnouncements, runPlayerAnnouncementScan, savePlayerAnnouncements } from "./services/playerAnnouncements.js";
@@ -38,6 +40,7 @@ import { exportBlueprint, importBlueprint, listBlueprints, deleteBlueprint } fro
 import { createZipArchive } from "./services/zipArchive.js";
 import { grantAddonItem } from "./addonItemGrants.js";
 import { createPublicDirectoryReporter, normalizeDiscordInvite, readDirectorySettings } from "./services/publicDirectory.js";
+import { choamTerminalOverview, installChoamTerminals, removeChoamTerminals } from "./services/choamTerminals.js";
 
 const config = loadConfig();
 const auth = createAuth(config);
@@ -98,6 +101,11 @@ createServer(async (req, res) => {
   }
   scheduleBootAutoStart();
   publicDirectory.start();
+  if (discordAdapterEnabled(config)) {
+    initializeDiscordAdapterSchema(db).catch((error) => {
+      console.warn(`Discord adapter schema initialization failed: ${redact(error?.message || error)}`);
+    });
+  }
 });
 
 setInterval(() => {
@@ -268,7 +276,7 @@ async function handleApi(req, res) {
     return json(res, 200, { ok: true });
   }
   if (isDiscordAdapterRoute(path)) {
-    return handleDiscordAdapterRoute({ req, res, path, config, readJson, json });
+    return handleDiscordAdapterRoute({ req, res, path, config, readJson, json, db });
   }
 
   const session = auth.requireAuth(req, res);
@@ -379,6 +387,14 @@ async function handleApi(req, res) {
   if (path === "/api/players/search") return dbJson(res, () => duneDb.listPlayers(db, { q: url.searchParams.get("q") || "" }));
   if (path === "/api/guilds") return dbJson(res, () => duneDb.listGuilds(db, { q: url.searchParams.get("q") || "" }));
   if (path.match(/^\/api\/guilds\/[^/]+\/members$/)) return dbJson(res, () => duneDb.guildMembers(db, decodeURIComponent(path.split("/")[3])));
+  if (path === "/api/bases") return dbJson(res, () => duneDb.listBases(db, {
+    q: url.searchParams.get("q") || "",
+    page: url.searchParams.get("page") || 0,
+    pageSize: url.searchParams.get("pageSize") || 50,
+    sortColumn: url.searchParams.get("sortColumn") || "name",
+    sortDirection: url.searchParams.get("sortDirection") || "asc"
+  }));
+  if (path.match(/^\/api\/bases\/[^/]+\/export$/) && req.method === "GET") return baseBlueprintDownloadRoute(req, res, path);
   if (path === "/api/admin/items/catalog") return json(res, 200, { rows: listCatalogItems(config.repoRoot, { q: url.searchParams.get("q") || "", limit: url.searchParams.get("limit") || 500 }) });
   if (path === "/api/admin/items/search") return commandJson(res, "adminItemSearch", { q: url.searchParams.get("q") || "" });
   if (path === "/api/admin/items") return commandJson(res, url.searchParams.get("category") ? "adminItemListCategory" : "adminItemList", { category: url.searchParams.get("category") || "" });
@@ -526,6 +542,9 @@ async function handleApi(req, res) {
   if (path === "/api/maps/memory") return commandJson(res, "memoryStatus");
   if (path.match(/^\/api\/maps\/spicefields\/[^/]+$/) && req.method === "PATCH") return mapsSpicefieldUpdateRoute(req, res, path);
   if (path === "/api/maps/spicefields") return dbJson(res, () => duneDb.listSpicefieldTypes(db));
+  if (path === "/api/maps/choam-terminals" && req.method === "POST") return mapsChoamTerminalInstallRoute(req, res);
+  if (path === "/api/maps/choam-terminals" && req.method === "DELETE") return mapsChoamTerminalRemoveRoute(req, res);
+  if (path === "/api/maps/choam-terminals") return dbJson(res, () => choamTerminalOverview(db));
   if (path === "/api/maps/user-settings/schema") return userSettingsSchemaRoute(res);
   if (path === "/api/maps/user-settings/values") return userSettingsValuesRoute(res, url);
   if (path === "/api/maps/user-settings/raw" && req.method === "POST") return userSettingsRawWriteRoute(req, res);
@@ -854,6 +873,20 @@ async function mapsSpicefieldUpdateRoute(req, res, path) {
     if (result.row) result.persistence = persistSpicefieldOverride(config, result.row);
     return result;
   });
+}
+
+async function mapsChoamTerminalInstallRoute(req, res) {
+  const body = await readJson(req);
+  if (!applyMutationRateLimit(req, res, "maps.choam-terminals.install")) return;
+  audit(config, req, "maps.choam-terminals.install", { tradeCenterKey: body.tradeCenterKey });
+  return dbJson(res, () => installChoamTerminals(db, body));
+}
+
+async function mapsChoamTerminalRemoveRoute(req, res) {
+  const body = await readJson(req);
+  if (!applyMutationRateLimit(req, res, "maps.choam-terminals.remove")) return;
+  audit(config, req, "maps.choam-terminals.remove", { tradeCenterKey: body.tradeCenterKey });
+  return dbJson(res, () => removeChoamTerminals(db, body));
 }
 
 async function safeCommand(operation, payload = {}) {
@@ -1654,18 +1687,37 @@ async function storageGiveItemRoute(req, res, path) {
   }, { storageId });
 }
 
+function writeJsonAttachment(res, data, filename) {
+  res.writeHead(200, {
+    "content-type": "application/json; charset=utf-8",
+    "content-disposition": `attachment; filename="${filename}"`
+  });
+  res.end(JSON.stringify(data));
+}
+
 async function blueprintExportRoute(req, res, path) {
   const idPart = decodeURIComponent(path.split("/")[3]);
   const blueprintId = Number(idPart);
   if (!Number.isFinite(blueprintId) || blueprintId < 1) return json(res, 400, { error: "Invalid blueprint ID" });
   try {
     const data = await exportBlueprint(db, blueprintId);
-    const filename = data.name ? `${sanitizeBlueprintFilename(data.name)}.json` : `blueprint_${blueprintId}.json`;
-    res.writeHead(200, {
-      "content-type": "application/json; charset=utf-8",
-      "content-disposition": `attachment; filename="${filename}"`
-    });
-    res.end(JSON.stringify(data));
+    const filename = data.name ? `${sanitizeFilename(data.name, "blueprint")}.json` : `blueprint_${blueprintId}.json`;
+    writeJsonAttachment(res, data, filename);
+  } catch (error) {
+    const status = error.unsupported ? 501 : 500;
+    return json(res, status, { ok: false, error: redact(error.message || error) });
+  }
+}
+
+async function baseBlueprintDownloadRoute(req, res, path) {
+  const idPart = decodeURIComponent(path.split("/")[3]);
+  const baseId = Number(idPart);
+  if (!Number.isFinite(baseId) || baseId < 1) return json(res, 400, { error: "Invalid base ID" });
+  try {
+    const data = await duneDb.exportBaseAsBlueprint(db, baseId);
+    const owner = sanitizeFilename(data.owner_name || "unknown_player", "unknown_player").replace(/\s+/g, "_");
+    const filename = `${owner}_base_${baseId}.json`;
+    writeJsonAttachment(res, data, filename);
   } catch (error) {
     const status = error.unsupported ? 501 : 500;
     return json(res, status, { ok: false, error: redact(error.message || error) });
@@ -1683,7 +1735,7 @@ async function blueprintBulkExportRoute(req, res) {
     const entries = [];
     for (const id of ids) {
       const data = await exportBlueprint(db, id);
-      const baseName = sanitizeBlueprintFilename(data.name || `blueprint_${id}`).replace(/\.json$/i, "") || `blueprint_${id}`;
+      const baseName = sanitizeFilename(data.name || `blueprint_${id}`, `blueprint_${id}`).replace(/\.json$/i, "") || `blueprint_${id}`;
       let filename = `${baseName}.json`;
       let suffix = 2;
       while (usedNames.has(filename.toLowerCase())) filename = `${baseName}_${suffix++}.json`;
@@ -1735,8 +1787,8 @@ async function blueprintImportRoute(req, res) {
   }
 }
 
-function sanitizeBlueprintFilename(s) {
-  return String(s).replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, "_").trim() || "blueprint";
+function sanitizeFilename(s, fallback = "export") {
+  return String(s).replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, "_").trim() || fallback;
 }
 
 async function blueprintsDeleteRoute(req, res, path) {
@@ -1825,12 +1877,13 @@ async function giveSingleItemRoute(req, res, path, operation) {
 }
 
 async function grantPlayerItem(playerId, item, target) {
-  const resolved = item.itemId ? { itemId: item.itemId } : resolveCatalogItem(config.repoRoot, item);
+  const resolved = item.itemId ? resolveCatalogItem(config.repoRoot, { itemId: item.itemId }) : resolveCatalogItem(config.repoRoot, item);
   const operation = resolved.itemId ? "adminGiveItemId" : "adminGiveItem";
   const hasExplicitGrade = item.quality !== undefined || item.grade !== undefined;
   const selectedGrade = hasExplicitGrade ? validateGrantGrade(item.quality ?? item.grade) : undefined;
   const selectedAugmentGrade = item.augmentQuality === undefined ? 1 : validateAugmentGrantGrade(item.augmentQuality);
-  const usesDatabaseGrant = !target.online || (selectedGrade !== undefined && selectedGrade > 0) || itemRequiresDatabaseGrant(resolved) || (item.augments && item.augments.length > 0);
+  const schematic = itemIsSchematic(resolved);
+  const usesDatabaseGrant = !schematic && (!target.online || (selectedGrade !== undefined && selectedGrade > 0) || itemRequiresDatabaseGrant(resolved) || (item.augments && item.augments.length > 0));
   const databaseGrade = hasExplicitGrade ? selectedGrade : 0;
   const payload = {
     playerId: target.actionId || playerId,
@@ -1843,6 +1896,9 @@ async function grantPlayerItem(playerId, item, target) {
     augmentQuality: selectedAugmentGrade
   };
   const liveAugmentRefreshWarning = "Augments were written to the database. If the player was online, the weapon may need a relog before the augment slots appear in-game.";
+  if (schematic && !config.mockMode && !target.online) {
+    throw new Error("Physical schematic grants require the player to be online so delivery can be verified by the game server.");
+  }
   if (usesDatabaseGrant) {
     if (!config.mockMode && !target.actorId) throw new Error("A database actor ID is required to grant graded items, schematics, and augments");
     if (!config.mockMode && payload.augments.length > 0 && target.online) {
