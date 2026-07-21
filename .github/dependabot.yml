@@ -1,0 +1,50 @@
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/runtime/public-probe"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "yacketrj"
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "chore(deps):"
+  - package-ecosystem: "docker"
+    directory: "/orchestrator"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "yacketrj"
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "chore(deps):"
+  - package-ecosystem: "docker"
+    directory: "/console/api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "yacketrj"
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "chore(deps):"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "yacketrj"
+    labels:
+      - "ci-cd"
+      - "security"
+    commit-message:
+      prefix: "chore(ci):"
