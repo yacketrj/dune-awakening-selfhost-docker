@@ -480,3 +480,70 @@ test("player-link route rejects a public-tier actor and allows an observer-tier 
     try { unlinkSync(tokenFile); } catch {}
   }
 });
+
+// Verification rate limiting — FINDING-LINK-3
+// (docs/security/discord-player-link-hardening.md): repeated wrong-code
+// guesses against /players/link/verify for one discordUserId must
+// eventually be rejected with 429, not left unthrottled.
+test("player-link verify route rate limits repeated wrong-code attempts for one discordUserId", async () => {
+  const { resetVerifyRateLimiterForTests } = await import("../src/integrations/discord/linkProvider.js");
+  const { createLoginRateLimiter } = await import("../src/rateLimit.js");
+  resetVerifyRateLimiterForTests(createLoginRateLimiter({ maxAttempts: 2, globalMaxAttempts: 99, windowMs: 60000, blockMs: 60000 }));
+
+  const tokenFile = "/tmp/discord-adapter-verify-rate-limit-test-token.txt";
+  writeFileSync(tokenFile, "server-test-token");
+  const testConfig = { discordBotApiTokenFile: tokenFile, discordAdapterEnabled: true, auditLog: "/tmp/discord-adapter-verify-rate-limit-test-audit.jsonl", generatedDir: "/tmp/discord-adapter-verify-rate-limit-test-generated" };
+  const db = {
+    transaction: (fn) => fn(db),
+    async query() {
+      return { rows: [], rowCount: 0 };
+    }
+  };
+
+  try {
+    await new Promise((resolve, reject) => {
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url || "/", "http://local");
+        const path = url.pathname;
+        const readJson = async () => {
+          const chunks = [];
+          for await (const chunk of req) chunks.push(chunk);
+          return Buffer.concat(chunks).length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+        };
+        const json = (r, code, body) => { r.writeHead(code, { "content-type": "application/json" }); r.end(JSON.stringify(body)); };
+        await handleDiscordAdapterRoute({ req, res, path, config: testConfig, readJson, json, db });
+      });
+      const auth = { authorization: "Bearer server-test-token" };
+
+      server.listen(async () => {
+        try {
+          const base = `http://127.0.0.1:${server.address().port}`;
+          const observerActor = actor(["role-observer"]);
+          const verifyOnce = () => fetch(`${base}/api/integrations/discord/players/link/verify`, {
+            method: "POST",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ actor: observerActor, code: "ACP-WRONG" })
+          });
+
+          const first = await verifyOnce();
+          assert.equal(first.status, 200);
+          const firstBody = await first.json();
+          assert.equal(firstBody.ok, false);
+
+          const second = await verifyOnce();
+          assert.equal(second.status, 200);
+
+          const third = await verifyOnce();
+          assert.equal(third.status, 429);
+          const thirdBody = await third.json();
+          assert.equal(thirdBody.code, "verify_rate_limited");
+
+          server.close();
+          resolve();
+        } catch (e) { server.close(); reject(e); }
+      });
+    });
+  } finally {
+    try { unlinkSync(tokenFile); } catch {}
+  }
+});

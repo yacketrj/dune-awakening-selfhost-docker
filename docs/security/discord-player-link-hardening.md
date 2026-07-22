@@ -6,9 +6,10 @@ Upstream tracking: `Red-Blink/dune-awakening-selfhost-docker#100` (covers
 FINDING-LINK-1, -2, -3, -5, -6). FINDING-LINK-4 is tracked separately and
 already resolved-by-discussion in `Red-Blink/dune-awakening-selfhost-docker#72`.
 
-Status: FINDING-LINK-1 and FINDING-LINK-2 implemented (console-side,
-backward-compatible). See "Remediation Status" at the end of this document.
-FINDING-LINK-3, -5, -6 remain proposed.
+Status: FINDING-LINK-1 and FINDING-LINK-2 implemented; FINDING-LINK-3
+partially implemented (console-side, backward-compatible). See
+"Remediation Status" at the end of this document. FINDING-LINK-5, -6
+remain proposed.
 
 ## Purpose
 
@@ -46,7 +47,7 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 - **Recommendation:** Move `PLAYER_LINK_WRITE` to require `admin` tier, or introduce a `self-link` capability that is available to any authenticated actor for their own `discordUserId` only, separate from role-tier-gated capabilities for privileged operations.
 - **Implemented:** The `self-link` option, not "raise to admin" — raising the tier alone would have been wrong. Every route gating `PLAYER_LINK_WRITE` (`players/link`, `players/link/verify`, `players/unlink`) always passes `discordUserId: actor.userId`, never a separate target: this is inherently a self-service action (a player linking *their own* Discord account to *their own* character), not a privileged operation. Restricting it to `admin` would have broken that self-service feature for ordinary players. Added `SELF_SCOPED_CAPABILITIES` and `requireSelfScopedCapability()` in `policy.js`: `PLAYER_LINK_WRITE` is now removed from every tier's capability set (including `admin`/`owner`'s previously-implicit "all capabilities" grant) and instead authorized for any actor above `public` tier (i.e. any actor holding at least one configured Discord role), regardless of which specific role. `requireDiscordCapability()` now explicitly rejects `PLAYER_LINK_WRITE` with `invalid_capability` to prevent a future call site from accidentally reintroducing tier-based gating for a self-scoped action.
 
-### FINDING-LINK-3: No rate limiting or lockout on verification attempts (MEDIUM)
+### FINDING-LINK-3: No rate limiting or lockout on verification attempts (MEDIUM) — PARTIALLY IMPLEMENTED
 
 - **Location:** `console/api/src/integrations/discord/linkProvider.js:94-116` (`verifyPlayerLinkProvider`), `console/api/src/duneDb.js:4951-4959` (`consumePendingLink`)
 - **Risk:** Verification codes are 6 characters from a 32-symbol alphabet (`console/api/src/integrations/discord/linkProvider.js:15,18-25`), giving ~30 bits of entropy, valid for 5 minutes, with zero attempt throttling. `consumePendingLink` is scoped to `(code, discord_user_id)`, so brute-forcing requires knowing the target's Discord ID — but that ID is itself attacker-suppliable per FINDING-LINK-1, so an attacker holding the adapter token can pick a target `discordUserId` and attempt many codes with no lockout, backoff, or alerting.
@@ -54,6 +55,8 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   1. Add per-`(discordUserId)` attempt throttling (e.g. 5 attempts per pending code, then force regeneration) to `verifyPlayerLinkProvider`.
   2. Consider increasing code length/entropy (e.g. 8 chars ≈ 40 bits) or switching to a copy-paste-friendly token if the whisper delivery channel supports longer strings without truncation.
   3. Emit an audit/log event on repeated failed verification for the same pending code so operators can detect probing.
+- **Implemented:** Item 1. `verifyPlayerLinkProvider()` now checks a rate limiter (reusing `createLoginRateLimiter()` from `rateLimit.js` — the same per-key + global-aggregate lockout shape proven in `docs/security/login-rate-limit-defense.md`, rather than inventing a new limiter) keyed by `discordUserId` before ever calling `consumePendingLink()`. Defaults: 5 attempts per 5-minute window per user, 50 attempts per 5-minute window globally, 15-minute lockout once exceeded; all four tunable via `DUNE_DISCORD_LINK_VERIFY_MAX_ATTEMPTS` / `_GLOBAL_MAX_ATTEMPTS` / `_WINDOW_MS` / `_BLOCK_MS`. A locked-out request never reaches the database and never consumes the real pending link, so a legitimate user isn't punished for an attacker's guesses against their ID once they retry after the lockout window. A successful verification clears that user's failure count. Exceeding the limit returns `429 verify_rate_limited` (added as a new safe error code; no sensitive detail beyond a retry-after hint).
+- **Not implemented:** Items 2 (longer codes) and 3 (audit/log event on repeated failure) remain open. Item 3 in particular would give operators visibility into probing attempts that this rate limiter silently absorbs — worth a follow-up.
 
 ### FINDING-LINK-4: Hardcoded command-auth token fallback was fixed, then reverted upstream — root cause is a two-sided synchronization gap, not a rollback mistake (HIGH — regression, tracked upstream)
 
@@ -101,7 +104,7 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 
 ## Verification (This Branch)
 
-- `npm test --prefix console/api`: 567/567 tests pass. Baseline 540
+- `npm test --prefix console/api`: 571/571 tests pass. Baseline 540
   (inherited from `main` at `0ae01dc` after #103/#104 merged) + 18
   (FINDING-LINK-1: 17 unit tests in `test/discordActorSignature.test.js`
   plus 1 end-to-end integration test in `test/discordAdapter.test.js`
@@ -110,14 +113,20 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   `test/discordPolicy.test.js` plus 1 end-to-end integration test in
   `test/discordAdapter.test.js` proving a `public`-tier actor is rejected
   with `403 not_authorized` from `/players/link` while an `observer`-tier
-  actor is allowed through to the provider).
+  actor is allowed through to the provider) + 4 (FINDING-LINK-3: 3 unit
+  tests in `test/discordLinkProvider.test.js` — lockout after repeated
+  wrong guesses, per-`discordUserId` scoping so one user's lockout doesn't
+  block another, and lockout reset on success — plus 1 end-to-end
+  integration test in `test/discordAdapter.test.js` proving a real HTTP
+  request sequence against `/players/link/verify` gets `429
+  verify_rate_limited` on the third wrong guess).
 - `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities.
 - `npm run build --prefix console/web`: builds clean (no web-side changes
-  in either finding; run as a regression check).
+  in any of these findings; run as a regression check).
 - `gitleaks detect --no-git`: no leaks.
 - `semgrep --config auto` on all new/changed files: 0 findings.
 
-## Proposed Verification Plan (FINDING-LINK-3, -5, -6 — Not Yet Implemented)
+## Proposed Verification Plan (FINDING-LINK-5, -6 — Not Yet Implemented)
 
 ```bash
 npm test --prefix console/api
@@ -128,7 +137,7 @@ npm run build --prefix console/web
 Add targeted tests for:
 - ~~Actor payload with mismatched/forged `userId` is rejected once signature/HMAC verification lands (FINDING-LINK-1).~~ Done — see Verification above.
 - ~~`moderator`-tier actor is denied `player-link:write` after the tier change (FINDING-LINK-2).~~ Done — see Verification above. (Note: the actual fix authorizes any non-`public` tier for this self-scoped action rather than restricting it upward to `admin`; see the FINDING-LINK-2 section for why.)
-- Repeated failed verification attempts trigger lockout (FINDING-LINK-3).
+- ~~Repeated failed verification attempts trigger lockout (FINDING-LINK-3).~~ Done — see Verification above. (Item 2, longer codes, and item 3, an audit/log event on repeated failure, remain open — see the FINDING-LINK-3 section.)
 - `discord_account_links` composite-unique constraint allows two different `account_id`s for the same `discord_user_id`, and rejects a duplicate `(discord_user_id, account_id)` pair (FINDING-LINK-6).
 
 ## Known Limitations
@@ -169,6 +178,20 @@ Add targeted tests for:
   ever added or changed to accept a distinct target, this function must be
   revisited before that route ships, or a genuinely privileged actor could
   again act on someone else's identity.
+- FINDING-LINK-3's rate limiter is in-memory (`Map`-backed, via
+  `createLoginRateLimiter()`), the same as the pre-existing login rate
+  limiter it reuses. Lockout state does not survive a console process
+  restart and is not shared across multiple console replicas, if the
+  console is ever run with more than one instance behind a load balancer.
+  This matches the existing limitation already accepted for login rate
+  limiting; a persisted/shared store would need to address both at once.
+- FINDING-LINK-3 rate-limits by `discordUserId` only. It does not add a
+  separate limit on `linkPlayerProvider()` (the code-generation side) —
+  that side is already implicitly throttled by `createPendingLink()`'s
+  one-pending-link-per-user uniqueness constraint (a second link request
+  before the first expires returns "already pending" rather than issuing a
+  new code), so a dedicated rate limiter there was judged unnecessary. If
+  that uniqueness constraint is ever relaxed, this should be revisited.
 
 ## Remediation Status
 
@@ -176,7 +199,7 @@ Add targeted tests for:
 |---------|--------|--------------|
 | FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in) | `console/api` 558/558 tests pass; gitleaks/semgrep clean |
 | FINDING-LINK-2 `player-link:write` at `moderator` tier | Implemented (self-scoped, not tier-restricted) | `console/api` 567/567 tests pass; gitleaks/semgrep clean |
-| FINDING-LINK-3 No verification rate limiting | Proposed | Not yet implemented |
+| FINDING-LINK-3 No verification rate limiting | Partially implemented (rate limiting done; longer codes and audit logging still open) | `console/api` 571/571 tests pass; gitleaks/semgrep clean |
 | FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
 | FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Proposed | Not yet implemented |
 | FINDING-LINK-6 No multi-character/multi-account linking | Proposed (design gap, not a vulnerability) | Not yet implemented |
