@@ -2,6 +2,10 @@
 
 Branch: `security/discord-player-link-hardening`
 
+Upstream tracking: `Red-Blink/dune-awakening-selfhost-docker#100` (covers
+FINDING-LINK-1, -2, -3, -5, -6). FINDING-LINK-4 is tracked separately and
+already resolved-by-discussion in `Red-Blink/dune-awakening-selfhost-docker#72`.
+
 Status: Findings documented and proposed. No remediation code has landed on
 this branch yet; it currently contains this document only.
 
