@@ -108,7 +108,7 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
   // configured, preserving today's behavior for unmigrated bots.
   async function readJson(request) {
     const body = await readJsonBody(request);
-    verifyActorSignature({ actorPayload: body?.actor, headers: request.headers, config });
+    verifyActorSignature({ actorPayload: body?.actor, headers: request.headers, config, route: path });
     return body;
   }
   try {

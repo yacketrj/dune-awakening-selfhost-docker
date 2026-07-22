@@ -38,7 +38,8 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   1. Require Discord's own interaction signature verification (Ed25519, `X-Signature-Ed25519`/`X-Signature-Timestamp`) if the adapter is ever reachable independently of the bot process.
   2. At minimum, add a second HMAC secret (distinct from the transport bearer token) shared only between the specific bot instance and adapter, covering `(userId, guildId, channelId, roleIds, interactionId, timestamp)`, with a short freshness window (~30s) to prevent replay.
   3. Until (1) or (2) ship, treat the adapter bearer token as equivalent in sensitivity to a master credential for all linked Discord identities, not just "API access" — document this explicitly in `docs/security/` and operator secret-handling guidance.
-- **Implemented:** Option 2. `console/api/src/integrations/discord/actorSignature.js` adds HMAC-SHA256 verification over `(userId, guildId, channelId, roleIds, interactionId)` plus a Unix timestamp, using a secret distinct from the transport bearer token (`DUNE_DISCORD_ACTOR_SECRET`/`DUNE_DISCORD_ACTOR_SECRET_FILE`), with a 30-second default freshness window (`DUNE_DISCORD_ACTOR_SIGNATURE_MAX_SKEW_SECONDS`). Wired into every POST route inside `handleDiscordAdapterRoute()` via a shared `readJson` wrapper, so no individual route handler needed to change. **Backward compatible by design:** when `DUNE_DISCORD_ACTOR_SECRET` is unset, verification no-ops and behavior is unchanged from before this fix — this lets the console ship ahead of bot-side signing support (tracked as a follow-up in `yacketrj/Arrakis-Control-Panel`). Option 1 (Discord's own Ed25519 interaction signatures) remains open as a stronger future alternative, since it wouldn't require provisioning and rotating a second shared secret. Item 3 (documenting the token as a master credential) is still open — see Known Limitations below.
+- **Implemented:** Option 2. `console/api/src/integrations/discord/actorSignature.js` adds HMAC-SHA256 verification over `(route, userId, guildId, channelId, roleIds, interactionId)` plus a Unix timestamp, using a secret distinct from the transport bearer token (`DUNE_DISCORD_ACTOR_SECRET`/`DUNE_DISCORD_ACTOR_SECRET_FILE`), with a 30-second default freshness window (`DUNE_DISCORD_ACTOR_SIGNATURE_MAX_SKEW_SECONDS`). Wired into every POST route inside `handleDiscordAdapterRoute()` via a shared `readJson` wrapper, so no individual route handler needed to change. **Backward compatible by design:** when `DUNE_DISCORD_ACTOR_SECRET` is unset, verification no-ops and behavior is unchanged from before this fix — this lets the console ship ahead of bot-side signing support (tracked as a follow-up in `yacketrj/Arrakis-Control-Panel`). Option 1 (Discord's own Ed25519 interaction signatures) remains open as a stronger future alternative, since it wouldn't require provisioning and rotating a second shared secret. Item 3 (documenting the token as a master credential) is still open — see Known Limitations below.
+- **Follow-up hardening (found during self-review, same branch):** the initial implementation signed only actor identity fields, not the route. That meant a signature captured from one legitimate, low-privilege request (e.g. a routine `status` call, which requires no special access to observe) could be replayed verbatim — with an attacker-chosen request body — against **any other route** within the freshness window, including `players/link` or `broadcast`, as long as the actor still qualified for that route's capability. Confirmed this was exploitable with a direct reproduction before fixing it. The signature now also covers the exact adapter route path (`canonicalActorSignaturePayload(actorPayload, timestamp, route)`), so a captured envelope only verifies against the specific route it was issued for. This does **not** fully eliminate replay — the exact same signed envelope (same route, same body) can still be resent verbatim within the skew window; see Known Limitations.
 
 ### FINDING-LINK-2: `player-link:write` capability requires only `moderator` tier (MEDIUM) — IMPLEMENTED
 
@@ -104,8 +105,8 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 
 ## Verification (This Branch)
 
-- `npm test --prefix console/api`: 571/571 tests pass. Baseline 540
-  (inherited from `main` at `0ae01dc` after #103/#104 merged) + 18
+- `npm test --prefix console/api`: 575/575 tests pass. Baseline 540
+  (inherited from `main` at `0ae01dc` after #103/#104 merged) + 20
   (FINDING-LINK-1: 17 unit tests in `test/discordActorSignature.test.js`
   plus 1 end-to-end integration test in `test/discordAdapter.test.js`
   proving a spoofed actor is rejected with `403 invalid_actor_signature`
@@ -119,7 +120,13 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   block another, and lockout reset on success — plus 1 end-to-end
   integration test in `test/discordAdapter.test.js` proving a real HTTP
   request sequence against `/players/link/verify` gets `429
-  verify_rate_limited` on the third wrong guess).
+  verify_rate_limited` on the third wrong guess) + 4 (FINDING-LINK-1
+  cross-route-replay follow-up hardening, found during self-review: 3
+  unit tests in `test/discordActorSignature.test.js` proving the
+  canonical payload differs per route and a signature valid for one route
+  is rejected for another, plus 1 end-to-end integration test in
+  `test/discordAdapter.test.js` proving a signature captured from a real
+  `/status` HTTP response is rejected when replayed against `/readiness`).
 - `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities.
 - `npm run build --prefix console/web`: builds clean (no web-side changes
   in any of these findings; run as a regression check).
@@ -146,6 +153,21 @@ Add targeted tests for:
   default). Deployments that have not configured it remain exactly as
   exposed to FINDING-LINK-1 as before this change. Making it mandatory
   requires bot-side signing support to exist first (see Remediation Status).
+- **No nonce or one-time-use enforcement.** The signature binds
+  `(route, userId, guildId, channelId, roleIds, interactionId, timestamp)`
+  but nothing rejects the exact same signed envelope being resent multiple
+  times within the freshness window (confirmed directly: two identical
+  `verifyActorSignature()` calls with the same signature both succeed).
+  `interactionId` is included in the signed fields but is never checked
+  for uniqueness anywhere in the codebase today — it is currently
+  informational only. This means a captured valid request can be replayed
+  verbatim (same route, same body) as many times as an attacker likes
+  within ~30 seconds. It cannot be replayed against a *different* route or
+  with a *different* body (see the route-binding fix above), which was the
+  more serious gap. Closing same-route/same-body replay fully would require
+  tracking consumed `interactionId`s (or a dedicated nonce) server-side
+  with a bounded TTL store, which was judged out of scope for this pass —
+  tracked as a follow-up.
 - The signed field set (`userId`, `guildId`, `channelId`, `roleIds`,
   `interactionId`) does not cover `username` or `commandName` — these
   remain unauthenticated informational fields. They are not used for any
@@ -197,9 +219,9 @@ Add targeted tests for:
 
 | Finding | Status | Verification |
 |---------|--------|--------------|
-| FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in) | `console/api` 558/558 tests pass; gitleaks/semgrep clean |
-| FINDING-LINK-2 `player-link:write` at `moderator` tier | Implemented (self-scoped, not tier-restricted) | `console/api` 567/567 tests pass; gitleaks/semgrep clean |
-| FINDING-LINK-3 No verification rate limiting | Partially implemented (rate limiting done; longer codes and audit logging still open) | `console/api` 571/571 tests pass; gitleaks/semgrep clean |
+| FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in; route-bound signature added during self-review to close cross-route replay) | `console/api` 575/575 tests pass; gitleaks/semgrep clean |
+| FINDING-LINK-2 `player-link:write` at `moderator` tier | Implemented (self-scoped, not tier-restricted) | `console/api` 567/567 tests pass at time of fix; gitleaks/semgrep clean |
+| FINDING-LINK-3 No verification rate limiting | Partially implemented (rate limiting done; longer codes and audit logging still open) | `console/api` 571/571 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
 | FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Proposed | Not yet implemented |
 | FINDING-LINK-6 No multi-character/multi-account linking | Proposed (design gap, not a vulnerability) | Not yet implemented |

@@ -35,8 +35,8 @@ function actor(overrides = {}) {
   };
 }
 
-function headersFor(actorPayload, secret, { timestamp = Math.floor(Date.now() / 1000), signature } = {}) {
-  const signed = signature ?? signActorPayload(actorPayload, secret, timestamp).signature;
+function headersFor(actorPayload, secret, { timestamp = Math.floor(Date.now() / 1000), signature, route = "" } = {}) {
+  const signed = signature ?? signActorPayload(actorPayload, secret, timestamp, route).signature;
   return {
     [ACTOR_SIGNATURE_HEADER]: signed,
     [ACTOR_TIMESTAMP_HEADER]: String(timestamp)
@@ -180,6 +180,49 @@ test("canonicalActorSignaturePayload excludes unsigned fields like username and 
   const withExtra = canonicalActorSignaturePayload(actor({ username: "alice" }), 1000);
   const withoutExtra = canonicalActorSignaturePayload(actor({ username: "bob" }), 1000);
   assert.equal(withExtra, withoutExtra);
+});
+
+// Route binding hardens FINDING-LINK-1 further: without it, a signature
+// covering only actor identity fields can be captured from one legitimate
+// request (e.g. a routine, low-privilege "status" call) and replayed
+// verbatim — with an attacker-chosen request body — against ANY OTHER
+// route within the freshness window, including write routes like
+// players/link or broadcast, as long as the actor still qualifies for that
+// route's capability.
+test("canonicalActorSignaturePayload differs for the same actor/timestamp when the route differs", () => {
+  const a = actor();
+  const statusPayload = canonicalActorSignaturePayload(a, 1000, "/api/integrations/discord/status");
+  const readinessPayload = canonicalActorSignaturePayload(a, 1000, "/api/integrations/discord/readiness");
+  assert.notEqual(statusPayload, readinessPayload);
+});
+
+test("verifyActorSignature rejects a signature valid for one route when checked against a different route", () => {
+  process.env.DUNE_DISCORD_ACTOR_SECRET = "shared-secret";
+  const now = Math.floor(Date.now() / 1000);
+  const a = actor();
+  const headers = headersFor(a, "shared-secret", { timestamp: now, route: "/api/integrations/discord/status" });
+
+  // Same actor, same signature, same timestamp, still within the skew
+  // window — but verified against a different route than it was signed for.
+  assert.throws(
+    () => verifyActorSignature({ actorPayload: a, headers, config: {}, now, route: "/api/integrations/discord/players/link" }),
+    (error) => error.code === "invalid_actor_signature"
+  );
+
+  // The same signature must still succeed against the route it was
+  // actually issued for.
+  assert.doesNotThrow(
+    () => verifyActorSignature({ actorPayload: a, headers, config: {}, now, route: "/api/integrations/discord/status" })
+  );
+});
+
+test("verifyActorSignature defaults to an empty route when none is passed, on both sign and verify sides", () => {
+  process.env.DUNE_DISCORD_ACTOR_SECRET = "shared-secret";
+  const now = Math.floor(Date.now() / 1000);
+  const a = actor();
+  const { signature } = signActorPayload(a, "shared-secret", now);
+  const headers = { [ACTOR_SIGNATURE_HEADER]: signature, [ACTOR_TIMESTAMP_HEADER]: String(now) };
+  assert.doesNotThrow(() => verifyActorSignature({ actorPayload: a, headers, config: {}, now }));
 });
 
 test("signActorPayload defaults to the current time when no timestamp is supplied", () => {

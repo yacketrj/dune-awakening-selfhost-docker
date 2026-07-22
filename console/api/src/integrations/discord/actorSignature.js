@@ -55,17 +55,32 @@ export function actorSignatureRequired(config = {}) {
 // Deterministic string the bot and console must both compute identically.
 // roleIds is sorted so role-array ordering differences never break a
 // signature that is otherwise for the same actor.
-export function canonicalActorSignaturePayload(actorPayload = {}, timestamp) {
+//
+// `route` binds the signature to the specific adapter route path (e.g.
+// "/api/integrations/discord/players/link"). Without this, a signature
+// covering only actor identity fields can be captured from one legitimate
+// request (e.g. a routine "status" call, which requires no special
+// privilege to observe) and replayed verbatim — with an attacker-chosen
+// request body — against ANY OTHER route within the freshness window,
+// including PLAYERS_LINK or BROADCAST, as long as the actor still qualifies
+// for that route's capability. Binding the route closes that gap: a
+// captured envelope only verifies against the exact route it was issued
+// for. This does not fully eliminate replay (a captured envelope can still
+// be resent verbatim to the SAME route with the SAME body within the skew
+// window — see FINDING-LINK-1's Known Limitations for why a full nonce/
+// one-time-use scheme was not implemented here), but it eliminates
+// cross-route and cross-body-parameter forgery using a captured envelope.
+export function canonicalActorSignaturePayload(actorPayload = {}, timestamp, route = "") {
   const fields = {};
   for (const key of SIGNED_ACTOR_FIELDS) {
     const value = actorPayload?.[key];
     fields[key] = Array.isArray(value) ? [...value].map(String).sort() : String(value ?? "");
   }
-  return `${timestamp}.${JSON.stringify(fields)}`;
+  return `${timestamp}.${String(route)}.${JSON.stringify(fields)}`;
 }
 
-export function signActorPayload(actorPayload, secret, timestamp = Math.floor(Date.now() / 1000)) {
-  const message = canonicalActorSignaturePayload(actorPayload, timestamp);
+export function signActorPayload(actorPayload, secret, timestamp = Math.floor(Date.now() / 1000), route = "") {
+  const message = canonicalActorSignaturePayload(actorPayload, timestamp, route);
   const signature = createHmac("sha256", String(secret)).update(message).digest("hex");
   return { signature, timestamp };
 }
@@ -82,7 +97,12 @@ function constantTimeHexEqual(a, b) {
 // when no secret is configured (see module header for the compatibility
 // rationale) — callers should still log/monitor this state to track
 // migration progress toward mandatory signing.
-export function verifyActorSignature({ actorPayload, headers, config, now = Math.floor(Date.now() / 1000) }) {
+//
+// `route` must be the exact adapter route path the request was made to
+// (see canonicalActorSignaturePayload() for why). Passing a route lets a
+// captured signed envelope be rejected when replayed against a different
+// route than the one it was issued for.
+export function verifyActorSignature({ actorPayload, headers, config, route = "", now = Math.floor(Date.now() / 1000) }) {
   const secret = actorSignatureSecret(config);
   if (!secret) return { verified: false, required: false };
 
@@ -102,7 +122,7 @@ export function verifyActorSignature({ actorPayload, headers, config, now = Math
     throw policyError("stale_actor_signature", "Discord actor signature has expired. Retry the command.", 403);
   }
 
-  const expected = signActorPayload(actorPayload, secret, timestamp).signature;
+  const expected = signActorPayload(actorPayload, secret, timestamp, route).signature;
   if (!constantTimeHexEqual(signature, expected)) {
     throw policyError("invalid_actor_signature", "Discord actor signature does not match the expected value.", 403);
   }

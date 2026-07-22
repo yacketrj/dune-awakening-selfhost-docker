@@ -353,7 +353,7 @@ test("adapter route rejects an unsigned or spoofed actor when DUNE_DISCORD_ACTOR
 
           // Correctly signed actor: accepted.
           const timestamp = Math.floor(Date.now() / 1000);
-          const { signature } = signActorPayload(observerActor, "integration-test-actor-secret", timestamp);
+          const { signature } = signActorPayload(observerActor, "integration-test-actor-secret", timestamp, "/api/integrations/discord/status");
           const validSigned = await fetch(`${base}/api/integrations/discord/status`, {
             method: "POST",
             headers: {
@@ -387,6 +387,83 @@ test("adapter route rejects an unsigned or spoofed actor when DUNE_DISCORD_ACTOR
           assert.equal(spoofed.status, 403);
           const spoofedBody = await spoofed.json();
           assert.equal(spoofedBody.code, "invalid_actor_signature");
+
+          server.close();
+          resolve();
+        } catch (e) { server.close(); reject(e); }
+      });
+    });
+  } finally {
+    try { unlinkSync(tokenFile); } catch {}
+    if (OLD_SECRET === undefined) delete process.env.DUNE_DISCORD_ACTOR_SECRET;
+    else process.env.DUNE_DISCORD_ACTOR_SECRET = OLD_SECRET;
+  }
+});
+
+// Cross-route replay rejection — FINDING-LINK-1 hardening. A signature that
+// covered only actor identity fields (not the route) could be captured from
+// one legitimate request (e.g. a routine "status" call, which requires no
+// special privilege to observe) and replayed verbatim against a completely
+// different, more sensitive route within the freshness window. Proves the
+// route-bound signature closes that gap: the same actor + signature +
+// timestamp that is valid for /status must be rejected for /readiness.
+test("a signature valid for one route is rejected when replayed against a different route", async () => {
+  const { signActorPayload, ACTOR_SIGNATURE_HEADER, ACTOR_TIMESTAMP_HEADER } = await import("../src/integrations/discord/actorSignature.js");
+  const tokenFile = "/tmp/discord-adapter-cross-route-replay-test-token.txt";
+  writeFileSync(tokenFile, "server-test-token");
+  const OLD_SECRET = process.env.DUNE_DISCORD_ACTOR_SECRET;
+  process.env.DUNE_DISCORD_ACTOR_SECRET = "cross-route-test-secret";
+  const testConfig = { discordBotApiTokenFile: tokenFile, discordAdapterEnabled: true, auditLog: "/tmp/discord-adapter-cross-route-replay-test-audit.jsonl", generatedDir: "/tmp/discord-adapter-cross-route-replay-test-generated" };
+  const mockStatus = async () => ({ ok: true, summary: { overall: "OK", region: "us", mode: "pve", population: "8/128" } });
+  const mockReadiness = async () => ({ ready: true, overall: "READY", issues: [] });
+
+  try {
+    await new Promise((resolve, reject) => {
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url || "/", "http://local");
+        const path = url.pathname;
+        const readJson = async () => {
+          const chunks = [];
+          for await (const chunk of req) chunks.push(chunk);
+          return Buffer.concat(chunks).length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+        };
+        const json = (r, code, body) => { r.writeHead(code, { "content-type": "application/json" }); r.end(JSON.stringify(body)); };
+        await handleDiscordAdapterRoute({ req, res, path, config: testConfig, readJson, json, statusProvider: mockStatus, readinessProvider: mockReadiness });
+      });
+      const auth = { authorization: "Bearer server-test-token" };
+
+      server.listen(async () => {
+        try {
+          const base = `http://127.0.0.1:${server.address().port}`;
+          const observerActor = actor(["role-observer"]);
+          const timestamp = Math.floor(Date.now() / 1000);
+          const { signature } = signActorPayload(observerActor, "cross-route-test-secret", timestamp, "/api/integrations/discord/status");
+          const headers = {
+            ...auth,
+            "content-type": "application/json",
+            [ACTOR_SIGNATURE_HEADER]: signature,
+            [ACTOR_TIMESTAMP_HEADER]: String(timestamp)
+          };
+
+          // The signature is valid for /status...
+          const statusResponse = await fetch(`${base}/api/integrations/discord/status`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ actor: observerActor })
+          });
+          assert.equal(statusResponse.status, 200);
+
+          // ...but must be rejected when replayed against /readiness, even
+          // though the actor, timestamp, and signature bytes are identical
+          // and still within the freshness window.
+          const readinessResponse = await fetch(`${base}/api/integrations/discord/readiness`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ actor: observerActor })
+          });
+          assert.equal(readinessResponse.status, 403);
+          const readinessBody = await readinessResponse.json();
+          assert.equal(readinessBody.code, "invalid_actor_signature");
 
           server.close();
           resolve();
