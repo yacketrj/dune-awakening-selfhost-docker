@@ -12,7 +12,7 @@ export const DISCORD_CAPABILITIES = Object.freeze({
   STORAGE_READ: "storage:read",
   GUILD_READ: "guild:read",
   // PLAYER_LINK_WRITE is intentionally NOT part of the observer/moderator/
-  // admin/owner tier ladder (see requirePlayerLinkAccess() below /
+  // admin/owner tier ladder (see requireSelfScopedCapability() below /
   // docs/security/discord-player-link-hardening.md FINDING-LINK-2). It is a
   // self-scoped identity action, not a role-scoped visibility grant: every
   // route that checks it always passes discordUserId = actor.userId, never

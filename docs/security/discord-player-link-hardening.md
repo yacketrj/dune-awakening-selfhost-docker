@@ -214,6 +214,23 @@ Add targeted tests for:
   before the first expires returns "already pending" rather than issuing a
   new code), so a dedicated rate limiter there was judged unnecessary. If
   that uniqueness constraint is ever relaxed, this should be revisited.
+- FINDING-LINK-3's limiter has no bound on the number of distinct
+  `discordUserId` keys it tracks. `discordUserId` is not validated as a
+  real Discord snowflake anywhere in the actor pipeline (`normalizeDiscordActor()`
+  in `policy.js` only checks non-empty and ≤256 chars), and entries are
+  only evicted lazily on next access to that same key
+  (`createLoginRateLimiter`'s `activeAttempt()` — there is no periodic
+  sweep). An attacker with the adapter bearer token (and, if
+  `DUNE_DISCORD_ACTOR_SECRET` is configured, a valid actor signature) could
+  submit many distinct fake `discordUserId` values to grow the limiter's
+  internal `Map` without bound over time. This is not a new risk
+  introduced by this fix — the pre-existing login rate limiter has the same
+  characteristic keyed by remote address, which is also attacker-rotatable
+  — but it is worth calling out precisely rather than only under the more
+  general "in-memory" limitation above. A bounded LRU or periodic sweep
+  would close this; not implemented here since it applies equally to the
+  pre-existing login limiter and was judged a shared follow-up rather than
+  specific to this finding.
 
 ## Remediation Status
 
