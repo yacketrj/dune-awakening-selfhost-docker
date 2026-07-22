@@ -6,7 +6,7 @@ import {
   discordAdapterStatus, discordWritesEnabled, DISCORD_ADAPTER_ROUTES, DISCORD_PLANNED_ADAPTER_ROUTES,
   validateDiscordActor, discordRoleMappingFromEnv
 } from "./adapter.js";
-import { policyError, requireDiscordCapability, DISCORD_CAPABILITIES } from "./policy.js";
+import { policyError, requireDiscordCapability, requireSelfScopedCapability, DISCORD_CAPABILITIES } from "./policy.js";
 import { discordStatusProvider } from "./statusProvider.js";
 import { discordReadinessProvider, discordServicesProvider } from "./readOnlyProviders.js";
 import {
@@ -234,7 +234,7 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
     if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_LINK && req.method === "POST") {
       const body = await readJson(req);
       const actor = validateDiscordActor(body.actor);
-      requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
       return json(res, 200, await linkPlayerProvider(db, config, {
         discordUserId: actor.userId,
         characterName: body.characterName
@@ -245,7 +245,7 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
     if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_LINK_VERIFY && req.method === "POST") {
       const body = await readJson(req);
       const actor = validateDiscordActor(body.actor);
-      requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
       return json(res, 200, await verifyPlayerLinkProvider(db, {
         discordUserId: actor.userId,
         code: body.code
@@ -256,7 +256,7 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
     if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_UNLINK && req.method === "POST") {
       const body = await readJson(req);
       const actor = validateDiscordActor(body.actor);
-      requireDiscordCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
       return json(res, 200, await unlinkProvider(db, {
         discordUserId: actor.userId
       }));

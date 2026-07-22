@@ -6,9 +6,9 @@ Upstream tracking: `Red-Blink/dune-awakening-selfhost-docker#100` (covers
 FINDING-LINK-1, -2, -3, -5, -6). FINDING-LINK-4 is tracked separately and
 already resolved-by-discussion in `Red-Blink/dune-awakening-selfhost-docker#72`.
 
-Status: FINDING-LINK-1 implemented (console-side, backward-compatible). See
-"Remediation Status" at the end of this document. FINDING-LINK-2, -3, -5, -6
-remain proposed.
+Status: FINDING-LINK-1 and FINDING-LINK-2 implemented (console-side,
+backward-compatible). See "Remediation Status" at the end of this document.
+FINDING-LINK-3, -5, -6 remain proposed.
 
 ## Purpose
 
@@ -39,11 +39,12 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   3. Until (1) or (2) ship, treat the adapter bearer token as equivalent in sensitivity to a master credential for all linked Discord identities, not just "API access" — document this explicitly in `docs/security/` and operator secret-handling guidance.
 - **Implemented:** Option 2. `console/api/src/integrations/discord/actorSignature.js` adds HMAC-SHA256 verification over `(userId, guildId, channelId, roleIds, interactionId)` plus a Unix timestamp, using a secret distinct from the transport bearer token (`DUNE_DISCORD_ACTOR_SECRET`/`DUNE_DISCORD_ACTOR_SECRET_FILE`), with a 30-second default freshness window (`DUNE_DISCORD_ACTOR_SIGNATURE_MAX_SKEW_SECONDS`). Wired into every POST route inside `handleDiscordAdapterRoute()` via a shared `readJson` wrapper, so no individual route handler needed to change. **Backward compatible by design:** when `DUNE_DISCORD_ACTOR_SECRET` is unset, verification no-ops and behavior is unchanged from before this fix — this lets the console ship ahead of bot-side signing support (tracked as a follow-up in `yacketrj/Arrakis-Control-Panel`). Option 1 (Discord's own Ed25519 interaction signatures) remains open as a stronger future alternative, since it wouldn't require provisioning and rotating a second shared secret. Item 3 (documenting the token as a master credential) is still open — see Known Limitations below.
 
-### FINDING-LINK-2: `player-link:write` capability requires only `moderator` tier (MEDIUM)
+### FINDING-LINK-2: `player-link:write` capability requires only `moderator` tier (MEDIUM) — IMPLEMENTED
 
 - **Location:** `console/api/src/integrations/discord/policy.js:14,34-45` (`DISCORD_CAPABILITIES.PLAYER_LINK_WRITE` in the `moderator` tier's capability set)
 - **Risk:** Combined with FINDING-LINK-1, any actor payload claiming a `moderator`-mapped role ID — a much larger population than `admin`/`owner` — can exercise the identity-binding write capability. Identity-linking has a different risk profile than the other `moderator`-tier read capabilities it's grouped with (inventory/storage/backups read); it mutates a persistent binding between a Discord account and a game account, not just a read query.
 - **Recommendation:** Move `PLAYER_LINK_WRITE` to require `admin` tier, or introduce a `self-link` capability that is available to any authenticated actor for their own `discordUserId` only, separate from role-tier-gated capabilities for privileged operations.
+- **Implemented:** The `self-link` option, not "raise to admin" — raising the tier alone would have been wrong. Every route gating `PLAYER_LINK_WRITE` (`players/link`, `players/link/verify`, `players/unlink`) always passes `discordUserId: actor.userId`, never a separate target: this is inherently a self-service action (a player linking *their own* Discord account to *their own* character), not a privileged operation. Restricting it to `admin` would have broken that self-service feature for ordinary players. Added `SELF_SCOPED_CAPABILITIES` and `requireSelfScopedCapability()` in `policy.js`: `PLAYER_LINK_WRITE` is now removed from every tier's capability set (including `admin`/`owner`'s previously-implicit "all capabilities" grant) and instead authorized for any actor above `public` tier (i.e. any actor holding at least one configured Discord role), regardless of which specific role. `requireDiscordCapability()` now explicitly rejects `PLAYER_LINK_WRITE` with `invalid_capability` to prevent a future call site from accidentally reintroducing tier-based gating for a self-scoped action.
 
 ### FINDING-LINK-3: No rate limiting or lockout on verification attempts (MEDIUM)
 
@@ -95,24 +96,28 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 
 - No change to the whisper message content or in-game player experience.
 - No change to the `/dune data link` / `/dune data verify` / `/dune data unlink` command surface from the operator's perspective — only the trust/authorization internals change.
-- FINDING-LINK-2's tier change may require operators who previously granted `moderator` roles expecting link access to explicitly grant `admin` instead; call this out in release notes if implemented.
+- FINDING-LINK-2 required no operator action: any actor holding at least one configured Discord role (`observer` and above) can still use `player-link:write` exactly as before — the fix removed the capability from the tier ladder entirely rather than moving it to a stricter tier, so no existing operator role configuration needs to change.
 - FINDING-LINK-6's schema change is additive (new table) and does not require migrating existing single-character links, though a migration path from `discord_player_links` to `discord_account_links` should be written if both are meant to coexist during a transition period.
 
 ## Verification (This Branch)
 
-- `npm test --prefix console/api`: 558/558 tests pass (540 inherited from
-  `main` at `0ae01dc` after #103/#104 merged, plus 18 new: 17 unit tests in
-  `test/discordActorSignature.test.js`, 1 end-to-end integration test in
-  `test/discordAdapter.test.js` proving a real HTTP request with a spoofed
-  actor is rejected with `403 invalid_actor_signature` even when the request
-  carries a valid bearer token).
+- `npm test --prefix console/api`: 567/567 tests pass. Baseline 540
+  (inherited from `main` at `0ae01dc` after #103/#104 merged) + 18
+  (FINDING-LINK-1: 17 unit tests in `test/discordActorSignature.test.js`
+  plus 1 end-to-end integration test in `test/discordAdapter.test.js`
+  proving a spoofed actor is rejected with `403 invalid_actor_signature`
+  even with a valid bearer token) + 9 (FINDING-LINK-2: 8 unit tests in
+  `test/discordPolicy.test.js` plus 1 end-to-end integration test in
+  `test/discordAdapter.test.js` proving a `public`-tier actor is rejected
+  with `403 not_authorized` from `/players/link` while an `observer`-tier
+  actor is allowed through to the provider).
 - `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities.
-- `npm run build --prefix console/web`: builds clean (FINDING-LINK-1 has no
-  web-side changes; run as a regression check).
+- `npm run build --prefix console/web`: builds clean (no web-side changes
+  in either finding; run as a regression check).
 - `gitleaks detect --no-git`: no leaks.
 - `semgrep --config auto` on all new/changed files: 0 findings.
 
-## Proposed Verification Plan (FINDING-LINK-2, -3, -5, -6 — Not Yet Implemented)
+## Proposed Verification Plan (FINDING-LINK-3, -5, -6 — Not Yet Implemented)
 
 ```bash
 npm test --prefix console/api
@@ -122,7 +127,7 @@ npm run build --prefix console/web
 
 Add targeted tests for:
 - ~~Actor payload with mismatched/forged `userId` is rejected once signature/HMAC verification lands (FINDING-LINK-1).~~ Done — see Verification above.
-- `moderator`-tier actor is denied `player-link:write` after the tier change (FINDING-LINK-2).
+- ~~`moderator`-tier actor is denied `player-link:write` after the tier change (FINDING-LINK-2).~~ Done — see Verification above. (Note: the actual fix authorizes any non-`public` tier for this self-scoped action rather than restricting it upward to `admin`; see the FINDING-LINK-2 section for why.)
 - Repeated failed verification attempts trigger lockout (FINDING-LINK-3).
 - `discord_account_links` composite-unique constraint allows two different `account_id`s for the same `discord_user_id`, and rejects a duplicate `(discord_user_id, account_id)` pair (FINDING-LINK-6).
 
@@ -147,13 +152,30 @@ Add targeted tests for:
   as a master credential in operator secret-handling docs) is not yet
   reflected in `docs/security-gates.md` or operator-facing setup
   documentation outside this file.
+- FINDING-LINK-2's fix authorizes `PLAYER_LINK_WRITE` for any actor above
+  `public` tier, which still depends on FINDING-LINK-1's actor-authenticity
+  fix (or the pre-existing bearer-token-only trust model) to mean anything
+  — `requireSelfScopedCapability()` trusts `actor.roleIds` exactly as much
+  as `requireDiscordCapability()` does. It does not itself verify the
+  actor is who they claim to be; it only decides that, given a trusted
+  actor, self-linking should not require a specific privileged role. Treat
+  FINDING-LINK-1 and FINDING-LINK-2 as complementary, not independent:
+  LINK-2 narrows *who is allowed to self-link* once identity is trusted;
+  LINK-1 is what makes that identity trustworthy in the first place.
+- `requireSelfScopedCapability()` does not verify `target == actor.userId`
+  directly — it relies on every current self-scoped route already always
+  passing `discordUserId: actor.userId` with no separate target parameter
+  (documented in the function's own comment). If a self-scoped route is
+  ever added or changed to accept a distinct target, this function must be
+  revisited before that route ships, or a genuinely privileged actor could
+  again act on someone else's identity.
 
 ## Remediation Status
 
 | Finding | Status | Verification |
 |---------|--------|--------------|
 | FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in) | `console/api` 558/558 tests pass; gitleaks/semgrep clean |
-| FINDING-LINK-2 `player-link:write` at `moderator` tier | Proposed | Not yet implemented |
+| FINDING-LINK-2 `player-link:write` at `moderator` tier | Implemented (self-scoped, not tier-restricted) | `console/api` 567/567 tests pass; gitleaks/semgrep clean |
 | FINDING-LINK-3 No verification rate limiting | Proposed | Not yet implemented |
 | FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
 | FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Proposed | Not yet implemented |

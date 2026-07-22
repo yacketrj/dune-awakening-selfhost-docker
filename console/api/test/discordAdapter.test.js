@@ -399,3 +399,84 @@ test("adapter route rejects an unsigned or spoofed actor when DUNE_DISCORD_ACTOR
     else process.env.DUNE_DISCORD_ACTOR_SECRET = OLD_SECRET;
   }
 });
+
+// Self-scoped capability enforcement — FINDING-LINK-2
+// (docs/security/discord-player-link-hardening.md): player-link:write is
+// no longer tier-gated at all; it authorizes any recognized Discord
+// principal to act on their own identity, and rejects an actor with no
+// configured role (public tier) regardless of what they claim as userId.
+test("player-link route rejects a public-tier actor and allows an observer-tier actor", async () => {
+  const tokenFile = "/tmp/discord-adapter-self-scoped-test-token.txt";
+  writeFileSync(tokenFile, "server-test-token");
+  const testConfig = { discordBotApiTokenFile: tokenFile, discordAdapterEnabled: true, auditLog: "/tmp/discord-adapter-self-scoped-test-audit.jsonl", generatedDir: "/tmp/discord-adapter-self-scoped-test-generated" };
+
+  // Minimal permissive db stub: satisfies migrateDiscordAdapterSchema()'s
+  // DDL calls and resolvePlayerByName()'s lookup query. Returns no rows for
+  // the player lookup so linkPlayerProvider() itself returns a normal "no
+  // player found" business result for the observer-tier case — the point
+  // of this test is proving the actor never reaches that far when
+  // unauthorized, not exercising the full link/whisper flow.
+  const db = {
+    transaction: (fn) => fn(db),
+    async query() {
+      return { rows: [], rowCount: 0 };
+    }
+  };
+
+  try {
+    await new Promise((resolve, reject) => {
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url || "/", "http://local");
+        const path = url.pathname;
+        const readJson = async () => {
+          const chunks = [];
+          for await (const chunk of req) chunks.push(chunk);
+          return Buffer.concat(chunks).length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+        };
+        const json = (r, code, body) => { r.writeHead(code, { "content-type": "application/json" }); r.end(JSON.stringify(body)); };
+        await handleDiscordAdapterRoute({ req, res, path, config: testConfig, readJson, json, db });
+      });
+      const auth = { authorization: "Bearer server-test-token" };
+
+      server.listen(async () => {
+        try {
+          const base = `http://127.0.0.1:${server.address().port}`;
+
+          // Public tier (no configured role at all) must be rejected, even
+          // with a valid bearer token, even though PLAYER_LINK_WRITE is a
+          // self-scoped capability meant to be broadly available.
+          const publicActor = { guildId: "guild-1", channelId: "channel-1", userId: "public-user", username: "no-role", roleIds: [] };
+          const publicResponse = await fetch(`${base}/api/integrations/discord/players/link`, {
+            method: "POST",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ actor: publicActor, characterName: "Chani" })
+          });
+          assert.equal(publicResponse.status, 403);
+          const publicBody = await publicResponse.json();
+          assert.equal(publicBody.code, "not_authorized");
+
+          // Observer tier (any recognized principal) is authorized for
+          // this self-scoped action — the request proceeds into
+          // linkPlayerProvider() and returns a normal business result
+          // (no player found, since the db stub returns no rows) rather
+          // than a 403.
+          const observerActor = actor(["role-observer"]);
+          const observerResponse = await fetch(`${base}/api/integrations/discord/players/link`, {
+            method: "POST",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ actor: observerActor, characterName: "Chani" })
+          });
+          assert.equal(observerResponse.status, 200);
+          const observerBody = await observerResponse.json();
+          assert.equal(observerBody.ok, false);
+          assert.match(observerBody.error, /No player found/i);
+
+          server.close();
+          resolve();
+        } catch (e) { server.close(); reject(e); }
+      });
+    });
+  } finally {
+    try { unlinkSync(tokenFile); } catch {}
+  }
+});
