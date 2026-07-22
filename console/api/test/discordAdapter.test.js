@@ -304,3 +304,98 @@ test("adapter routes respond through mounted HTTP server path", async () => {
     try { unlinkSync(tokenFile); } catch {}
   }
 });
+
+// Actor signature enforcement — FINDING-LINK-1
+// (docs/security/discord-player-link-hardening.md): when
+// DUNE_DISCORD_ACTOR_SECRET is configured, the bearer token alone is no
+// longer sufficient to make requests on behalf of an arbitrary actor.
+test("adapter route rejects an unsigned or spoofed actor when DUNE_DISCORD_ACTOR_SECRET is configured", async () => {
+  const tokenFile = "/tmp/discord-adapter-actor-sig-test-token.txt";
+  writeFileSync(tokenFile, "server-test-token");
+  const OLD_SECRET = process.env.DUNE_DISCORD_ACTOR_SECRET;
+  process.env.DUNE_DISCORD_ACTOR_SECRET = "integration-test-actor-secret";
+  const testConfig = { discordBotApiTokenFile: tokenFile, discordAdapterEnabled: true, auditLog: "/tmp/discord-adapter-actor-sig-test-audit.jsonl", generatedDir: "/tmp/discord-adapter-actor-sig-test-generated" };
+  const mockStatus = async () => ({ ok: true, summary: { overall: "OK", region: "us", mode: "pve", population: "8/128" } });
+
+  const { signActorPayload, ACTOR_SIGNATURE_HEADER, ACTOR_TIMESTAMP_HEADER } = await import("../src/integrations/discord/actorSignature.js");
+
+  try {
+    await new Promise((resolve, reject) => {
+      const server = createServer(async (req, res) => {
+        const url = new URL(req.url || "/", "http://local");
+        const path = url.pathname;
+        const readJson = async () => {
+          const chunks = [];
+          for await (const chunk of req) chunks.push(chunk);
+          return Buffer.concat(chunks).length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+        };
+        const json = (r, code, body) => { r.writeHead(code, { "content-type": "application/json" }); r.end(JSON.stringify(body)); };
+        await handleDiscordAdapterRoute({ req, res, path, config: testConfig, readJson, json, statusProvider: mockStatus });
+      });
+      const auth = { authorization: "Bearer server-test-token" };
+
+      server.listen(async () => {
+        try {
+          const base = `http://127.0.0.1:${server.address().port}`;
+          const observerActor = actor(["role-observer"]);
+
+          // Valid bearer token but no actor signature at all: rejected even
+          // though this exact request would have succeeded before
+          // DUNE_DISCORD_ACTOR_SECRET was configured.
+          const unsigned = await fetch(`${base}/api/integrations/discord/status`, {
+            method: "POST",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ actor: observerActor })
+          });
+          assert.equal(unsigned.status, 403);
+          const unsignedBody = await unsigned.json();
+          assert.equal(unsignedBody.code, "missing_actor_signature");
+
+          // Correctly signed actor: accepted.
+          const timestamp = Math.floor(Date.now() / 1000);
+          const { signature } = signActorPayload(observerActor, "integration-test-actor-secret", timestamp);
+          const validSigned = await fetch(`${base}/api/integrations/discord/status`, {
+            method: "POST",
+            headers: {
+              ...auth,
+              "content-type": "application/json",
+              [ACTOR_SIGNATURE_HEADER]: signature,
+              [ACTOR_TIMESTAMP_HEADER]: String(timestamp)
+            },
+            body: JSON.stringify({ actor: observerActor })
+          });
+          assert.equal(validSigned.status, 200);
+          const validBody = await validSigned.json();
+          assert.equal(validBody.ok, true);
+
+          // Signature was computed for a different actor (observer); an
+          // attacker with the bearer token tries to reuse that signature
+          // while claiming an owner role to escalate privilege. Must be
+          // rejected — this is exactly the confused-deputy scenario
+          // FINDING-LINK-1 describes.
+          const spoofedActor = { ...observerActor, roleIds: ["role-owner"] };
+          const spoofed = await fetch(`${base}/api/integrations/discord/status`, {
+            method: "POST",
+            headers: {
+              ...auth,
+              "content-type": "application/json",
+              [ACTOR_SIGNATURE_HEADER]: signature,
+              [ACTOR_TIMESTAMP_HEADER]: String(timestamp)
+            },
+            body: JSON.stringify({ actor: spoofedActor })
+          });
+          assert.equal(spoofed.status, 403);
+          const spoofedBody = await spoofed.json();
+          assert.equal(spoofedBody.code, "invalid_actor_signature");
+
+          server.close();
+          resolve();
+        } catch (e) { server.close(); reject(e); }
+      });
+    });
+  } finally {
+    try { unlinkSync(tokenFile); } catch {}
+    if (OLD_SECRET === undefined) delete process.env.DUNE_DISCORD_ACTOR_SECRET;
+    else process.env.DUNE_DISCORD_ACTOR_SECRET = OLD_SECRET;
+  }
+});

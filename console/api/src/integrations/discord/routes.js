@@ -21,6 +21,7 @@ import {
   whoamiProvider,
   requireLinkedPlayer
 } from "./linkProvider.js";
+import { verifyActorSignature } from "./actorSignature.js";
 import {
   playerInventoryProvider,
   playerStorageProvider,
@@ -93,11 +94,23 @@ export function isDiscordAdapterRoute(path) {
   return Object.values(DISCORD_ADAPTER_ROUTES).includes(path);
 }
 
-export async function handleDiscordAdapterRoute({ req, res, path, config, readJson, json, db, statusProvider, readinessProvider, servicesProvider, populationProvider }) {
+export async function handleDiscordAdapterRoute({ req, res, path, config, readJson: readJsonBody, json, db, statusProvider, readinessProvider, servicesProvider, populationProvider }) {
   const safeStatusProvider = typeof statusProvider === "function" ? statusProvider : () => discordStatusProvider(config);
   const safeReadinessProvider = typeof readinessProvider === "function" ? readinessProvider : () => discordReadinessProvider(config);
   const safeServicesProvider = typeof servicesProvider === "function" ? servicesProvider : () => discordServicesProvider(config);
   const safePopulationProvider = typeof populationProvider === "function" ? populationProvider : () => defaultPopulationProvider(config);
+
+  // Reads the JSON body for a Discord adapter POST route and, when
+  // DUNE_DISCORD_ACTOR_SECRET is configured, verifies that body.actor
+  // carries a valid HMAC signature before any route handler trusts
+  // actor.userId/actor.roleIds. See actorSignature.js (FINDING-LINK-1).
+  // No-ops (verification only, no behavior change) when no secret is
+  // configured, preserving today's behavior for unmigrated bots.
+  async function readJson(request) {
+    const body = await readJsonBody(request);
+    verifyActorSignature({ actorPayload: body?.actor, headers: request.headers, config });
+    return body;
+  }
   try {
     if (!discordAdapterEnabled(config)) throw policyError("adapter_disabled", "Discord adapter is disabled.", 404);
     requireDiscordBotToken(req, config);

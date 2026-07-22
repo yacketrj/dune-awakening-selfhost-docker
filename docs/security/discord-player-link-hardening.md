@@ -6,8 +6,9 @@ Upstream tracking: `Red-Blink/dune-awakening-selfhost-docker#100` (covers
 FINDING-LINK-1, -2, -3, -5, -6). FINDING-LINK-4 is tracked separately and
 already resolved-by-discussion in `Red-Blink/dune-awakening-selfhost-docker#72`.
 
-Status: Findings documented and proposed. No remediation code has landed on
-this branch yet; it currently contains this document only.
+Status: FINDING-LINK-1 implemented (console-side, backward-compatible). See
+"Remediation Status" at the end of this document. FINDING-LINK-2, -3, -5, -6
+remain proposed.
 
 ## Purpose
 
@@ -28,7 +29,7 @@ All findings below were confirmed by direct code review against
 this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 (`1ea3316`) for the bot-side client and documentation.
 
-### FINDING-LINK-1: Discord actor identity is an unauthenticated request-body claim (HIGH)
+### FINDING-LINK-1: Discord actor identity is an unauthenticated request-body claim (HIGH) — IMPLEMENTED
 
 - **Location:** `console/api/src/integrations/discord/policy.js:59-71` (`normalizeDiscordActor`), `console/api/src/integrations/discord/routes.js:221-260` (link/verify/unlink/me routes)
 - **Risk:** `actor.userId`, `actor.roleIds`, `actor.username`, `actor.guildId` are read verbatim from the JSON request body with no cryptographic binding to a real Discord interaction. The only gate on the whole adapter is a single shared bearer token (`routes.js:371-378`, `requireDiscordBotToken`) that authenticates the bot process, not the specific Discord user. Any caller holding that token can submit any `userId`/`roleIds` combination and the adapter will treat it as authentic. For the link/verify/unlink routes specifically, this means an attacker with the adapter token can link, unlink, or query the linked character for **any** Discord user ID, and can escalate their effective role tier by simply listing higher `roleIds` in the payload.
@@ -36,6 +37,7 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   1. Require Discord's own interaction signature verification (Ed25519, `X-Signature-Ed25519`/`X-Signature-Timestamp`) if the adapter is ever reachable independently of the bot process.
   2. At minimum, add a second HMAC secret (distinct from the transport bearer token) shared only between the specific bot instance and adapter, covering `(userId, guildId, channelId, roleIds, interactionId, timestamp)`, with a short freshness window (~30s) to prevent replay.
   3. Until (1) or (2) ship, treat the adapter bearer token as equivalent in sensitivity to a master credential for all linked Discord identities, not just "API access" — document this explicitly in `docs/security/` and operator secret-handling guidance.
+- **Implemented:** Option 2. `console/api/src/integrations/discord/actorSignature.js` adds HMAC-SHA256 verification over `(userId, guildId, channelId, roleIds, interactionId)` plus a Unix timestamp, using a secret distinct from the transport bearer token (`DUNE_DISCORD_ACTOR_SECRET`/`DUNE_DISCORD_ACTOR_SECRET_FILE`), with a 30-second default freshness window (`DUNE_DISCORD_ACTOR_SIGNATURE_MAX_SKEW_SECONDS`). Wired into every POST route inside `handleDiscordAdapterRoute()` via a shared `readJson` wrapper, so no individual route handler needed to change. **Backward compatible by design:** when `DUNE_DISCORD_ACTOR_SECRET` is unset, verification no-ops and behavior is unchanged from before this fix — this lets the console ship ahead of bot-side signing support (tracked as a follow-up in `yacketrj/Arrakis-Control-Panel`). Option 1 (Discord's own Ed25519 interaction signatures) remains open as a stronger future alternative, since it wouldn't require provisioning and rotating a second shared secret. Item 3 (documenting the token as a master credential) is still open — see Known Limitations below.
 
 ### FINDING-LINK-2: `player-link:write` capability requires only `moderator` tier (MEDIUM)
 
@@ -98,14 +100,19 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 
 ## Verification (This Branch)
 
-This branch adds documentation only; no source files changed.
+- `npm test --prefix console/api`: 558/558 tests pass (540 inherited from
+  `main` at `0ae01dc` after #103/#104 merged, plus 18 new: 17 unit tests in
+  `test/discordActorSignature.test.js`, 1 end-to-end integration test in
+  `test/discordAdapter.test.js` proving a real HTTP request with a spoofed
+  actor is rejected with `403 invalid_actor_signature` even when the request
+  carries a valid bearer token).
+- `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities.
+- `npm run build --prefix console/web`: builds clean (FINDING-LINK-1 has no
+  web-side changes; run as a regression check).
+- `gitleaks detect --no-git`: no leaks.
+- `semgrep --config auto` on all new/changed files: 0 findings.
 
-- `npm test --prefix console/api`: 518/518 tests pass (unchanged from `main`
-  at `e188c87`, confirming no regression from adding this document).
-
-## Proposed Verification Plan
-
-Remediation code not yet implemented on this branch. When work begins:
+## Proposed Verification Plan (FINDING-LINK-2, -3, -5, -6 — Not Yet Implemented)
 
 ```bash
 npm test --prefix console/api
@@ -114,10 +121,43 @@ npm run build --prefix console/web
 ```
 
 Add targeted tests for:
-- Actor payload with mismatched/forged `userId` is rejected once signature/HMAC verification lands (FINDING-LINK-1).
+- ~~Actor payload with mismatched/forged `userId` is rejected once signature/HMAC verification lands (FINDING-LINK-1).~~ Done — see Verification above.
 - `moderator`-tier actor is denied `player-link:write` after the tier change (FINDING-LINK-2).
 - Repeated failed verification attempts trigger lockout (FINDING-LINK-3).
 - `discord_account_links` composite-unique constraint allows two different `account_id`s for the same `discord_user_id`, and rejects a duplicate `(discord_user_id, account_id)` pair (FINDING-LINK-6).
+
+## Known Limitations
+
+- Signature verification is opt-in (`DUNE_DISCORD_ACTOR_SECRET` unset by
+  default). Deployments that have not configured it remain exactly as
+  exposed to FINDING-LINK-1 as before this change. Making it mandatory
+  requires bot-side signing support to exist first (see Remediation Status).
+- The signed field set (`userId`, `guildId`, `channelId`, `roleIds`,
+  `interactionId`) does not cover `username` or `commandName` — these
+  remain unauthenticated informational fields. They are not used for any
+  authorization decision today (`discordActorTier`/`discordActorCan` only
+  read `roleIds`), so this is intentional, not an oversight, but should be
+  re-checked if either field is ever used for a security decision.
+- This does not implement Discord's own Ed25519 interaction-signature
+  verification (option 1 in the original recommendation), which would be
+  stronger since it wouldn't require provisioning/rotating a second shared
+  secret. Left as a future option if the adapter is ever made reachable
+  independently of a single trusted bot process.
+- Recommendation item 3 from the original finding (treat the bearer token
+  as a master credential in operator secret-handling docs) is not yet
+  reflected in `docs/security-gates.md` or operator-facing setup
+  documentation outside this file.
+
+## Remediation Status
+
+| Finding | Status | Verification |
+|---------|--------|--------------|
+| FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in) | `console/api` 558/558 tests pass; gitleaks/semgrep clean |
+| FINDING-LINK-2 `player-link:write` at `moderator` tier | Proposed | Not yet implemented |
+| FINDING-LINK-3 No verification rate limiting | Proposed | Not yet implemented |
+| FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
+| FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Proposed | Not yet implemented |
+| FINDING-LINK-6 No multi-character/multi-account linking | Proposed (design gap, not a vulnerability) | Not yet implemented |
 
 ## Sources
 
@@ -125,12 +165,14 @@ Add targeted tests for:
 - `console/api/src/integrations/discord/linkProvider.js`
 - `console/api/src/integrations/discord/routes.js`
 - `console/api/src/integrations/discord/adapter.js`
+- `console/api/src/integrations/discord/actorSignature.js`
 - `console/api/src/rmq.js`
 - `console/api/src/carePackage.js`
 - `console/api/src/duneDb.js`
 - `docs/security/generated-command-auth-token.md`
 - `docs/security/login-rate-limit-defense.md`
 - `Red-Blink/dune-awakening-selfhost-docker#72` ("[Discussion] RabbitMQ / Command Auth Token", closed 2026-07-17)
+- `Red-Blink/dune-awakening-selfhost-docker#100` (tracking issue for FINDING-LINK-1, -2, -3, -5, -6)
 - `yacketrj/Arrakis-Control-Panel:docs/security-audit/2026-07-04-comprehensive-security-audit.md`
 - `yacketrj/Arrakis-Control-Panel:src/adapterClient.js` (`UNMERGED_ROUTES`)
 - `yacketrj/Arrakis-Control-Panel:docs/user-guide.md` (unresolved merge conflicts referencing Steam auto-link)
