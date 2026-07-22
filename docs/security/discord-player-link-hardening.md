@@ -8,8 +8,9 @@ already resolved-by-discussion in `Red-Blink/dune-awakening-selfhost-docker#72`.
 
 Status: FINDING-LINK-1 and FINDING-LINK-2 implemented; FINDING-LINK-3
 partially implemented (console-side, backward-compatible). See
-"Remediation Status" at the end of this document. FINDING-LINK-5, -6
-remain proposed.
+"Remediation Status" at the end of this document. FINDING-LINK-5 reviewed
+and confirmed non-exploitable but not implemented (explicit scope decision
+— see the finding for why). FINDING-LINK-6 remains proposed.
 
 ## Purpose
 
@@ -67,11 +68,13 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 - **Risk:** `publishServerCommand()` (used for admin broadcasts, shutdown scheduling, etc.) currently falls back to a publicly known, source-controlled token whenever `DUNE_COMMAND_AUTH_TOKEN` is unset, and per the maintainer this is deliberate, not an oversight. This is not part of the whisper/link path directly (`publishCarePackageWhisper()` does not call `commandAuthToken()`), but it shares the same RMQ trust boundary and `dockerExec()`/`rabbitmqctl eval` mechanism that the whisper delivery depends on, so a compromised command channel is a plausible path to forging or disrupting whisper delivery.
 - **Recommendation:** Do not re-attempt a console-only token generation fix — it will hit the same synchronization gap and likely be reverted again. The real fix, per the maintainer, requires locating where the game server/director reads its expected command-auth token and wiring a synchronized override mechanism on both the console and the game-server side (e.g. writing the generated token to a location or config the game server also reads at startup). This is out of scope for `docs/security/discord-player-link-hardening.md` specifically — track it as its own effort, cross-referencing issue #72, and do not close it as "won't fix" without addressing the two-sided sync requirement the maintainer identified. The unmerged `security/core-remove-hardcoded-command-token` branch (predates #72's discussion) should not be revived as-is since it repeats the same one-sided approach.
 
-### FINDING-LINK-5: Whisper transport depends on Docker socket + string-templated Erlang (LOW/architectural)
+### FINDING-LINK-5: Whisper transport depends on Docker socket + string-templated Erlang (LOW/architectural) — REVIEWED, NOT IMPLEMENTED (out of scope for this branch)
 
 - **Location:** `console/api/src/rmq.js:145-174` (`publishCarePackageWhisper`), `console/api/src/rmq.js:235-252` (`dockerExec`)
 - **Risk:** Whisper delivery shells out to `docker exec dune-rmq-game rabbitmqctl eval "<Erlang>"`, building the Erlang term via string interpolation of base64-encoded, regex-validated fields (`validateWhisperIdentity`, `validateHexFlsId`, etc., `rmq.js:280-321`). Current input validation is reasonably strict (allowlist regexes reject the characters needed to break out of the base64 wrapper), so this is not an active injection vulnerability today, but it is architecturally fragile: every new whisper-sending feature must independently get this right, and the console process needs Docker socket access to the RMQ container, which is a broad privilege for a chat-message send.
 - **Recommendation:** Replace with a proper AMQP client (e.g. `amqplib`) connecting directly to RabbitMQ over a scoped service account and TLS, removing both the Docker-socket dependency and the string-templated Erlang. Lower priority than FINDING-LINK-1 through -3 since no working exploit was found, but should be tracked as technical debt before any additional whisper-based features are added.
+- **Verified no active exploit exists (this review pass):** confirmed directly that `recipientCharacterName` (validated only for length/printability, not for quote/bracket characters) cannot break out of the Erlang string literal even when it contains a deliberate breakout attempt (`"\">>), Sender = <<\"pwned"`), because the field is JSON-stringified and then base64-encoded as a whole blob before being spliced into the `evalCode` string — the base64 alphabet (`A-Za-z0-9+/=`) structurally cannot contain the `"` or `>` characters needed to break Erlang string syntax, regardless of what the pre-encoding validators allow. This confirms the finding's own characterization ("input validation is currently adequate") is accurate, not merely optimistic.
+- **Explicit scope decision (this branch):** not implementing the AMQP-client rewrite here. `rmq.js`'s `dockerExec`/`rabbitmqctl eval` pattern is shared by 6 call sites across the console (`carePackage.js`, `messageOfTheDay.js`, `playerAnnouncements.js`, `broadcastProvider.js`, `server.js`, and `linkProvider.js`) — replacing it would mean adding a new runtime dependency (no AMQP client is currently a `console/api` dependency), building real connection/credential/TLS/retry management, and touching core web-admin features (server broadcast, shutdown scheduling, message-of-the-day) that have nothing to do with Discord player-linking. This is a repo-wide infrastructure change, not a player-link-scoped security fix, and doing it as a drive-by within a focused hardening PR would risk regressing unrelated, already-working functionality with no dedicated test coverage of the new transport layer. Recording this as an R2-style architectural prerequisite for a dedicated follow-up PR, per the "no active exploit, lower priority" framing already in this finding, rather than expanding this branch's scope to attempt it.
 
 ### FINDING-LINK-6: No multi-character or multi-account linking exists server-side (Design Gap, not a vulnerability)
 
@@ -133,7 +136,7 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 - `gitleaks detect --no-git`: no leaks.
 - `semgrep --config auto` on all new/changed files: 0 findings.
 
-## Proposed Verification Plan (FINDING-LINK-5, -6 — Not Yet Implemented)
+## Proposed Verification Plan (FINDING-LINK-6 — Not Yet Implemented; FINDING-LINK-5 Explicitly Out of Scope)
 
 ```bash
 npm test --prefix console/api
@@ -240,7 +243,7 @@ Add targeted tests for:
 | FINDING-LINK-2 `player-link:write` at `moderator` tier | Implemented (self-scoped, not tier-restricted) | `console/api` 567/567 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-3 No verification rate limiting | Partially implemented (rate limiting done; longer codes and audit logging still open) | `console/api` 571/571 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
-| FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Proposed | Not yet implemented |
+| FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Reviewed, confirmed non-exploitable, rewrite explicitly out of scope | Direct injection-breakout test performed (see finding); no code change proposed |
 | FINDING-LINK-6 No multi-character/multi-account linking | Proposed (design gap, not a vulnerability) | Not yet implemented |
 
 ## Sources
