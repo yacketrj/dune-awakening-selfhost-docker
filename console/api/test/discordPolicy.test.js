@@ -87,3 +87,30 @@ test("requireDiscordCapability still works normally for ordinary tier-gated capa
     (error) => error.code === "not_authorized"
   );
 });
+
+// FINDING-LINK-6 (docs/security/discord-player-link-hardening.md):
+// ACCOUNT_LINK_WRITE is a distinct self-scoped capability from
+// PLAYER_LINK_WRITE, not a reuse of it, so the two linking flows can be
+// authorized/audited independently.
+test("ACCOUNT_LINK_WRITE is self-scoped and distinct from PLAYER_LINK_WRITE", () => {
+  assert.ok(SELF_SCOPED_CAPABILITIES.has(DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE));
+  assert.notEqual(DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
+});
+
+test("requireDiscordCapability rejects ACCOUNT_LINK_WRITE entirely — must use requireSelfScopedCapability", () => {
+  const ownerActor = actor(["role-owner"]);
+  assert.throws(
+    () => requireDiscordCapability(ownerActor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE),
+    (error) => error.code === "invalid_capability"
+  );
+});
+
+test("requireSelfScopedCapability allows any recognized principal to use ACCOUNT_LINK_WRITE, and rejects public tier", () => {
+  const observerActor = actor(["role-observer"]);
+  assert.doesNotThrow(() => requireSelfScopedCapability(observerActor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE));
+  const publicActor = actor([]);
+  assert.throws(
+    () => requireSelfScopedCapability(publicActor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE),
+    (error) => error.code === "not_authorized" && error.statusCode === 403
+  );
+});

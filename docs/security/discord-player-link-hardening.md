@@ -6,11 +6,11 @@ Upstream tracking: `Red-Blink/dune-awakening-selfhost-docker#100` (covers
 FINDING-LINK-1, -2, -3, -5, -6). FINDING-LINK-4 is tracked separately and
 already resolved-by-discussion in `Red-Blink/dune-awakening-selfhost-docker#72`.
 
-Status: FINDING-LINK-1 and FINDING-LINK-2 implemented; FINDING-LINK-3
-partially implemented (console-side, backward-compatible). See
-"Remediation Status" at the end of this document. FINDING-LINK-5 reviewed
-and confirmed non-exploitable but not implemented (explicit scope decision
-— see the finding for why). FINDING-LINK-6 remains proposed.
+Status: FINDING-LINK-1, FINDING-LINK-2, and FINDING-LINK-6 implemented;
+FINDING-LINK-3 partially implemented (console-side, backward-compatible).
+See "Remediation Status" at the end of this document. FINDING-LINK-5
+reviewed and confirmed non-exploitable but not implemented (explicit scope
+decision — see the finding for why).
 
 ## Purpose
 
@@ -20,9 +20,11 @@ authorization scope, and verification brute-forcing, and close the gap
 between documented and actual multi-character/multi-account support.
 
 This flow is the only Discord-adapter write path that currently ships
-(`discordAdapterHealth()` reports `adapterDataWrites: ["player-link"]`), so
-it is the highest-value adapter surface to harden before any broader
-write-capable work proceeds.
+(`discordAdapterHealth()` reports
+`adapterDataWrites: ["player-link", "account-link"]` — the second entry
+added by FINDING-LINK-6's implementation, see below), so it is the
+highest-value adapter surface to harden before any broader write-capable
+work proceeds.
 
 ## Source Findings
 
@@ -76,17 +78,30 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 - **Verified no active exploit exists (this review pass):** confirmed directly that `recipientCharacterName` (validated only for length/printability, not for quote/bracket characters) cannot break out of the Erlang string literal even when it contains a deliberate breakout attempt (`"\">>), Sender = <<\"pwned"`), because the field is JSON-stringified and then base64-encoded as a whole blob before being spliced into the `evalCode` string — the base64 alphabet (`A-Za-z0-9+/=`) structurally cannot contain the `"` or `>` characters needed to break Erlang string syntax, regardless of what the pre-encoding validators allow. This confirms the finding's own characterization ("input validation is currently adequate") is accurate, not merely optimistic.
 - **Explicit scope decision (this branch):** not implementing the AMQP-client rewrite here. `rmq.js`'s `dockerExec`/`rabbitmqctl eval` pattern is shared by 6 call sites across the console (`carePackage.js`, `messageOfTheDay.js`, `playerAnnouncements.js`, `broadcastProvider.js`, `server.js`, and `linkProvider.js`) — replacing it would mean adding a new runtime dependency (no AMQP client is currently a `console/api` dependency), building real connection/credential/TLS/retry management, and touching core web-admin features (server broadcast, shutdown scheduling, message-of-the-day) that have nothing to do with Discord player-linking. This is a repo-wide infrastructure change, not a player-link-scoped security fix, and doing it as a drive-by within a focused hardening PR would risk regressing unrelated, already-working functionality with no dedicated test coverage of the new transport layer. Recording this as an R2-style architectural prerequisite for a dedicated follow-up PR, per the "no active exploit, lower priority" framing already in this finding, rather than expanding this branch's scope to attempt it.
 
-### FINDING-LINK-6: No multi-character or multi-account linking exists server-side (Design Gap, not a vulnerability)
+### FINDING-LINK-6: No multi-character or multi-account linking exists server-side (Design Gap, not a vulnerability) — IMPLEMENTED
 
-- **Location:** `console/api/src/duneDb.js:4669-4713` (schema migration for `dune.discord_player_links` and `dune.discord_pending_links`)
-- **Current state:** `discord_player_links` has a unique index on `player_controller_id` (one Discord user per character) **and** the link is upserted keyed by `discord_user_id` alone (`duneDb.js:4762-4767`, `on conflict (discord_user_id) do update`), meaning **one Discord user can only ever have one linked character, globally, at a time.** Re-linking silently overwrites the previous link.
-- **Bot-side drift:** `Arrakis-Control-Panel` (bot repo) commit `1ea3316` ("V2 multi-character, multi-guild Discord player linking") added client-side routes/methods (`player-links-start`, `player-links-verify`, `player-links`, `player-links-unlink`, `guild-grants-enable/disable/default`) and local SQLite mirroring, all classified as `UNMERGED_ROUTES` in `src/adapterClient.js` — but **no corresponding schema, provider, or route exists anywhere in this console repo.** These are purely aspirational client scaffolding with no backend. Additionally, conflicting doc revisions in the bot repo (`docs/user-guide.md`, unresolved `<<<<<<< HEAD` markers) claim a Steam-connection auto-link feature that does not exist in this codebase either.
-- **Recommendation (if multi-character support is desired):**
+- **Location:** `console/api/src/duneDb.js:4669-4713` (original schema migration for `dune.discord_player_links` and `dune.discord_pending_links`)
+- **Original state:** `discord_player_links` has a unique index on `player_controller_id` (one Discord user per character) **and** the link is upserted keyed by `discord_user_id` alone (`duneDb.js:4762-4767`, `on conflict (discord_user_id) do update`), meaning **one Discord user can only ever have one linked character, globally, at a time.** Re-linking silently overwrites the previous link. This original single-link table and flow are unchanged by this fix and remain fully functional (see "Minimal Impact" below).
+- **Bot-side drift:** `Arrakis-Control-Panel` (bot repo) commit `1ea3316` ("V2 multi-character, multi-guild Discord player linking") added client-side routes/methods (`player-links-start`, `player-links-verify`, `player-links`, `player-links-unlink`, `guild-grants-enable/disable/default`) and local SQLite mirroring, all classified as `UNMERGED_ROUTES` in `src/adapterClient.js` — but at the time this finding was written **no corresponding schema, provider, or route existed anywhere in this console repo.** These were purely aspirational client scaffolding with no backend. This fix adds a real backend, but the bot's `UNMERGED_ROUTES` classification and the route paths/payload shapes below have not been cross-checked against the bot repo's expectations — see "Not implemented" below. Conflicting doc revisions in the bot repo (`docs/user-guide.md`, unresolved `<<<<<<< HEAD` markers) claiming a Steam-connection auto-link feature remain unaddressed; no such feature exists in this codebase.
+- **Recommendation (original):**
   1. Add `dune.discord_account_links` with composite unique `(discord_user_id, account_id)` instead of a single-column unique on `discord_user_id`, keeping `player_controller_id` unique per row (a character still belongs to exactly one Discord user).
   2. Add an `is_default` boolean with a partial unique index enforcing exactly one default per `discord_user_id`.
   3. Key the pending-link table on `(discord_user_id, account_id)` rather than `discord_user_id` alone so concurrent verifications for different accounts don't collide (current schema already uniques `discord_pending_links` by `discord_user_id`, which would need to change too — `duneDb.js:4709-4710`).
   4. Each additional account link still requires its own online-character whisper verification; there is no way to bulk-verify accounts the requester doesn't control, and that constraint should be preserved.
   5. Update the bot's `UNMERGED_ROUTES` classification and stale docs (`docs/user-guide.md` merge conflicts) once real routes exist, and remove the Steam-auto-link documentation claim unless it is actually built.
+- **Implemented:** Items 1-4, additively, alongside (not replacing) the original single-link flow:
+  1. New `dune.discord_account_links` table with composite unique `(discord_user_id, player_controller_id)` **and** a standalone unique index on `player_controller_id` alone (`duneDb.js`'s `migrateDiscordAdapterSchema()`), so a character still belongs to exactly one Discord user, but one Discord user can now hold multiple linked characters.
+  2. `is_default` boolean column with a partial unique index (`where is_default`) enforcing at most one default per `discord_user_id`. The first account a user links becomes their default automatically (`linkAdditionalAccount()`); later links are not default unless `setDefaultLinkedAccount()` is called explicitly. Unlinking the current default promotes the next-oldest remaining link to default (`unlinkAdditionalAccount()`), so a user with ≥1 linked account always has exactly one default, never zero.
+  3. New `dune.discord_pending_account_links` table keyed by `(discord_user_id, player_controller_id)` (with `code` as its own primary key and a standalone unique index on `player_controller_id`, mirroring the account-link table's dual-uniqueness shape), so verifying a second/third character does not collide with or cancel a still-pending verification for a different character.
+  4. Preserved exactly: `linkAccountProvider()` in the new `console/api/src/integrations/discord/multiAccountLinkProvider.js` reuses the identical online-character-only, whisper-delivered verification flow as the original `linkProvider.js` (same code format, same 5-minute expiry, same "must be online" and "no active Funcom identity" checks) — there is no bulk-link or admin-assisted linking path; every additional account still requires the requester to prove control of that specific character in real time.
+  - New provider functions: `linkAccountProvider`, `verifyAccountLinkProvider`, `unlinkAccountProvider`, `listAccountsProvider`, `setDefaultAccountProvider`, `requireDefaultOrSpecifiedAccount`.
+  - New routes (all POST, gated by the new self-scoped `ACCOUNT_LINK_WRITE` capability — see FINDING-LINK-2's pattern, reused as a **distinct** capability rather than overloading `PLAYER_LINK_WRITE`, so the two flows can be enabled/audited independently): `/players/accounts/link`, `/players/accounts/link/verify`, `/players/accounts/unlink`, `/players/accounts/list`, `/players/accounts/set-default`.
+  - New rate limiter instance for `verifyAccountLinkProvider()`, same shape as FINDING-LINK-3's but in a **separate env var namespace** (`DUNE_DISCORD_ACCOUNT_LINK_VERIFY_MAX_ATTEMPTS`/`_GLOBAL_MAX_ATTEMPTS`/`_WINDOW_MS`/`_BLOCK_MS`) so tuning or exhausting one flow's limiter never affects the other's, even for the same `discordUserId`.
+- **Not implemented (still open):**
+  - Item 5 from the original recommendation: the bot repo's `UNMERGED_ROUTES` classification, route paths, and payload shapes have **not** been reconciled with what this implementation actually built. The route paths chosen here (`/players/accounts/*`) were designed against this console repo's own conventions, not against the bot repo's pre-existing client scaffolding (`player-links-start`, `player-links-verify`, etc.) — a bot-side integration pass is required before any Discord command actually calls these new routes, and the bot's stale docs/`UNMERGED_ROUTES` comments still need updating separately in `yacketrj/Arrakis-Control-Panel`.
+  - No Discord slash-command wiring exists yet in this console repo for the new routes (there is no bot process in this repository at all — commands like `/dune data accounts` referenced in the new provider's user-facing messages describe an intended bot-side UX, not something implemented here).
+  - No data migration path from `discord_player_links` to `discord_account_links` was written; the two tables intentionally coexist with no automatic backfill (see "Minimal Impact").
+  - The Steam-connection auto-link documentation claim in the bot repo remains unaddressed (out of scope — no such feature exists in either repo).
 
 ## STRIDE Notes
 
@@ -104,11 +119,12 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 - No change to the whisper message content or in-game player experience.
 - No change to the `/dune data link` / `/dune data verify` / `/dune data unlink` command surface from the operator's perspective — only the trust/authorization internals change.
 - FINDING-LINK-2 required no operator action: any actor holding at least one configured Discord role (`observer` and above) can still use `player-link:write` exactly as before — the fix removed the capability from the tier ladder entirely rather than moving it to a stricter tier, so no existing operator role configuration needs to change.
-- FINDING-LINK-6's schema change is additive (new table) and does not require migrating existing single-character links, though a migration path from `discord_player_links` to `discord_account_links` should be written if both are meant to coexist during a transition period.
+- FINDING-LINK-6's schema change is additive (new tables) and required no migration of existing single-character links: `discord_player_links`/`discord_pending_links` and their routes/functions are completely untouched by this fix. A Discord user's existing single link keeps working exactly as before, in parallel with the new multi-account tables, with no automatic backfill between them. A migration path (or a decision to formally deprecate the single-link flow in favor of the multi-account one) is left for a future follow-up, not this branch.
+- FINDING-LINK-6 adds a new self-scoped capability (`ACCOUNT_LINK_WRITE`) rather than reusing `PLAYER_LINK_WRITE`, so no existing operator role configuration needs to change to use the new routes — any actor already authorized for `PLAYER_LINK_WRITE` (any non-`public` tier) is authorized for `ACCOUNT_LINK_WRITE` under the same rule, since both are self-scoped by the identical `requireSelfScopedCapability()` mechanism.
 
 ## Verification (This Branch)
 
-- `npm test --prefix console/api`: 575/575 tests pass. Baseline 540
+- `npm test --prefix console/api`: 594/594 tests pass. Baseline 540
   (inherited from `main` at `0ae01dc` after #103/#104 merged) + 20
   (FINDING-LINK-1: 17 unit tests in `test/discordActorSignature.test.js`
   plus 1 end-to-end integration test in `test/discordAdapter.test.js`
@@ -129,14 +145,48 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   canonical payload differs per route and a signature valid for one route
   is rejected for another, plus 1 end-to-end integration test in
   `test/discordAdapter.test.js` proving a signature captured from a real
-  `/status` HTTP response is rejected when replayed against `/readiness`).
-- `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities.
+  `/status` HTTP response is rejected when replayed against `/readiness`)
+  + 19 (FINDING-LINK-6: 14 unit tests in the new
+  `test/discordMultiAccountLinkProvider.test.js` — first-link-becomes-default,
+  second link does not override the default, a character already linked to
+  one Discord user cannot be linked by another, duplicate self-link is
+  rejected as a conflict rather than silently duplicated, verify links
+  correctly and lists alongside prior accounts, a different Discord user
+  cannot consume another's pending code, unlinking a non-default account
+  leaves the default untouched, unlinking the default promotes the
+  next-oldest remaining account, unlinking/setting-default for an
+  unlinked character returns a business error not a crash,
+  `setDefaultAccountProvider` switches the default correctly, the new
+  rate limiter is verified independent from the single-link flow's,
+  offline-character and failed-whisper-delivery checks mirror the
+  single-link flow — plus 3 unit tests in `test/discordPolicy.test.js`
+  proving `ACCOUNT_LINK_WRITE` is self-scoped, distinct from
+  `PLAYER_LINK_WRITE`, and follows the same
+  `requireSelfScopedCapability()`/`requireDiscordCapability()` rejection
+  rules — plus 2 end-to-end integration tests in
+  `test/discordAdapter.test.js`: one proving a `public`-tier actor is
+  rejected from `/players/accounts/link` while an `observer`-tier actor
+  can reach `/players/accounts/list` and get a normal empty result, and
+  one proving the account-link verify route's rate limiter is a genuinely
+  separate instance from the single-link route's — exhausting the
+  account-link limiter for a `discordUserId` does not block that same
+  `discordUserId` on the single-link verify route).
+- `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities
+  (re-verified after FINDING-LINK-6; no new dependencies added — the new
+  provider reuses `createLoginRateLimiter`, `publishCarePackageWhisper`,
+  and `ensureCarePackageServerPersona` from existing modules).
 - `npm run build --prefix console/web`: builds clean (no web-side changes
-  in any of these findings; run as a regression check).
+  in any of these findings, including FINDING-LINK-6, which is
+  console-API-only; run as a regression check).
 - `gitleaks detect --no-git`: no leaks.
-- `semgrep --config auto` on all new/changed files: 0 findings.
+- `trivy fs --scanners secret --severity HIGH,CRITICAL`: no findings.
+- `semgrep --config auto` and `semgrep --config p/default` on all
+  new/changed files (including FINDING-LINK-6's `duneDb.js` additions,
+  `multiAccountLinkProvider.js`, and the `routes.js`/`adapter.js`/`policy.js`
+  wiring): 0 findings.
+- `ggshield secret scan pre-push`: clean.
 
-## Proposed Verification Plan (FINDING-LINK-6 — Not Yet Implemented; FINDING-LINK-5 Explicitly Out of Scope)
+## Remaining Verification Plan (FINDING-LINK-5 Explicitly Out of Scope)
 
 ```bash
 npm test --prefix console/api
@@ -144,11 +194,12 @@ npm audit --prefix console/api --audit-level=moderate
 npm run build --prefix console/web
 ```
 
-Add targeted tests for:
+Status of previously proposed targeted tests:
 - ~~Actor payload with mismatched/forged `userId` is rejected once signature/HMAC verification lands (FINDING-LINK-1).~~ Done — see Verification above.
 - ~~`moderator`-tier actor is denied `player-link:write` after the tier change (FINDING-LINK-2).~~ Done — see Verification above. (Note: the actual fix authorizes any non-`public` tier for this self-scoped action rather than restricting it upward to `admin`; see the FINDING-LINK-2 section for why.)
 - ~~Repeated failed verification attempts trigger lockout (FINDING-LINK-3).~~ Done — see Verification above. (Item 2, longer codes, and item 3, an audit/log event on repeated failure, remain open — see the FINDING-LINK-3 section.)
-- `discord_account_links` composite-unique constraint allows two different `account_id`s for the same `discord_user_id`, and rejects a duplicate `(discord_user_id, account_id)` pair (FINDING-LINK-6).
+- ~~`discord_account_links` composite-unique constraint allows two different `player_controller_id`s for the same `discord_user_id`, and rejects a duplicate `(discord_user_id, player_controller_id)` pair (FINDING-LINK-6).~~ Done — see Verification above (`linkAdditionalAccount()`/`linkAccountProvider()` tests).
+- Remaining open item (not test-plan-blocking, but tracked): bot-side integration tests in `yacketrj/Arrakis-Control-Panel` exercising the new `/players/accounts/*` routes do not exist yet, since no bot process lives in this repository — see FINDING-LINK-6's "Not implemented" list.
 
 ## Known Limitations
 
@@ -234,22 +285,51 @@ Add targeted tests for:
   would close this; not implemented here since it applies equally to the
   pre-existing login limiter and was judged a shared follow-up rather than
   specific to this finding.
+- FINDING-LINK-6's new rate limiter (`multiAccountLinkProvider.js`) has the
+  identical unbounded-key-growth characteristic described above for
+  FINDING-LINK-3's limiter, since it is created via the same
+  `createLoginRateLimiter()` factory. Not a new risk, but now duplicated
+  across two limiter instances instead of one.
+- FINDING-LINK-6 has no bot-side integration: the new routes
+  (`/players/accounts/*`) exist and are tested at the console/API level
+  (unit tests + HTTP-level integration tests against a mocked db), but no
+  real Discord bot in `yacketrj/Arrakis-Control-Panel` has been updated to
+  call them, and this branch does not touch that repository. Until that
+  integration work happens, these routes are reachable but unused by any
+  shipped Discord command.
+- FINDING-LINK-6 does not add a limit on how many characters a single
+  Discord user may link. `discord_account_links` has no cap enforced at
+  the database or provider level — a user (or an attacker with valid
+  verification access to many characters) could link an arbitrarily large
+  number of accounts. This mirrors the original single-link flow's lack of
+  any similar limit and was not identified as a requirement in the
+  original finding, but is worth calling out explicitly since the
+  multi-account design makes unbounded growth possible in a way the
+  single-link flow structurally could not.
+- FINDING-LINK-6's `unlinkAdditionalAccount()` promotes the next-oldest
+  remaining link to default when the current default is removed, with no
+  way for the caller to opt out of that promotion in the same call — a
+  caller who wants "unlink and leave no default" must make two calls
+  (`unlink`, then observe there's still a default, then decide whether to
+  change it). This matches the finding's minimal-impact intent but is a
+  minor UX rigidity, not a security issue.
 
 ## Remediation Status
 
 | Finding | Status | Verification |
 |---------|--------|--------------|
-| FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in; route-bound signature added during self-review to close cross-route replay) | `console/api` 575/575 tests pass; gitleaks/semgrep clean |
+| FINDING-LINK-1 Unauthenticated actor identity | Implemented (backward-compatible, opt-in; route-bound signature added during self-review to close cross-route replay) | `console/api` 575/575 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-2 `player-link:write` at `moderator` tier | Implemented (self-scoped, not tier-restricted) | `console/api` 567/567 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-3 No verification rate limiting | Partially implemented (rate limiting done; longer codes and audit logging still open) | `console/api` 571/571 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
 | FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Reviewed, confirmed non-exploitable, rewrite explicitly out of scope | Direct injection-breakout test performed (see finding); no code change proposed |
-| FINDING-LINK-6 No multi-character/multi-account linking | Proposed (design gap, not a vulnerability) | Not yet implemented |
+| FINDING-LINK-6 No multi-character/multi-account linking | Implemented (additive; new capability, new rate limiter, new routes; no bot-side integration yet) | `console/api` 594/594 tests pass; gitleaks/semgrep/trivy clean |
 
 ## Sources
 
 - `console/api/src/integrations/discord/policy.js`
 - `console/api/src/integrations/discord/linkProvider.js`
+- `console/api/src/integrations/discord/multiAccountLinkProvider.js`
 - `console/api/src/integrations/discord/routes.js`
 - `console/api/src/integrations/discord/adapter.js`
 - `console/api/src/integrations/discord/actorSignature.js`

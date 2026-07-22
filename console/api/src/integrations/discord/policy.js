@@ -24,11 +24,19 @@ export const DISCORD_CAPABILITIES = Object.freeze({
   // capability whose real authorization boundary is "must be this actor",
   // not "must hold this role").
   PLAYER_LINK_WRITE: "player-link:write",
+  // ACCOUNT_LINK_WRITE is the FINDING-LINK-6 multi-account counterpart to
+  // PLAYER_LINK_WRITE above, and is self-scoped for the same reason: every
+  // multi-account route (link/verify/unlink/set-default) always passes
+  // discordUserId = actor.userId, never a separate target. It is a
+  // distinct capability (not a reuse of PLAYER_LINK_WRITE) so the two
+  // linking flows can be enabled/disabled or audited independently.
+  ACCOUNT_LINK_WRITE: "account-link:write",
   BROADCAST_SEND: "broadcast:send"
 });
 
 export const DISCORD_WRITE_CAPABILITIES = Object.freeze(new Set([
   DISCORD_CAPABILITIES.PLAYER_LINK_WRITE,
+  DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE,
   DISCORD_CAPABILITIES.BROADCAST_SEND
 ]));
 
@@ -39,7 +47,8 @@ export const DISCORD_WRITE_CAPABILITIES = Object.freeze(new Set([
 // a recognized Discord principal (observer tier or above) and always
 // operates on that actor's own identity — see FINDING-LINK-2.
 export const SELF_SCOPED_CAPABILITIES = Object.freeze(new Set([
-  DISCORD_CAPABILITIES.PLAYER_LINK_WRITE
+  DISCORD_CAPABILITIES.PLAYER_LINK_WRITE,
+  DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE
 ]));
 
 export const EXPERIMENTAL_READ_ONLY_CAPABILITIES = Object.freeze(

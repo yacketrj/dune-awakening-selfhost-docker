@@ -21,6 +21,13 @@ import {
   whoamiProvider,
   requireLinkedPlayer
 } from "./linkProvider.js";
+import {
+  linkAccountProvider,
+  verifyAccountLinkProvider,
+  unlinkAccountProvider,
+  listAccountsProvider,
+  setDefaultAccountProvider
+} from "./multiAccountLinkProvider.js";
 import { verifyActorSignature } from "./actorSignature.js";
 import {
   playerInventoryProvider,
@@ -259,6 +266,65 @@ export async function handleDiscordAdapterRoute({ req, res, path, config, readJs
       requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.PLAYER_LINK_WRITE);
       return json(res, 200, await unlinkProvider(db, {
         discordUserId: actor.userId
+      }));
+    }
+
+    // Multi-account: link an additional character (FINDING-LINK-6).
+    // Distinct from PLAYERS_LINK above: this is additive (a Discord user
+    // may hold several linked characters at once) rather than overwrite,
+    // and uses its own capability/rate limiter — see
+    // multiAccountLinkProvider.js and docs/security/discord-player-link-hardening.md.
+    if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_ACCOUNTS_LINK && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE);
+      return json(res, 200, await linkAccountProvider(db, config, {
+        discordUserId: actor.userId,
+        characterName: body.characterName
+      }));
+    }
+
+    // Multi-account: verify a pending additional-account link
+    if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_ACCOUNTS_LINK_VERIFY && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE);
+      return json(res, 200, await verifyAccountLinkProvider(db, {
+        discordUserId: actor.userId,
+        code: body.code
+      }));
+    }
+
+    // Multi-account: unlink one additional character (does not affect the
+    // legacy single-link flow's discord_player_links entry, if any).
+    if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_ACCOUNTS_UNLINK && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE);
+      return json(res, 200, await unlinkAccountProvider(db, {
+        discordUserId: actor.userId,
+        playerControllerId: body.playerControllerId
+      }));
+    }
+
+    // Multi-account: list all characters linked to the calling Discord user
+    if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_ACCOUNTS_LIST && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE);
+      return json(res, 200, await listAccountsProvider(db, {
+        discordUserId: actor.userId
+      }));
+    }
+
+    // Multi-account: change which linked character is the default
+    if (path === DISCORD_ADAPTER_ROUTES.PLAYERS_ACCOUNTS_SET_DEFAULT && req.method === "POST") {
+      const body = await readJson(req);
+      const actor = validateDiscordActor(body.actor);
+      requireSelfScopedCapability(actor, mapping, DISCORD_CAPABILITIES.ACCOUNT_LINK_WRITE);
+      return json(res, 200, await setDefaultAccountProvider(db, {
+        discordUserId: actor.userId,
+        playerControllerId: body.playerControllerId
       }));
     }
 
