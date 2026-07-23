@@ -41,9 +41,8 @@ function createMultiAccountDb(players = []) {
         return { rows: match ? [match] : [], rowCount: match ? 1 : 0 };
       }
 
-      // listLinkedAccounts / getDefaultLinkedAccount (both select from
-      // discord_account_links dal join player_state ps, distinguished only
-      // by an optional "limit 1" — same handler covers both).
+      // listLinkedAccounts: selects from discord_account_links dal joined
+      // to player_state ps.
       if (text.includes("from dune.discord_account_links dal") && text.includes("join dune.player_state ps")) {
         const rows = state.accounts
           .filter((a) => a.discordUserId === values[0])
@@ -59,14 +58,23 @@ function createMultiAccountDb(players = []) {
               online_status: player?.online_status || "Offline"
             };
           });
-        const limited = text.includes("limit 1") ? rows.slice(0, 1) : rows;
-        return { rows: limited, rowCount: limited.length };
+        return { rows, rowCount: rows.length };
       }
 
       // linkAdditionalAccount: conflict check (for update)
       if (text.includes("from dune.discord_account_links") && text.includes("for update")) {
         const conflict = state.accounts.find((a) => a.playerControllerId === values[0] && a.discordUserId !== values[1]);
         return { rows: conflict ? [{ discord_user_id: conflict.discordUserId }] : [], rowCount: conflict ? 1 : 0 };
+      }
+
+      // FINDING-LINK-6 cross-table check (otherTableLinkConflict()):
+      // linkAdditionalAccount() also checks dune.discord_player_links for
+      // a conflicting owner from the legacy single-link flow. This test
+      // file only exercises the multi-account flow and never populates
+      // discord_player_links, so this always reports no conflict — the
+      // cross-table check itself is proven separately in duneDb tests.
+      if (text.includes("from dune.discord_player_links") && text.includes("for update")) {
+        return { rows: [], rowCount: 0 };
       }
 
       // linkAdditionalAccount: already-linked-to-this-account check

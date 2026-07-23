@@ -4818,6 +4818,29 @@ export async function getLinkedPlayer(db, discordUserId) {
   return result.rows[0] || null;
 }
 
+// Checks the given discord_*_links table for a row that would conflict
+// with linking playerControllerId to discordUserId. Used to enforce "a
+// character belongs to exactly one Discord user" ACROSS both the
+// single-link (dune.discord_player_links) and multi-account
+// (dune.discord_account_links) tables, not just within whichever table a
+// given operation is writing to. Without this cross-table check, the two
+// flows each only enforced that invariant within their own table — a
+// character already owned by one Discord user via one flow could be
+// silently claimed by a DIFFERENT Discord user via the other flow. Locks
+// the matching row (if any) with "for update" so this check is race-safe
+// against a concurrent link attempt in the other table within the same
+// transaction. `table` must be a fixed, non-user-controlled string
+// literal from a caller in this module — never pass through user input.
+async function otherTableLinkConflict(tx, table, playerControllerId, discordUserId) {
+  const result = await tx.query(`
+    select discord_user_id
+    from dune.${table}
+    where player_controller_id = $1
+      and discord_user_id <> $2
+    for update`, [playerControllerId, String(discordUserId)]);
+  return result.rowCount > 0;
+}
+
 export async function discordPlayerLink(db, discordUserId, playerControllerId) {
   const link = async (tx) => {
     const conflict = await tx.query(`
@@ -4827,6 +4850,12 @@ export async function discordPlayerLink(db, discordUserId, playerControllerId) {
         and discord_user_id <> $2
       for update`, [playerControllerId, String(discordUserId)]);
     if (conflict.rowCount) {
+      return { conflict: true };
+    }
+    // FINDING-LINK-6 cross-table check: reject if this character is
+    // already linked to a DIFFERENT Discord user via the multi-account
+    // table, even though this is the single-link table's own insert.
+    if (await otherTableLinkConflict(tx, "discord_account_links", playerControllerId, discordUserId)) {
       return { conflict: true };
     }
     await tx.query(`
@@ -4874,22 +4903,6 @@ export async function listLinkedAccounts(db, discordUserId) {
   return result.rows;
 }
 
-export async function getDefaultLinkedAccount(db, discordUserId) {
-  const result = await db.query(`
-    select dal.discord_user_id,
-           dal.player_controller_id,
-           dal.is_default,
-           coalesce(ps.character_name, '') as character_name,
-           coalesce(ps.player_pawn_id::text, '0') as player_pawn_id,
-           coalesce(ps.online_status::text, 'Offline') as online_status
-    from dune.discord_account_links dal
-    join dune.player_state ps on ps.player_controller_id::text = dal.player_controller_id
-    where dal.discord_user_id = $1
-    order by dal.is_default desc, dal.linked_at asc
-    limit 1`, [String(discordUserId)]);
-  return result.rows[0] || null;
-}
-
 // Links an additional character to a Discord user who may already have
 // other linked accounts. Unlike discordPlayerLink() (single-link,
 // "on conflict do update" overwrite semantics), this INSERTs a new row and
@@ -4906,6 +4919,13 @@ export async function linkAdditionalAccount(db, discordUserId, playerControllerI
         and discord_user_id <> $2
       for update`, [playerControllerId, String(discordUserId)]);
     if (conflict.rowCount) {
+      return { conflict: "character_already_linked" };
+    }
+    // FINDING-LINK-6 cross-table check: reject if this character is
+    // already linked to a DIFFERENT Discord user via the legacy
+    // single-link table. See otherTableLinkConflict()'s comment above
+    // discordPlayerLink() for why this check exists in both directions.
+    if (await otherTableLinkConflict(tx, "discord_player_links", playerControllerId, discordUserId)) {
       return { conflict: "character_already_linked" };
     }
     const existing = await tx.query(`

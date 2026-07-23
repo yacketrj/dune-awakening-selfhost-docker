@@ -94,9 +94,10 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   2. `is_default` boolean column with a partial unique index (`where is_default`) enforcing at most one default per `discord_user_id`. The first account a user links becomes their default automatically (`linkAdditionalAccount()`); later links are not default unless `setDefaultLinkedAccount()` is called explicitly. Unlinking the current default promotes the next-oldest remaining link to default (`unlinkAdditionalAccount()`), so a user with ≥1 linked account always has exactly one default, never zero.
   3. New `dune.discord_pending_account_links` table keyed by `(discord_user_id, player_controller_id)` (with `code` as its own primary key and a standalone unique index on `player_controller_id`, mirroring the account-link table's dual-uniqueness shape), so verifying a second/third character does not collide with or cancel a still-pending verification for a different character.
   4. Preserved exactly: `linkAccountProvider()` in the new `console/api/src/integrations/discord/multiAccountLinkProvider.js` reuses the identical online-character-only, whisper-delivered verification flow as the original `linkProvider.js` (same code format, same 5-minute expiry, same "must be online" and "no active Funcom identity" checks) — there is no bulk-link or admin-assisted linking path; every additional account still requires the requester to prove control of that specific character in real time.
-  - New provider functions: `linkAccountProvider`, `verifyAccountLinkProvider`, `unlinkAccountProvider`, `listAccountsProvider`, `setDefaultAccountProvider`, `requireDefaultOrSpecifiedAccount`.
+  - New provider functions: `linkAccountProvider`, `verifyAccountLinkProvider`, `unlinkAccountProvider`, `listAccountsProvider`, `setDefaultAccountProvider`.
   - New routes (all POST, gated by the new self-scoped `ACCOUNT_LINK_WRITE` capability — see FINDING-LINK-2's pattern, reused as a **distinct** capability rather than overloading `PLAYER_LINK_WRITE`, so the two flows can be enabled/audited independently): `/players/accounts/link`, `/players/accounts/link/verify`, `/players/accounts/unlink`, `/players/accounts/list`, `/players/accounts/set-default`.
   - New rate limiter instance for `verifyAccountLinkProvider()`, same shape as FINDING-LINK-3's but in a **separate env var namespace** (`DUNE_DISCORD_ACCOUNT_LINK_VERIFY_MAX_ATTEMPTS`/`_GLOBAL_MAX_ATTEMPTS`/`_WINDOW_MS`/`_BLOCK_MS`) so tuning or exhausting one flow's limiter never affects the other's, even for the same `discordUserId`.
+- **Follow-up hardening (found during a deep re-review pass, same branch, before merge):** the initial implementation enforced "a character belongs to exactly one Discord user" only WITHIN each table separately — `discordPlayerLink()` checked `discord_player_links` for a conflicting owner, and `linkAdditionalAccount()` checked `discord_account_links`, but neither checked the OTHER table. Directly reproduced both directions of the resulting gap before fixing it: (1) a character already linked to Discord user A via the legacy single-link flow could be silently claimed by a different Discord user B via the new multi-account flow, and (2) the reverse — a character linked via the multi-account flow could be silently reclaimed by a different Discord user via the legacy single-link flow's overwrite-on-upsert behavior. Both directions let a second Discord user seize read/write access to a character's inventory, storage, and identity binding out from under its rightful linked owner, without ever needing to defeat either table's own uniqueness constraint. Fixed by adding `otherTableLinkConflict()` — both `discordPlayerLink()` and `linkAdditionalAccount()` now also check the other table for a conflicting owner (row-locked with `for update`, inside the same transaction as the existing own-table check, so the check is race-safe against a concurrent link attempt in the other table). Proven directly in the new `test/discordCrossLinkInvariant.test.js`, which exercises the real `duneDb.js` functions (not just the provider layer) against a single mock modeling both tables together.
 - **Not implemented (still open):**
   - Item 5 from the original recommendation: the bot repo's `UNMERGED_ROUTES` classification, route paths, and payload shapes have **not** been reconciled with what this implementation actually built. The route paths chosen here (`/players/accounts/*`) were designed against this console repo's own conventions, not against the bot repo's pre-existing client scaffolding (`player-links-start`, `player-links-verify`, etc.) — a bot-side integration pass is required before any Discord command actually calls these new routes, and the bot's stale docs/`UNMERGED_ROUTES` comments still need updating separately in `yacketrj/Arrakis-Control-Panel`.
   - No Discord slash-command wiring exists yet in this console repo for the new routes (there is no bot process in this repository at all — commands like `/dune data accounts` referenced in the new provider's user-facing messages describe an intended bot-side UX, not something implemented here).
@@ -124,7 +125,7 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
 
 ## Verification (This Branch)
 
-- `npm test --prefix console/api`: 594/594 tests pass. Baseline 540
+- `npm test --prefix console/api`: 598/598 tests pass. Baseline 540
   (inherited from `main` at `0ae01dc` after #103/#104 merged) + 20
   (FINDING-LINK-1: 17 unit tests in `test/discordActorSignature.test.js`
   plus 1 end-to-end integration test in `test/discordAdapter.test.js`
@@ -170,7 +171,17 @@ this repository, and against `yacketrj/Arrakis-Control-Panel` `main`
   one proving the account-link verify route's rate limiter is a genuinely
   separate instance from the single-link route's — exhausting the
   account-link limiter for a `discordUserId` does not block that same
-  `discordUserId` on the single-link verify route).
+  `discordUserId` on the single-link verify route) + 4 (FINDING-LINK-6
+  cross-table-conflict follow-up hardening, found during a deep re-review
+  pass before merge: 4 tests in the new
+  `test/discordCrossLinkInvariant.test.js`, exercising the real
+  `discordPlayerLink()`/`linkAdditionalAccount()` functions directly
+  against a single mock db modeling both tables together — a character
+  linked via the single-link flow cannot be claimed by a different
+  Discord user via the multi-account flow, the reverse direction is also
+  blocked, the SAME Discord user re-affirming their own character through
+  the other flow is correctly NOT blocked, and linking an unrelated,
+  non-conflicting character through either flow still succeeds normally).
 - `npm audit --prefix console/api --audit-level=moderate`: 0 vulnerabilities
   (re-verified after FINDING-LINK-6; no new dependencies added — the new
   provider reuses `createLoginRateLimiter`, `publishCarePackageWhisper`,
@@ -313,6 +324,20 @@ Status of previously proposed targeted tests:
   (`unlink`, then observe there's still a default, then decide whether to
   change it). This matches the finding's minimal-impact intent but is a
   minor UX rigidity, not a security issue.
+- The cross-table ownership check (`otherTableLinkConflict()`) only guards
+  the two `discord_*_links` tables — it does not extend to the two
+  *pending* tables (`discord_pending_links` / `discord_pending_account_links`).
+  It is possible for Discord user A to hold a pending single-link
+  verification code for character X at the same time Discord user B holds
+  a pending multi-account verification code for the same character X.
+  This is not itself exploitable — the actual ownership decision happens
+  at consume-time (`discordPlayerLink()`/`linkAdditionalAccount()`), which
+  IS cross-table-checked, so whichever user's code is verified first wins
+  and the second verification attempt is correctly rejected by the fix
+  above. It is, at most, a minor UX confusion (two whispers in flight for
+  the same character from two different Discord users), not a security
+  gap, and was judged not worth the added complexity of cross-checking
+  the pending tables too.
 
 ## Remediation Status
 
@@ -323,7 +348,7 @@ Status of previously proposed targeted tests:
 | FINDING-LINK-3 No verification rate limiting | Partially implemented (rate limiting done; longer codes and audit logging still open) | `console/api` 571/571 tests pass at time of fix; gitleaks/semgrep clean |
 | FINDING-LINK-4 Hardcoded command-auth token | Resolved-by-discussion upstream | See `Red-Blink/dune-awakening-selfhost-docker#72` |
 | FINDING-LINK-5 Whisper transport via docker-exec/rabbitmqctl | Reviewed, confirmed non-exploitable, rewrite explicitly out of scope | Direct injection-breakout test performed (see finding); no code change proposed |
-| FINDING-LINK-6 No multi-character/multi-account linking | Implemented (additive; new capability, new rate limiter, new routes; no bot-side integration yet) | `console/api` 594/594 tests pass; gitleaks/semgrep/trivy clean |
+| FINDING-LINK-6 No multi-character/multi-account linking | Implemented (additive; new capability, new rate limiter, new routes; cross-table ownership check added during review; no bot-side integration yet) | `console/api` 598/598 tests pass; gitleaks/semgrep/trivy clean |
 
 ## Sources
 

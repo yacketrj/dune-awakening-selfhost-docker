@@ -21,7 +21,6 @@
 import { randomInt } from "node:crypto";
 import {
   listLinkedAccounts,
-  getDefaultLinkedAccount,
   linkAdditionalAccount,
   unlinkAdditionalAccount,
   setDefaultLinkedAccount,
@@ -208,27 +207,6 @@ export async function setDefaultAccountProvider(db, { discordUserId, playerContr
     return { ok: false, error: "That character is not linked to your Discord account. Link it first with /dune data link." };
   }
   return { ok: true, message: "Default character updated." };
-}
-
-// Resolves which linked account a command should act on: the account
-// matching an explicitly-supplied playerControllerId, or the user's
-// default account when none is supplied. Throws not_linked (403) when the
-// user has no linked accounts at all, matching requireLinkedPlayer()'s
-// behavior in linkProvider.js for the single-link flow.
-export async function requireDefaultOrSpecifiedAccount(db, discordUserId, playerControllerId) {
-  if (playerControllerId) {
-    const accounts = await listLinkedAccounts(db, discordUserId);
-    const match = accounts.find((account) => account.player_controller_id === String(playerControllerId));
-    if (!match) {
-      throw policyError("not_linked", "That character is not linked to your Discord account.", 403);
-    }
-    return match;
-  }
-  const linked = await getDefaultLinkedAccount(db, discordUserId);
-  if (!linked) {
-    throw policyError("not_linked", "Not linked to a game character. Use /dune data link <name> first.", 403);
-  }
-  return linked;
 }
 
 function publicAccountView(account) {

@@ -61,6 +61,14 @@ function createLinkDb(playerOverrides = {}) {
         const conflict = state.link && state.link.playerControllerId === values[0] && state.link.discordUserId !== values[1];
         return { rows: conflict ? [{ discord_user_id: state.link.discordUserId }] : [], rowCount: conflict ? 1 : 0 };
       }
+      // FINDING-LINK-6 cross-table check (otherTableLinkConflict()):
+      // discordPlayerLink() also checks dune.discord_account_links for a
+      // conflicting owner. This test file only exercises the single-link
+      // flow and never populates discord_account_links, so this always
+      // reports no conflict.
+      if (text.includes("from dune.discord_account_links") && text.includes("for update")) {
+        return { rows: [], rowCount: 0 };
+      }
       if (text.includes("insert into dune.discord_player_links")) {
         state.link = { discordUserId: values[0], playerControllerId: values[1] };
         return { rows: [], rowCount: 1 };
